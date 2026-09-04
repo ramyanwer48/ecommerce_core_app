@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "571987518617",
+    "project_id": "ecommerce-core-app-b3f08",
+    "storage_bucket": "ecommerce-core-app-b3f08.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:571987518617:android:eb8921dedf7308cecb4408",
+        "android_client_info": {
+          "package_name": "com.ramy.ecommerce.ecommerce_core_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1H-8sLrDCbJ0bVlA60is6dBZO8gRFnGs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
