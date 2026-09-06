@@ -1,0 +1,166 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/routing/routes.dart';
+import '../../../core/theming/colors.dart';
+import '../../../core/theming/styles.dart';
+import '../logic/auth_cubit.dart';
+import '../logic/auth_state.dart';
+
+class SignUpScreen extends StatelessWidget {
+  const SignUpScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: ColorsManager.mainDarkBlue,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: ColorsManager.white),
+          onPressed: () => context.pop(), // الرجوع لشاشة الدخول
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: BlocConsumer<AuthCubit, AuthState>(
+            listener: (context, state) {
+              if (state is AuthSuccess) {
+                // عند نجاح إنشاء الحساب، ندخل للتطبيق مباشرة
+                context.go(Routes.home);
+              } else if (state is AuthFailure) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.errorMessage),
+                    backgroundColor: ColorsManager.errorRed,
+                  ),
+                );
+              }
+            },
+            builder: (context, state) {
+              final cubit = context.read<AuthCubit>();
+              return Form(
+                key: cubit.formKey, // نستخدم نفس הFormKey
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 20),
+                      const Text(
+                        'حساب جديد',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: ColorsManager.white,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'قم بإنشاء حسابك الآن في RAMY STORE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: ColorsManager.lightGray,
+                        ),
+                      ),
+                      const SizedBox(height: 50),
+
+                      // حقل الإيميل
+                      TextFormField(
+                        controller: cubit.emailController,
+                        style: const TextStyle(color: ColorsManager.white),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.isEmpty || !value.contains('@')) {
+                            return 'بريد إلكتروني غير صالح';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'البريد الإلكتروني',
+                          hintStyle: TextStyles.font14LightGrayRegular,
+                          prefixIcon: const Icon(Icons.email_outlined, color: ColorsManager.lightBlue),
+                          filled: true,
+                          fillColor: ColorsManager.mainDarkBlue,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.darkGray, width: 1),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.lightBlue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.errorRed, width: 1),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // حقل كلمة المرور
+                      TextFormField(
+                        controller: cubit.passwordController,
+                        obscureText: true,
+                        style: const TextStyle(color: ColorsManager.white),
+                        validator: (value) {
+                          if (value == null || value.isEmpty || value.length < 6) {
+                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'كلمة المرور',
+                          hintStyle: TextStyles.font14LightGrayRegular,
+                          prefixIcon: const Icon(Icons.lock_outline, color: ColorsManager.lightBlue),
+                          filled: true,
+                          fillColor: ColorsManager.mainDarkBlue,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.darkGray, width: 1),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.lightBlue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.errorRed, width: 1),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+
+                      // زر تسجيل الحساب
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ColorsManager.neonBlue,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          if (cubit.formKey.currentState!.validate()) {
+                            // نقوم باستدعاء دالة إنشاء الحساب بدلاً من تسجيل الدخول
+                            cubit.emitSignUpStates();
+                          }
+                        },
+                        child: state is AuthLoading
+                            ? const CircularProgressIndicator(color: ColorsManager.white)
+                            : const Text('تسجيل حساب جديد', style: TextStyles.font18WhiteMedium),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -34,11 +34,14 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  flutter_bloc: ^8.1.5
-  get_it: ^7.7.0
-  go_router: ^14.2.0
+  flutter_bloc: ^9.1.1
+  get_it: ^9.2.1
+  go_router: ^18.0.1
   equatable: ^2.0.5
   firebase_core: ^4.14.0
+  cloud_firestore: ^6.9.0
+  firebase_auth: ^6.6.1
+  local_auth: ^3.0.2
 
 dev_dependencies:
   flutter_test:
@@ -94,9 +97,7 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 flutter_launcher_icons:
-  android: true
+  android: true # اجعلها true بدلاً من اسم الأيقونة
   ios: false
   image_path: "assets/icons/app_icon.png"
   min_sdk_android: 21
-  adaptive_icon_background: "#FFFFFF" # إجبار النظام على خلفية بيضاء
-  adaptive_icon_foreground: "assets/icons/app_icon.png" # اللوجو المصغر
