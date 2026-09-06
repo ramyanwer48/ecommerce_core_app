@@ -1,147 +1,137 @@
 import 'package:flutter/material.dart';
-import '../../../core/theming/colors.dart';
-import '../../../core/theming/styles.dart';
-
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../logic/home_cubit.dart';
+import '../logic/home_state.dart';
+import '../data/models/product_model.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/routing/routes.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ColorsManager.mainDarkBlue,
+      backgroundColor: const Color(0xFFF5F7FA), // لون خلفية هادئ ومريح للعين
       appBar: AppBar(
-        backgroundColor: ColorsManager.mainDarkBlue,
-        elevation: 0,
-        title: const Text(
-          'RAMY STORE',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: ColorsManager.white,
-            letterSpacing: 1.5,
-          ),
-        ),
+        title: const Text('RAMY STORE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
         centerTitle: true,
+        backgroundColor: const Color(0xFF000826),
+        foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.shopping_cart_outlined, color: ColorsManager.lightBlue),
+            icon: const Icon(Icons.shopping_cart),
             onPressed: () {
-              // سنبرمج سلة المشتريات لاحقاً
+              // توجيه المستخدم لشاشة السلة
+              context.push(Routes.cart);
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- قسم العروض أو الترحيب ---
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF007BFF), Color(0xFF00D4FF)], // تدرج التركواز
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('أحدث قطع الهاردوير', style: TextStyles.font24WhiteBold),
-                  SizedBox(height: 8),
-                  Text('خصومات تصل إلى 20% على كروت الشاشة', style: TextStyles.font14LightGrayRegular),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+      body: BlocBuilder<HomeCubit, HomeState>(
+        builder: (context, state) {
+          // 1. حالة التحميل
+          if (state is HomeLoading) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
+          }
+          // 2. حالة حدوث خطأ
+          else if (state is HomeError) {
+            return Center(
+              child: Text('حدث خطأ: ${state.message}', style: const TextStyle(color: Colors.red, fontSize: 16)),
+            );
+          }
+          // 3. حالة نجاح جلب البيانات
+          else if (state is HomeLoaded) {
+            final products = state.products;
 
-            // --- عنوان قسم المنتجات ---
-            const Text('المنتجات المتاحة', style: TextStyles.font18WhiteMedium),
-            const SizedBox(height: 16),
+            // إذا كانت قاعدة البيانات فارغة
+            if (products.isEmpty) {
+              return const Center(
+                child: Text('المتجر فارغ حالياً. قم بإضافة منتجات من Firebase!',
+                    style: TextStyle(fontSize: 18, color: Colors.grey)),
+              );
+            }
 
-            // --- شبكة عرض المنتجات (مؤقتاً سنضع منتجات وهمية حتى نربطها بـ Firebase) ---
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // عدد الأعمدة
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.75, // نسبة العرض للطول للكارت
-                ),
-                itemCount: 4, // عدد المنتجات الوهمية للتجربة
-                itemBuilder: (context, index) {
-                  return _buildProductCard();
-                },
+            // عرض المنتجات في شبكة (Grid)
+            return GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, // عدد الأعمدة (منتجين بجوار بعض)
+                childAspectRatio: 0.68, // نسبة الطول للعرض للكارت
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
               ),
-            ),
-          ],
-        ),
+              itemCount: products.length,
+              itemBuilder: (context, index) {
+                return _buildProductCard(context, products[index]); // أضفنا context هنا
+              },
+            );
+          }
+          return const SizedBox.shrink();
+        },
       ),
     );
   }
 
-  // --- دالة لبناء كارت المنتج ---
-  Widget _buildProductCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A122E), // كحلي أفتح قليلاً من الخلفية
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: ColorsManager.darkGray.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // صورة المنتج (مؤقتة)
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: const Center(
-                child: Icon(Icons.computer, size: 50, color: ColorsManager.mainDarkBlue),
+  // تصميم كارت المنتج
+  // تصميم كارت المنتج مع تفعيل الضغط
+  Widget _buildProductCard(BuildContext context, ProductModel product) { // أضفنا BuildContext هنا
+    return GestureDetector(
+      onTap: () {
+        // الانتقال لشاشة التفاصيل مع تمرير بيانات المنتج (product) كـ extra
+        context.push(Routes.productDetails, extra: product);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // صورة المنتج
+            Expanded(
+              flex: 3,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: product.imageUrl.isNotEmpty
+                    ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
+                    : Container(color: Colors.grey[200], child: const Icon(Icons.image, size: 50, color: Colors.grey)),
               ),
             ),
-          ),
-          // تفاصيل المنتج
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'ASUS ROG Laptop',
-                  style: TextStyles.font18WhiteMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  '55,000 EGP',
-                  style: TextStyles.font20NeonBlueBold,
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ColorsManager.neonBlue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+            // تفاصيل المنتج
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, height: 1.2),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    onPressed: () {},
-                    child: const Text('أضف للسلة', style: TextStyle(color: Colors.white)),
-                  ),
-                )
-              ],
+                    Text(
+                      '${product.price} ج.م',
+                      style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          )
-        ],
+          ],
+        ),
       ),
     );
   }

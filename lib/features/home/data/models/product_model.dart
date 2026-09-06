@@ -1,11 +1,11 @@
 class ProductModel {
-  final String id;
-  final String name; // اسم القطعة (مثال: RTX 4090)
-  final String description; // وصف القطعة
+  final String id; // معرف فريد للمنتج (Document ID في Firestore)
+  final String name; // اسم المنتج (مثلاً: ASUS ROG Laptop)
+  final String description; // وصف المنتج
   final double price; // السعر
-  final String imageUrl; // رابط صورة القطعة
-  final int stockQuantity; // أهم متغير: الكمية المتاحة في المخزن
-  final String category; // التصنيف (Laptops, GPUs, Accessories)
+  final String imageUrl; // رابط صورة المنتج
+  final String category; // الفئة (مثلاً: Laptops, GPUs)
+  final bool inStock; // هل متوفر في المخزن؟
 
   ProductModel({
     required this.id,
@@ -13,33 +13,32 @@ class ProductModel {
     required this.description,
     required this.price,
     required this.imageUrl,
-    required this.stockQuantity,
     required this.category,
+    this.inStock = true,
   });
 
-  // هذه الدالة ستقوم بتحويل البيانات القادمة من Firebase (Map) إلى كائن (Object) يفهمه Flutter
+  // دالة لتحويل بيانات Firestore (JSON) إلى كائن (Object) داخل فلاتر
   factory ProductModel.fromJson(Map<String, dynamic> json, String documentId) {
     return ProductModel(
       id: documentId,
       name: json['name'] ?? '',
       description: json['description'] ?? '',
-      // نحول السعر إلى double أياً كان نوعه في Firebase لتجنب الأخطاء
-      price: (json['price'] ?? 0).toDouble(),
+      price: (json['price'] ?? 0.0).toDouble(),
       imageUrl: json['imageUrl'] ?? '',
-      stockQuantity: json['stockQuantity'] ?? 0,
-      category: json['category'] ?? '',
+      category: json['category'] ?? 'General',
+      inStock: json['inStock'] ?? true,
     );
   }
 
-  // هذه الدالة ستحول بيانات التطبيق إلى شكل يقبله Firebase عند رفع منتج جديد للمخزن
+  // دالة لتحويل بيانات الكائن (Object) إلى JSON لإرساله إلى Firestore
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'description': description,
       'price': price,
       'imageUrl': imageUrl,
-      'stockQuantity': stockQuantity,
       'category': category,
+      'inStock': inStock,
     };
   }
 }

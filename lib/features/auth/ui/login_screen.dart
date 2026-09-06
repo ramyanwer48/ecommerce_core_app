@@ -1,23 +1,100 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theming/colors.dart';
 import '../../../core/theming/styles.dart';
 import '../logic/auth_cubit.dart';
 import '../logic/auth_state.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool _isRememberMeChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedEmail();
+  }
+
+  // 1. استدعاء الإيميل المحفوظ عند فتح الشاشة
+  Future<void> _loadSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+
+    if (savedEmail != null && savedEmail.isNotEmpty) {
+      setState(() {
+        _isRememberMeChecked = true;
+      });
+      // نستخدم microtask لضمان بناء الـ context أولاً قبل تمرير البيانات للـ Cubit
+      Future.microtask(() {
+        if (mounted) {
+          context.read<AuthCubit>().emailController.text = savedEmail;
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: BlocConsumer<AuthCubit, AuthState>(
-          listener: (context, state) {
+          listener: (context, state) async {
             if (state is AuthSuccess) {
-              context.go(Routes.home);
+              // 2. التحقق من الرسالة الذكية للبصمة بعد نجاح الدخول
+              final prefs = await SharedPreferences.getInstance();
+              bool hasAskedBiometric = prefs.getBool('has_asked_biometric') ?? false;
+
+              if (!hasAskedBiometric && mounted) {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (dialogContext) => AlertDialog(
+                    backgroundColor: ColorsManager.mainDarkBlue,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text('تفعيل البصمة', style: TextStyle(color: ColorsManager.white, fontWeight: FontWeight.bold)),
+                    content: const Text(
+                      'هل ترغب في استخدام البصمة لتسجيل الدخول السريع والأمن في المرات القادمة؟',
+                      style: TextStyle(color: Colors.grey, height: 1.5),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          prefs.setBool('isBiometricEnabled', false);
+                          prefs.setBool('has_asked_biometric', true);
+                          Navigator.pop(dialogContext); // إغلاق الرسالة
+                          context.go(Routes.home); // التوجيه للمتجر
+                        },
+                        child: const Text('لا، شكراً', style: TextStyle(color: Colors.grey)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ColorsManager.neonBlue,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () {
+                          prefs.setBool('isBiometricEnabled', true);
+                          prefs.setBool('has_asked_biometric', true);
+                          Navigator.pop(dialogContext); // إغلاق الرسالة
+                          context.go(Routes.home); // التوجيه للمتجر
+                        },
+                        child: const Text('تفعيل', style: TextStyle(color: ColorsManager.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                // إذا سُئل من قبل، يذهب للمتجر مباشرة
+                if (mounted) context.go(Routes.home);
+              }
             } else if (state is AuthFailure) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -31,7 +108,6 @@ class LoginScreen extends StatelessWidget {
             final cubit = context.read<AuthCubit>();
             return Form(
               key: cubit.formKey,
-              // --- الحل الجذري هنا: Center + SingleChildScrollView ---
               child: Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -123,7 +199,29 @@ class LoginScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 30),
+
+                      // 3. تصميم خيار "تذكرني"
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Theme(
+                            data: ThemeData(unselectedWidgetColor: ColorsManager.darkGray),
+                            child: Checkbox(
+                              value: _isRememberMeChecked,
+                              activeColor: ColorsManager.neonBlue,
+                              checkColor: ColorsManager.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                              onChanged: (value) {
+                                setState(() {
+                                  _isRememberMeChecked = value ?? false;
+                                });
+                              },
+                            ),
+                          ),
+                          const Text('تذكرني', style: TextStyles.font14LightGrayRegular),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
 
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
@@ -133,8 +231,16 @@ class LoginScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           if (cubit.formKey.currentState!.validate()) {
+                            // 4. حفظ أو مسح الإيميل بناءً على اختيار المستخدم
+                            final prefs = await SharedPreferences.getInstance();
+                            if (_isRememberMeChecked) {
+                              await prefs.setString('saved_email', cubit.emailController.text);
+                            } else {
+                              await prefs.remove('saved_email');
+                            }
+
                             cubit.emitLoginStates();
                           }
                         },

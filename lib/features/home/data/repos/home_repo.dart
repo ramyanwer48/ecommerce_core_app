@@ -1,26 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/product_model.dart';
+import '../models/product_model.dart'; // مسار الاستدعاء الصحيح
 
 class HomeRepo {
-  // تعريف نسخة الفايربيز التي سنحقنها لاحقاً
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  HomeRepo(this._firestore);
-
-  // دالة لجلب جميع المنتجات من قاعدة البيانات
   Future<List<ProductModel>> getProducts() async {
     try {
-      // الاتصال بـ Firebase والذهاب إلى مجلد (collection) اسمه 'products'
-      final snapshot = await _firestore.collection('products').get();
+      final QuerySnapshot snapshot = await _firestore.collection('products').get();
 
-      // تحويل البيانات القادمة من السحابة إلى قائمة (List) من الـ ProductModel
-      return snapshot.docs
-          .map((doc) => ProductModel.fromJson(doc.data(), doc.id))
-          .toList();
+      List<ProductModel> products = snapshot.docs.map((doc) {
+        return ProductModel.fromJson(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+
+      return products;
     } catch (e) {
-      // في حالة فشل الاتصال، نطبع الخطأ للمبرمج ونعيد قائمة فارغة
-      print('Error fetching products: $e');
-      return [];
+      throw Exception('فشل في جلب المنتجات: $e');
     }
   }
 }
