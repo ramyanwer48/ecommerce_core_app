@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // تمت إضافة المكتبة لقراءة الذاكرة
 import '../../../core/routing/routes.dart';
 import '../../../core/theming/colors.dart';
 
@@ -23,18 +24,29 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _checkAuthState() async {
-    // ننتظر قليلاً لعرض شكل الشاشة الافتتاحية
+    // 1. عرض الشاشة الافتتاحية الأنيقة لمدة ثانيتين
     await Future.delayed(const Duration(seconds: 2));
 
     User? currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser != null) {
-      bool authenticated = await _authenticateWithBiometrics();
-      if (authenticated) {
-        if (mounted) context.go(Routes.home);
+      // 2. قراءة قرار المستخدم بخصوص البصمة من الذاكرة المحلية
+      final prefs = await SharedPreferences.getInstance();
+      bool isBiometricEnabled = prefs.getBool('isBiometricEnabled') ?? false;
+
+      if (isBiometricEnabled) {
+        // إذا كان قد وافق على التفعيل، نطلب البصمة
+        bool authenticated = await _authenticateWithBiometrics();
+        if (authenticated) {
+          if (mounted) context.go(Routes.home);
+        } else {
+          // إذا فشلت البصمة، يعود لشاشة تسجيل الدخول
+          FirebaseAuth.instance.signOut();
+          if (mounted) context.go(Routes.login);
+        }
       } else {
-        FirebaseAuth.instance.signOut();
-        if (mounted) context.go(Routes.login);
+        // إذا كان قد رفض تفعيل البصمة، يدخل للمتجر مباشرة بنعومة
+        if (mounted) context.go(Routes.home);
       }
     } else {
       if (mounted) context.go(Routes.login);
@@ -46,7 +58,6 @@ class _AuthGateState extends State<AuthGate> {
     try {
       setState(() { _isAuthenticating = true; });
 
-      // نكتفي بتمرير الرسالة فقط لتجنب أي تعارض مع إصدارات المكتبة المختلفة
       authenticated = await auth.authenticate(
         localizedReason: 'الرجاء التحقق من هويتك للدخول إلى متجر رامي',
       );
@@ -68,8 +79,19 @@ class _AuthGateState extends State<AuthGate> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('RAMY STORE', style: TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2)),
-            const SizedBox(height: 50),
+            // الشعار الفخم
+            const Text(
+              'RAMY STORE',
+              style: TextStyle(
+                  fontSize: 40,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            // التبديل بين شكل التحميل الأنيق وشكل البصمة
             _isAuthenticating
                 ? const Column(
               children: [
@@ -78,7 +100,14 @@ class _AuthGateState extends State<AuthGate> {
                 Text('بانتظار البصمة...', style: TextStyle(color: Colors.white, fontSize: 18)),
               ],
             )
-                : const CircularProgressIndicator(color: ColorsManager.neonBlue),
+                : const SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                color: ColorsManager.neonBlue,
+                strokeWidth: 3,
+              ),
+            ),
           ],
         ),
       ),

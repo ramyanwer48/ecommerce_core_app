@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/routing/routes.dart';
 import '../logic/cart_cubit.dart';
 import '../logic/cart_state.dart';
 
@@ -17,24 +19,45 @@ class CartScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      // نستخدم BlocBuilder للاستماع للتغييرات في السلة
-      body: BlocBuilder<CartCubit, CartState>(
+      body: BlocConsumer<CartCubit, CartState>(
+        listener: (context, state) {
+          if (state is CartCheckoutSuccess) {
+            // إظهار رسالة نجاح
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('تم إرسال طلبك بنجاح! 🚀', style: TextStyle(fontSize: 16)),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            // توجيه العميل فوراً لرؤية طلبه الجديد في السجل
+            context.push(Routes.orders);
+
+          } else if (state is CartError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+            );
+          }
+        },
         builder: (context, state) {
-          // إذا لم يتم إضافة شيء بعد
+          final cubit = context.read<CartCubit>();
+
+          // حالة التحميل أثناء الدفع
+          if (state is CartLoading) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
+          }
+
+          // إذا السلة فارغة
           if (state is CartInitial || (state is CartUpdated && state.cartItems.isEmpty)) {
             return const Center(
-              child: Text(
-                'السلة فارغة حالياً 🛒',
-                style: TextStyle(fontSize: 20, color: Colors.grey, fontWeight: FontWeight.bold),
-              ),
+              child: Text('السلة فارغة حالياً 🛒', style: TextStyle(fontSize: 20, color: Colors.grey, fontWeight: FontWeight.bold)),
             );
           }
 
-          // إذا كان هناك منتجات
+          // عرض المنتجات
           if (state is CartUpdated) {
             return Column(
               children: [
-                // قائمة المنتجات في السلة
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -56,7 +79,7 @@ class CartScreen extends StatelessWidget {
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.red),
                             onPressed: () {
-                              // سنضيف لاحقاً دالة الحذف
+                              cubit.removeFromCart(item);
                             },
                           ),
                         ),
@@ -65,7 +88,7 @@ class CartScreen extends StatelessWidget {
                   ),
                 ),
 
-                // شريط الإجمالي السفلي (Checkout Bar)
+                // شريط الإجمالي السفلي
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: const BoxDecoration(
@@ -80,10 +103,7 @@ class CartScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('الإجمالي', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                          Text(
-                            '${state.totalPrice} ج.م',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF000826)),
-                          ),
+                          Text('${state.totalPrice} ج.م', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF000826))),
                         ],
                       ),
                       ElevatedButton(
@@ -93,10 +113,8 @@ class CartScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () {
-                          // هنا سنبرمج إتمام الطلب لاحقاً
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('جاري إتمام الطلب...')),
-                          );
+                          // إطلاق دالة الرفع لفايربيز
+                          cubit.checkout();
                         },
                         child: const Text('إتمام الطلب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                       ),
