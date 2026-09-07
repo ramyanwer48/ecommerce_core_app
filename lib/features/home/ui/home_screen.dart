@@ -6,6 +6,9 @@ import '../../../core/theming/colors.dart';
 import '../logic/home_cubit.dart';
 import '../logic/home_state.dart';
 import 'product_shimmer.dart';
+// استدعاءات المفضلة
+import '../../wishlist/logic/wishlist_cubit.dart';
+import '../../wishlist/logic/wishlist_state.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,7 +33,11 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // تمت إضافة زر الملف الشخصي هنا
+          // أيقونة المفضلة الجديدة
+          IconButton(
+            icon: const Icon(Icons.favorite),
+            onPressed: () => context.push(Routes.wishlist),
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => context.push(Routes.profile),
@@ -44,12 +51,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // 1. شريط البحث الفوري (Search Bar) الأنيق
+          // 1. شريط البحث الفوري
           Padding(
             padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 8),
             child: TextField(
               onChanged: (value) {
-                // استدعاء دالة البحث مع كل حرف يكتبه المستخدم
                 context.read<HomeCubit>().searchProducts(value);
               },
               decoration: InputDecoration(
@@ -158,26 +164,57 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Card(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           elevation: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Stack(
                             children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                  child: product.imageUrl.isNotEmpty
-                                      ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
-                                      : Container(color: Colors.grey[200], child: const Icon(Icons.image, size: 50)),
-                                ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                      child: product.imageUrl.isNotEmpty
+                                          ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
+                                          : Container(color: Colors.grey[200], child: const Icon(Icons.image, size: 50)),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        const SizedBox(height: 4),
+                                        Text('${product.price} ج.م', style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 4),
-                                    Text('${product.price} ج.م', style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold)),
-                                  ],
+                              // زر المفضلة التفاعلي
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                child: BlocBuilder<WishlistCubit, WishlistState>(
+                                  builder: (context, wishlistState) {
+                                    final wishlistCubit = context.read<WishlistCubit>();
+                                    final isFavorite = wishlistCubit.isInWishlist(product.id);
+
+                                    return CircleAvatar(
+                                      backgroundColor: Colors.white.withOpacity(0.9),
+                                      radius: 16,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        iconSize: 20,
+                                        icon: Icon(
+                                          isFavorite ? Icons.favorite : Icons.favorite_border,
+                                          color: isFavorite ? Colors.red : Colors.grey,
+                                        ),
+                                        onPressed: () {
+                                          wishlistCubit.toggleWishlist(product);
+                                        },
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],

@@ -9,4 +9,6 @@ class Routes {
   static const String orders = '/orders';
   static const String addProduct = '/addProduct';
   static const String adminOrders = '/adminOrders';
+  static const String manageProducts = '/manageProducts';
+  static const String wishlist = '/wishlist';
 }

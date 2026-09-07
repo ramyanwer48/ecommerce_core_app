@@ -53,7 +53,27 @@ class AdminOrdersScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('رقم الطلب: ${order.id.substring(0, 8)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 8),
+
+                        // قسم الهاتف والعنوان الجديد
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.phone, size: 16, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Text(order.phone, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(order.address, style: const TextStyle(fontSize: 14, color: Colors.black87))),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
                         Text('الإجمالي: ${order.totalPrice} ج.م', style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold)),
                         Text('التاريخ: ${order.date}', style: const TextStyle(color: Colors.grey)),
                         const Divider(height: 24),

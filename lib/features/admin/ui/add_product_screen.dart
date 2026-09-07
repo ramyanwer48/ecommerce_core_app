@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../logic/add_product_cubit.dart';
 import '../logic/add_product_state.dart';
 
@@ -15,18 +17,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
   final _descController = TextEditingController();
-  final _imageController = TextEditingController();
+  final _variationsController = TextEditingController();
 
-  String _selectedCategory = 'Laptops'; // التصنيف الافتراضي
+  String _selectedCategory = 'Laptops';
   final List<String> _categories = ['Laptops', 'Accessories', 'Screens'];
   bool _inStock = true;
+
+  // الصورة الأساسية
+  File? _selectedImage;
+  // قائمة الصور الإضافية من الموبايل
+  List<File> _extraImages = [];
+
+  final ImagePicker _picker = ImagePicker();
+
+  // اختيار الصورة الأساسية
+  Future<void> _pickMainImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+    }
+  }
+
+  // اختيار عدة صور إضافية معاً
+  Future<void> _pickExtraImages() async {
+    final List<XFile> images = await _picker.pickMultiImage();
+    if (images.isNotEmpty) {
+      setState(() {
+        _extraImages = images.map((img) => File(img.path)).toList();
+      });
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
     _descController.dispose();
-    _imageController.dispose();
+    _variationsController.dispose();
     super.dispose();
   }
 
@@ -43,15 +72,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
         listener: (context, state) {
           if (state is AddProductSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تم نشر المنتج بنجاح!'), backgroundColor: Colors.green),
+              const SnackBar(content: Text('تم رفع الصور ونشر المنتج بنجاح! 🚀'), backgroundColor: Colors.green),
             );
-            // تفريغ الحقول بعد النجاح
             _formKey.currentState?.reset();
             _nameController.clear();
             _priceController.clear();
             _descController.clear();
-            _imageController.clear();
-            setState(() => _inStock = true);
+            _variationsController.clear();
+            setState(() {
+              _inStock = true;
+              _selectedImage = null;
+              _extraImages.clear();
+            });
           } else if (state is AddProductError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.error), backgroundColor: Colors.red),
@@ -64,6 +96,72 @@ class _AddProductScreenState extends State<AddProductScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // 1. اختيار الصورة الأساسية
+                const Text('الصورة الرئيسية للمنتج:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _pickMainImage,
+                  child: Container(
+                    height: 160,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF00D4FF), width: 1.5),
+                    ),
+                    child: _selectedImage != null
+                        ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                    )
+                        : const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_a_photo_outlined, size: 40, color: Color(0xFF00D4FF)),
+                        SizedBox(height: 8),
+                        Text('اضغط لاختيار الصورة الرئيسية', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 2. اختيار صور إضافية للمعرض (مباشرة من الموبايل)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('معرض الصور الإضافية:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    TextButton.icon(
+                      onPressed: _pickExtraImages,
+                      icon: const Icon(Icons.add_photo_alternate, color: Color(0xFF007BFF)),
+                      label: Text('اختر (${_extraImages.length}) صور', style: const TextStyle(color: Color(0xFF007BFF))),
+                    ),
+                  ],
+                ),
+                if (_extraImages.isNotEmpty)
+                  SizedBox(
+                    height: 90,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _extraImages.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          width: 90,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(_extraImages[index], fit: BoxFit.cover),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder()),
@@ -85,9 +183,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: _imageController,
-                  decoration: const InputDecoration(labelText: 'رابط الصورة (URL)', border: OutlineInputBorder()),
-                  validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                  controller: _variationsController,
+                  decoration: const InputDecoration(
+                      labelText: 'خيارات الهاردوير (مثال: 16GB, 32GB - افصل بفاصلة ,)',
+                      border: OutlineInputBorder()
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -98,7 +198,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
-                  title: const Text('متوفر في المخزن (inStock)'),
+                  title: const Text('متوفر في المخزن'),
                   value: _inStock,
                   onChanged: (val) => setState(() => _inStock = val),
                 ),
@@ -111,13 +211,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   onPressed: () {
+                    if (_selectedImage == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
                     if (_formKey.currentState!.validate()) {
+                      List<String> variationsList = _variationsController.text.isNotEmpty
+                          ? _variationsController.text.split(',').map((e) => e.trim()).toList()
+                          : [];
+
                       context.read<AddProductCubit>().addProductToFirestore(
                         name: _nameController.text,
                         price: double.parse(_priceController.text),
                         category: _selectedCategory,
                         description: _descController.text,
-                        imageUrl: _imageController.text,
+                        mainImageFile: _selectedImage!,
+                        extraImageFiles: _extraImages, // تمرير ملفات الصور الإضافية
+                        variations: variationsList,
                         inStock: _inStock,
                       );
                     }

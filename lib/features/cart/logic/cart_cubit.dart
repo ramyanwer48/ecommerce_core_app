@@ -28,41 +28,38 @@ class CartCubit extends Cubit<CartState> {
   }
 
   // 4. إتمام الطلب وإرساله إلى Firebase
-  Future<void> checkout() async {
+  Future<void> checkout({required String address, required String phone}) async {
     if (_items.isEmpty) return;
 
     try {
       final currentTotal = _items.fold(0.0, (sum, item) => sum + item.price);
-      emit(CartLoading()); // عرض دائرة التحميل
+      emit(CartLoading());
 
-      // جلب بيانات المستخدم الحالي
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("حدث خطأ: المستخدم غير مسجل الدخول");
 
-      // تجهيز الفاتورة (الطلب)
       final orderData = {
         'userId': user.uid,
-        'userEmail': user.email,
+        'userEmail': user.email ?? 'غير معروف', // حماية إضافية هنا
+        'address': address, // تم إضافة العنوان
+        'phone': phone,     // تم إضافة الهاتف
         'totalPrice': currentTotal,
-        'orderDate': FieldValue.serverTimestamp(), // توقيت سيرفر جوجل
-        'status': 'Pending', // قيد المراجعة
+        'orderDate': FieldValue.serverTimestamp(),
+        'status': 'Pending',
         'items': _items.map((item) => {
           'name': item.name,
           'price': item.price,
         }).toList(),
       };
 
-      // رفع الطلب إلى مجموعة 'orders' في Firestore
       await FirebaseFirestore.instance.collection('orders').add(orderData);
 
-      // تنظيف السلة بعد نجاح الطلب
       _items.clear();
       emit(CartCheckoutSuccess());
-      emit(CartUpdated([], 0)); // العودة لشاشة سلة فارغة
-
+      emit(CartUpdated([], 0));
     } catch (e) {
       emit(CartError(e.toString()));
-      _calculateTotal(); // العودة لحالة السلة في حال فشل الطلب
+      _calculateTotal();
     }
   }
 }

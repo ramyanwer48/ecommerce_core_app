@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 // استدعاءات Auth
+import '../../features/admin/ui/manage_products_screen.dart';
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/ui/auth_gate.dart';
 import '../../features/auth/ui/login_screen.dart';
@@ -42,6 +43,9 @@ import '../../features/admin/ui/admin_orders_screen.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
 
+import '../../features/wishlist/ui/wishlist_screen.dart';
+import '../../features/wishlist/logic/wishlist_cubit.dart';
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -66,8 +70,11 @@ class AppRouter {
       ),
       GoRoute(
         path: Routes.home,
-        builder: (context, state) => BlocProvider(
-          create: (context) => getIt<HomeCubit>()..fetchProducts(),
+        builder: (context, state) => MultiBlocProvider(
+          providers: [
+            BlocProvider(create: (context) => getIt<HomeCubit>()..fetchProducts()),
+            BlocProvider.value(value: getIt<WishlistCubit>()), // توفير المفضلة للشاشة الرئيسية
+          ],
           child: const HomeScreen(),
         ),
       ),
@@ -112,6 +119,18 @@ class AppRouter {
           child: const AdminOrdersScreen(),
         ),
       ),
+      GoRoute(
+        path: Routes.manageProducts,
+        builder: (context, state) => ManageProductsScreen(),
+      ),
+      GoRoute(
+        path: Routes.wishlist,
+        builder: (context, state) => BlocProvider.value(
+          value: getIt<WishlistCubit>(),
+          child: const WishlistScreen(),
+        ),
+      ),
     ],
+
   );
 }
