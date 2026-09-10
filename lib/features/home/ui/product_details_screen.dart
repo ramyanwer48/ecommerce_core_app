@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/widgets/custom_bottom_sheet.dart';
 import '../data/models/product_model.dart';
 import '../../../core/di/dependency_injection.dart';
 import '../../cart/logic/cart_cubit.dart';
 import '../logic/reviews/reviews_cubit.dart';
 import '../logic/reviews/reviews_state.dart';
+// إضافة استدعاءات المفضلة
+import '../logic/favorites/favorites_cubit.dart';
+import '../logic/favorites/favorites_state.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final ProductModel product;
@@ -42,85 +46,76 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  // الحل الاحترافي (Bottom Sheet) المعتمد في التطبيقات الكبرى
   void _showAddReviewDialog(BuildContext context, ReviewsCubit cubit) {
     double selectedRating = 5.0;
     final nameController = TextEditingController();
     final commentController = TextEditingController();
 
-    showDialog(
+    // استدعاء الأداة الموحدة اللي عملناها
+    CustomBottomSheet.show(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              scrollable: true, // <-- الحل السحري لمنع خطأ الكيبورد
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('أضف تقييمك ⭐️', style: TextStyle(fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return GestureDetector(
-                        onTap: () {
-                          setStateDialog(() {
-                            selectedRating = index + 1.0;
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(
-                            index < selectedRating ? Icons.star : Icons.star_border,
-                            color: Colors.amber,
-                            size: 32,
-                          ),
+      title: 'أضف تقييمك ⭐️',
+      // بنبعت المحتوى الخاص بالتقييم بس (نجوم + حقول إدخال + زرار)
+      child: StatefulBuilder(
+          builder: (context, setStateSheet) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    return GestureDetector(
+                      onTap: () {
+                        setStateSheet(() => selectedRating = index + 1.0);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Icon(
+                          index < selectedRating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 36,
                         ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسمك',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: commentController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'رأيك في المنتج...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D4FF)),
-                  onPressed: () {
-                    cubit.addReview(
-                      productId: widget.product.id,
-                      userName: nameController.text.isNotEmpty ? nameController.text : 'عميل RAMY STORE',
-                      rating: selectedRating,
-                      comment: commentController.text,
+                      ),
                     );
-                    Navigator.pop(context);
-                  },
-                  child: const Text('نشر التقييم', style: TextStyle(color: Colors.white)),
+                  }),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'اسمك', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: commentController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'رأيك في المنتج...', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00D4FF),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      cubit.addReview(
+                        productId: widget.product.id,
+                        userName: nameController.text.isNotEmpty ? nameController.text : 'عميل RAMY STORE',
+                        rating: selectedRating,
+                        comment: commentController.text,
+                      );
+                      Navigator.pop(context); // إغلاق النافذة
+                    },
+                    child: const Text('نشر التقييم', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  ),
                 ),
               ],
             );
-          },
-        );
-      },
+          }
+      ),
     );
   }
 
@@ -144,6 +139,42 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               backgroundColor: const Color(0xFF000826),
               foregroundColor: Colors.white,
               elevation: 0,
+              // التعديل الجديد: استخدام BlocConsumer للاستماع للأخطاء
+              actions: [
+                BlocConsumer<FavoritesCubit, FavoritesState>(
+                  listener: (context, state) {
+                    if (state is FavoritesError) {
+                      // إظهار تنبيه شيك للمستخدم الزائر
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(state.error),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  },
+                  builder: (context, state) {
+                    bool isFavorite = false;
+                    // نتحقق مما إذا كان الـ ID الخاص بالمنتج موجوداً في قائمة المفضلة
+                    if (state is FavoritesLoaded) {
+                      isFavorite = state.favoriteIds.contains(widget.product.id);
+                    }
+                    return IconButton(
+                      icon: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: isFavorite ? Colors.red : Colors.white,
+                        size: 28,
+                      ),
+                      onPressed: () {
+                        // عند الضغط، نقوم بإضافة أو إزالة المنتج من المفضلة السحابية
+                        context.read<FavoritesCubit>().toggleFavorite(widget.product);
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
             body: Column(
               children: [
@@ -190,7 +221,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ],
                   ),
                 ),
-
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(24.0),
@@ -221,7 +251,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-
                           BlocBuilder<ReviewsCubit, ReviewsState>(
                             builder: (context, state) {
                               double avg = 0.0;
@@ -243,7 +272,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-
                           Row(
                             children: [
                               Icon(
@@ -262,7 +290,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ],
                           ),
                           const Divider(height: 24),
-
                           if (widget.product.variations.isNotEmpty) ...[
                             const Text('الخيارات المتاحة:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 12),
@@ -298,7 +325,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                             const Divider(height: 24),
                           ],
-
                           const Text('الوصف:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           Text(
@@ -306,7 +332,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             style: const TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
                           ),
                           const Divider(height: 32),
-
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -319,7 +344,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ],
                           ),
                           const SizedBox(height: 8),
-
                           BlocBuilder<ReviewsCubit, ReviewsState>(
                             builder: (context, state) {
                               if (state is ReviewsLoading) {

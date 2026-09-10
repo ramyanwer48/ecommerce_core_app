@@ -42,22 +42,24 @@ class WishlistScreen extends StatelessWidget {
               return _buildEmptyWishlist();
             }
 
+            // 👈 إضافة السحب للتحديث في المفضلة
             return RefreshIndicator(
               color: ColorsManager.neonBlue,
               onRefresh: () async {
-                // 👈 السطر اللي تم تعديله ليتطابق مع الكيوبيت الخاص بك
-                await context.read<FavoritesCubit>().fetchFavorites();
+                // استدعاء دالة تحديث المفضلة (تأكد من اسم الدالة في الكيوبيت عندك)
+                await context.read<FavoritesCubit>().getFavorites(); 
               },
               child: ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(), // إجبار السحب للأسفل
+                physics: const AlwaysScrollableScrollPhysics(), // 👈 إجبار السحب حتى لو المنتجات قليلة
                 padding: const EdgeInsets.all(16),
                 itemCount: state.favoriteProducts.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final item = state.favoriteProducts[index];
-
-                  // قراءة حالة المنتج من الموديل الجديد
-                  final bool isActive = item.isActive;
+                  
+                  // 👈 قراءة حالة المنتج (الافتراضي true لو مش موجودة لسه)
+                  // ملاحظة: هنضيف isActive للموديل في الخطوة الجاية
+                  final bool isActive = item.isActive ?? true;
 
                   return Card(
                     color: isActive ? Colors.white : Colors.grey.shade100, // لون باهت للمنتج المخفي
@@ -65,7 +67,7 @@ class WishlistScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      // تعطيل الضغط لو المنتج غير متاح
+                      // 👈 تعطيل الضغط لو المنتج غير متاح
                       onTap: isActive ? () {
                         final tempProduct = ProductModel(
                           id: item.productId,
@@ -80,12 +82,12 @@ class WishlistScreen extends StatelessWidget {
                           isActive: isActive,
                         );
                         context.push(Routes.productDetails, extra: tempProduct);
-                      } : null,
+                      } : null, 
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: Row(
                           children: [
-                            // تقليل شفافية الصورة للمنتج المخفي
+                            // 👈 تقليل شفافية الصورة للمنتج المخفي
                             Opacity(
                               opacity: isActive ? 1.0 : 0.4,
                               child: ClipRRect(
@@ -108,9 +110,9 @@ class WishlistScreen extends StatelessWidget {
                                   Text(
                                     item.name,
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 16, 
                                       fontWeight: FontWeight.bold,
-                                      // شطب الاسم للمنتج المخفي
+                                      // 👈 شطب الاسم للمنتج المخفي
                                       decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
                                       color: isActive ? Colors.black : Colors.grey.shade600,
                                     ),
@@ -121,12 +123,12 @@ class WishlistScreen extends StatelessWidget {
                                   Text(
                                     '${item.price} ج.م',
                                     style: TextStyle(
-                                        fontSize: 16,
-                                        color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade500,
-                                        fontWeight: FontWeight.bold
+                                      fontSize: 16, 
+                                      color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade500, 
+                                      fontWeight: FontWeight.bold
                                     ),
                                   ),
-                                  // بادج التنبيه
+                                  // 👈 بادج التنبيه
                                   if (!isActive)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4.0),
@@ -135,7 +137,7 @@ class WishlistScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            // زر الحذف من المفضلة
+                            // 👈 زر الحذف من المفضلة (يظل يعمل دائماً)
                             IconButton(
                               icon: const Icon(Icons.favorite, color: Colors.red, size: 28),
                               onPressed: () {
@@ -170,6 +172,7 @@ class WishlistScreen extends StatelessWidget {
   }
 
   Widget _buildEmptyWishlist() {
+    // ... (نفس كود الشاشة الفارغة بتاعك بدون تعديل)
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

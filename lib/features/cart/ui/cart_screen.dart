@@ -8,7 +8,6 @@ import '../logic/cart_state.dart';
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
-  // النافذة المنبثقة لطلب بيانات التوصيل
   void _showCheckoutForm(BuildContext context, CartCubit cubit) {
     final formKey = GlobalKey<FormState>();
     final phoneController = TextEditingController();
@@ -16,7 +15,7 @@ class CartScreen extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // مهم جداً لرفع النافذة فوق الكيبورد
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
@@ -65,8 +64,7 @@ class CartScreen extends StatelessWidget {
                     ),
                     onPressed: () {
                       if (formKey.currentState!.validate()) {
-                        Navigator.pop(context); // إغلاق النافذة المنبثقة
-                        // إرسال الطلب لفايربيز بالبيانات الجديدة
+                        Navigator.pop(context);
                         cubit.checkout(address: addressController.text, phone: phoneController.text);
                       }
                     },
@@ -103,7 +101,7 @@ class CartScreen extends StatelessWidget {
                 behavior: SnackBarBehavior.floating,
               ),
             );
-            context.push(Routes.orders);
+            context.pushReplacement(Routes.orders); // 👈 تغيير التوجيه لـ Replacement لتنظيف الهيستوري
           } else if (state is CartError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.error), backgroundColor: Colors.red),
@@ -132,23 +130,67 @@ class CartScreen extends StatelessWidget {
                     itemCount: state.cartItems.length,
                     itemBuilder: (context, index) {
                       final item = state.cartItems[index];
+                      // 👈 قراءة الكمية الخاصة بهذا المنتج من الكيوبيت
+                      final quantity = cubit.getQuantity(item);
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: item.imageUrl.isNotEmpty
-                                ? Image.network(item.imageUrl, width: 60, height: 60, fit: BoxFit.cover)
-                                : Container(width: 60, height: 60, color: Colors.grey[200], child: const Icon(Icons.image)),
-                          ),
-                          title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          subtitle: Text('${item.price} ج.م', style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            onPressed: () {
-                              cubit.removeFromCart(item);
-                            },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: item.imageUrl.isNotEmpty
+                                    ? Image.network(item.imageUrl, width: 70, height: 70, fit: BoxFit.cover)
+                                    : Container(width: 70, height: 70, color: Colors.grey[200], child: const Icon(Icons.image)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                    const SizedBox(height: 4),
+                                    Text('${item.price} ج.م', style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                              // 👈 أزرار التحكم في الكمية (+) و (-)
+                              Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      InkWell(
+                                        onTap: () => cubit.decreaseQuantity(item),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(6)),
+                                          child: const Icon(Icons.remove, size: 18, color: Colors.black),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text('$quantity', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                      const SizedBox(width: 12),
+                                      InkWell(
+                                        onTap: () => cubit.increaseQuantity(item),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(color: const Color(0xFF00D4FF), borderRadius: BorderRadius.circular(6)),
+                                          child: const Icon(Icons.add, size: 18, color: Colors.white),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  // زر الحذف
+                                  TextButton(
+                                    onPressed: () => cubit.removeFromCart(item),
+                                    child: const Text('حذف', style: TextStyle(color: Colors.red, fontSize: 12)),
+                                  )
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -180,7 +222,6 @@ class CartScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () {
-                          // استدعاء النافذة المنبثقة بدلاً من الدفع المباشر
                           _showCheckoutForm(context, cubit);
                         },
                         child: const Text('إتمام الطلب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),

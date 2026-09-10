@@ -41,7 +41,7 @@ class SignUpScreen extends StatelessWidget {
             builder: (context, state) {
               final cubit = context.read<AuthCubit>();
               return Form(
-                key: cubit.formKey, // نستخدم نفس הFormKey
+                key: cubit.formKey,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -67,6 +67,39 @@ class SignUpScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 50),
+
+                      // حقل الاسم (الإضافة الجديدة)
+                      TextFormField(
+                        controller: cubit.nameController,
+                        style: const TextStyle(color: ColorsManager.white),
+                        keyboardType: TextInputType.name,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'برجاء إدخال اسمك بالكامل';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'الاسم بالكامل',
+                          hintStyle: TextStyles.font14LightGrayRegular,
+                          prefixIcon: const Icon(Icons.person_outline, color: ColorsManager.lightBlue),
+                          filled: true,
+                          fillColor: ColorsManager.mainDarkBlue,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.darkGray, width: 1),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.lightBlue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: ColorsManager.errorRed, width: 1),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
                       // حقل الإيميل
                       TextFormField(
@@ -145,7 +178,6 @@ class SignUpScreen extends StatelessWidget {
                         ),
                         onPressed: () {
                           if (cubit.formKey.currentState!.validate()) {
-                            // نقوم باستدعاء دالة إنشاء الحساب بدلاً من تسجيل الدخول
                             cubit.emitSignUpStates();
                           }
                         },

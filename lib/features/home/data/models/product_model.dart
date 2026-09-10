@@ -3,11 +3,12 @@ class ProductModel {
   final String name;
   final String description;
   final double price;
-  final String imageUrl; // الصورة الأساسية لشبكة المنتجات (للتوافق القديم)
-  final List<String> images; // معرض الصور (Carousel)
-  final List<String> variations; // خيارات الهاردوير (مثال: 16GB RAM / 32GB RAM)
+  final String imageUrl;
+  final List<String> images;
+  final List<String> variations;
   final String category;
   final bool inStock;
+  final bool isActive; // 👈 المتغير الجديد (True = المنتج يظهر في المتجر، False = المنتج محذوف ومخفي)
 
   ProductModel({
     required this.id,
@@ -19,6 +20,7 @@ class ProductModel {
     required this.variations,
     required this.category,
     this.inStock = true,
+    this.isActive = true, // 👈 القيمة الافتراضية لأي منتج جديد إنه شغال ومتاح
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -27,7 +29,6 @@ class ProductModel {
     if (json['images'] != null) {
       parsedImages = List<String>.from(json['images']);
     } else if (json['imageUrl'] != null && json['imageUrl'].toString().isNotEmpty) {
-      // حماية للمنتجات القديمة: وضع الصورة الأساسية كصورة وحيدة في المعرض
       parsedImages = [json['imageUrl']];
     }
 
@@ -47,6 +48,7 @@ class ProductModel {
       variations: parsedVariations,
       category: json['category'] ?? 'General',
       inStock: json['inStock'] ?? true,
+      isActive: json['isActive'] ?? true, // 👈 قراءة حالة المنتج (لو مش موجودة في منتج قديم هتعتبر true أوتوماتيك)
     );
   }
 
@@ -60,6 +62,7 @@ class ProductModel {
       'variations': variations,
       'category': category,
       'inStock': inStock,
+      'isActive': isActive, // 👈 حفظ الحالة الجديدة في الفايربيز
     };
   }
 }

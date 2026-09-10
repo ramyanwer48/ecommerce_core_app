@@ -2,14 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class OrderModel {
   final String id;
+  final String userId; // 👈 المتغير اللي كان ناقص عشان الإشعارات
   final double totalPrice;
   final String date;
   final String status;
-  final String address; // شلنا علامة الاستفهام عشان الواجهة
-  final String phone;   // شلنا علامة الاستفهام
+  final String address;
+  final String phone;
 
   OrderModel({
     required this.id,
+    required this.userId, // 👈 إضافته هنا
     required this.totalPrice,
     required this.date,
     required this.status,
@@ -32,11 +34,12 @@ class OrderModel {
 
     return OrderModel(
       id: documentId,
+      userId: json['userId'] ?? '', // 👈 سحب رقم العميل من قاعدة البيانات
       totalPrice: (json['totalPrice'] ?? 0).toDouble(),
       date: formattedDate,
       status: json['status'] ?? 'Pending',
-      address: json['address'] ?? 'غير محدد', // لو الطلب قديم ومفيش عنوان يكتب "غير محدد"
-      phone: json['phone'] ?? 'غير محدد',     // لو الطلب قديم يكتب "غير محدد"
+      address: json['address'] ?? 'غير محدد',
+      phone: json['phone'] ?? 'غير محدد',
     );
   }
 }

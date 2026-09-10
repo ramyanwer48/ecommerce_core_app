@@ -28,13 +28,13 @@ class AdminRepo {
     }
   }
 
-  // دالة إضافة المنتج كما هي
+  // دالة إضافة المنتج
   Future<void> addProduct({
     required String name,
     required double price,
     required String category,
     required String description,
-    required String imageUrl, // تأكد إنها String imageUrl مش File
+    required String imageUrl,
     required List<String> images,
     required List<String> variations,
     required bool inStock,
@@ -48,11 +48,15 @@ class AdminRepo {
       'images': images,
       'variations': variations,
       'inStock': inStock,
+      'isActive': true, // 👈 تم إضافة هذه القيمة لضمان أن المنتج الجديد متاح دائماً
     });
   }
-  // 1. حذف منتج
+
+  // 1. إخفاء منتج (Soft Delete) بدلاً من الحذف النهائي 👈 (التعديل الجوهري هنا)
   Future<void> deleteProduct(String productId) async {
-    await _firestore.collection('products').doc(productId).delete();
+    await _firestore.collection('products').doc(productId).update({
+      'isActive': false,
+    });
   }
 
   // 2. تعديل السعر

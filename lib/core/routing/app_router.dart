@@ -44,7 +44,6 @@ import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
 
 import '../../features/wishlist/ui/wishlist_screen.dart';
-import '../../features/wishlist/logic/wishlist_cubit.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -73,7 +72,6 @@ class AppRouter {
         builder: (context, state) => MultiBlocProvider(
           providers: [
             BlocProvider(create: (context) => getIt<HomeCubit>()..fetchProducts()),
-            BlocProvider.value(value: getIt<WishlistCubit>()), // توفير المفضلة للشاشة الرئيسية
           ],
           child: const HomeScreen(),
         ),
@@ -124,12 +122,9 @@ class AppRouter {
         builder: (context, state) => ManageProductsScreen(),
       ),
       GoRoute(
-        path: Routes.wishlist,
-        builder: (context, state) => BlocProvider.value(
-          value: getIt<WishlistCubit>(),
-          child: const WishlistScreen(),
-        ),
-      ),
+      path: Routes.wishlist,
+  builder: (context, state) => const WishlistScreen(),
+  ),
     ],
 
   );

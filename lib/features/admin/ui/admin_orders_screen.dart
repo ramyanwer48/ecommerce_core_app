@@ -91,7 +91,7 @@ class AdminOrdersScreen extends StatelessWidget {
                               ],
                               onChanged: (newStatus) {
                                 if (newStatus != null && newStatus != order.status) {
-                                  context.read<AdminOrdersCubit>().updateStatus(order.id, newStatus);
+                                  context.read<AdminOrdersCubit>().updateStatus(order.id, order.userId, newStatus);
                                 }
                               },
                             ),

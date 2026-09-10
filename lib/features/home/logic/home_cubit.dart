@@ -6,8 +6,15 @@ import 'home_state.dart';
 class HomeCubit extends Cubit<HomeState> {
   final HomeRepo _homeRepo;
 
-  // حفظ النسخة الأصلية من المنتجات لفلترتها محلياً
+  // القائمة الأصلية
   List<ProductModel> _allProducts = [];
+
+  // متغيرات تتبع حالة الفلترة (جعلناها عامة لتقرأها واجهة المستخدم)
+  String currentCategory = 'الكل';
+  String currentSearchQuery = '';
+  double currentMinPrice = 0;
+  double currentMaxPrice = 100000; // حد أقصى افتراضي
+  String currentSortBy = 'none'; // 'price_asc' (الأقل للأعلى), 'price_desc' (الأعلى للأقل)
 
   HomeCubit(this._homeRepo) : super(HomeInitial());
 
@@ -15,33 +22,67 @@ class HomeCubit extends Cubit<HomeState> {
     emit(HomeLoading());
     try {
       _allProducts = await _homeRepo.getProducts();
-      emit(HomeLoaded(_allProducts));
+      _applyFilters();
     } catch (e) {
       emit(HomeError(e.toString()));
     }
   }
 
-  // دالة الفلترة الجديدة
-  void filterByCategory(String category) {
-    if (category == 'الكل') {
-      emit(HomeLoaded(_allProducts)); // عرض كل المنتجات
-    } else {
-      final filteredList = _allProducts.where((product) => product.category == category).toList();
-      emit(HomeLoaded(filteredList)); // عرض المنتجات المطابقة فقط
-    }
-  } // <-- تم إغلاق قوس دالة الفلترة هنا
-
-  // دالة البحث الفوري (مستقلة وتعمل بشكل صحيح الآن)
+  // البحث السريع
   void searchProducts(String query) {
-    if (query.isEmpty) {
-      // إذا كان مربع البحث فارغاً، نعرض كل المنتجات
-      emit(HomeLoaded(_allProducts));
-    } else {
-      // البحث عن أي منتج يحتوي اسمه على الحروف المكتوبة (مع تجاهل حالة الأحرف)
-      final searchedList = _allProducts
-          .where((product) => product.name.toLowerCase().contains(query.toLowerCase()))
-          .toList();
-      emit(HomeLoaded(searchedList));
+    currentSearchQuery = query.toLowerCase().trim();
+    _applyFilters();
+  }
+
+  // فلترة التصنيفات السريعة
+  void filterByCategory(String category) {
+    currentCategory = category;
+    _applyFilters();
+  }
+
+  // الفلترة المتقدمة (من الـ Bottom Sheet)
+  void applyAdvancedFilters({
+    String? category,
+    double? minPrice,
+    double? maxPrice,
+    String? sortBy,
+  }) {
+    if (category != null) currentCategory = category;
+    if (minPrice != null) currentMinPrice = minPrice;
+    if (maxPrice != null) currentMaxPrice = maxPrice;
+    if (sortBy != null) currentSortBy = sortBy;
+
+    _applyFilters();
+  }
+
+  // 🚀 المحرك الأساسي (يجمع كل الفلاتر معاً)
+  void _applyFilters() {
+    List<ProductModel> filteredList = List.from(_allProducts);
+
+    // 1. التصنيف
+    if (currentCategory != 'الكل') {
+      filteredList = filteredList.where((product) => product.category == currentCategory).toList();
     }
+
+    // 2. البحث النصي
+    if (currentSearchQuery.isNotEmpty) {
+      filteredList = filteredList.where((product) {
+        final nameMatch = product.name.toLowerCase().contains(currentSearchQuery);
+        final descMatch = product.description.toLowerCase().contains(currentSearchQuery);
+        return nameMatch || descMatch;
+      }).toList();
+    }
+
+    // 3. نطاق السعر
+    filteredList = filteredList.where((product) => product.price >= currentMinPrice && product.price <= currentMaxPrice).toList();
+
+    // 4. الترتيب (Sorting)
+    if (currentSortBy == 'price_asc') {
+      filteredList.sort((a, b) => a.price.compareTo(b.price)); // الأقل سعراً
+    } else if (currentSortBy == 'price_desc') {
+      filteredList.sort((a, b) => b.price.compareTo(a.price)); // الأعلى سعراً
+    }
+
+    emit(HomeLoaded(filteredList));
   }
 }

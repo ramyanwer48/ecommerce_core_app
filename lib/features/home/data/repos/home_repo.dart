@@ -6,7 +6,11 @@ class HomeRepo {
 
   Future<List<ProductModel>> getProducts() async {
     try {
-      final QuerySnapshot snapshot = await _firestore.collection('products').get();
+      // 👈 التعديل الجوهري هنا: فلترة المنتجات من السيرفر مباشرة
+      final QuerySnapshot snapshot = await _firestore
+          .collection('products')
+          .where('isActive', isEqualTo: true) // جلب المنتجات المتاحة فقط
+          .get();
 
       List<ProductModel> products = snapshot.docs.map((doc) {
         return ProductModel.fromJson(doc.data() as Map<String, dynamic>, doc.id);

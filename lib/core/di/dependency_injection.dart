@@ -7,9 +7,11 @@ import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/home/data/repos/home_repo.dart';
 import '../../features/home/logic/home_cubit.dart';
 import '../../features/cart/logic/cart_cubit.dart';
-import '../../features/wishlist/logic/wishlist_cubit.dart';
 
 import '../../features/home/logic/reviews/reviews_cubit.dart';
+
+import '../../features/home/logic/favorites/favorites_cubit.dart';
+
 final GetIt getIt = GetIt.instance;
 
 Future<void> setupGetIt() async {
@@ -28,7 +30,8 @@ Future<void> setupGetIt() async {
   // Cart
   getIt.registerLazySingleton<CartCubit>(() => CartCubit());
 
-  getIt.registerLazySingleton<WishlistCubit>(() => WishlistCubit());
 
   getIt.registerFactory<ReviewsCubit>(() => ReviewsCubit());
+
+  getIt.registerLazySingleton<FavoritesCubit>(() => FavoritesCubit());
 }
