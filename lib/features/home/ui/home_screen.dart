@@ -3,12 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theming/colors.dart';
-import '../../../core/widgets/custom_bottom_sheet.dart'; // استدعاء البوتوم شيت
+import '../../../core/widgets/custom_bottom_sheet.dart';
 import '../logic/home_cubit.dart';
 import '../logic/home_state.dart';
 import 'product_shimmer.dart';
 import '../logic/favorites/favorites_cubit.dart';
 import '../logic/favorites/favorites_state.dart';
+import '../data/models/category_model.dart'; // 👈 استدعاء موديل الأقسام الجديد
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,18 +19,22 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<String> categories = ['الكل', 'Laptops', 'Accessories', 'Screens'];
-  int selectedCategoryIndex = 0;
 
   // 🎛️ دالة عرض الفلتر الاحترافي
   void _showFilterSheet(BuildContext context) {
     final cubit = context.read<HomeCubit>();
 
-    // سحب القيم الحالية من الـ Cubit للحفاظ على اختيارات العميل
+    // سحب القيم الحالية من الـ Cubit
     String localCategory = cubit.currentCategory;
     double localMin = cubit.currentMinPrice;
     double localMax = cubit.currentMaxPrice;
     String localSortBy = cubit.currentSortBy;
+
+    // 👈 سحب الأقسام الديناميكية من الـ State الحالي
+    List<CategoryModel> sheetCategories = [];
+    if (cubit.state is HomeLoaded) {
+      sheetCategories = (cubit.state as HomeLoaded).categories;
+    }
 
     CustomBottomSheet.show(
       context: context,
@@ -85,29 +90,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       localMin = values.start;
                       localMax = values.end;
                     });
-                    // تحديث مباشر للعداد والخلفية!
                     cubit.applyAdvancedFilters(minPrice: localMin, maxPrice: localMax);
                   },
                 ),
                 const Divider(height: 32),
 
-                // 3. التصنيفات
+                // 3. التصنيفات (الديناميكية)
                 const Text('التصنيف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: categories.map((cat) {
-                    return _buildChoiceChip(cat, localCategory == cat, () {
-                      setStateSheet(() => localCategory = cat);
-                      setState(() => selectedCategoryIndex = categories.indexOf(cat)); // تحديث الشاشة الرئيسية
-                      cubit.applyAdvancedFilters(category: cat);
+                  children: sheetCategories.map((cat) {
+                    return _buildChoiceChip(cat.name, localCategory == cat.name, () {
+                      setStateSheet(() => localCategory = cat.name);
+                      // تم حذف setState الخاصة بالشاشة الرئيسية لأن الكيوبيت سيتولى الأمر
+                      cubit.applyAdvancedFilters(category: cat.name);
                     });
                   }).toList(),
                 ),
                 const SizedBox(height: 32),
 
-                // 4. زر التطبيق الذكي (العداد الحي)
+                // 4. زر التطبيق الذكي
                 BlocBuilder<HomeCubit, HomeState>(
                     bloc: cubit,
                     builder: (context, state) {
@@ -140,7 +144,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // أداة مساعدة لرسم الـ Chips بشكل أنيق
   Widget _buildChoiceChip(String label, bool isSelected, VoidCallback onTap) {
     return ChoiceChip(
       label: Text(label),
@@ -186,16 +189,15 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: Column(
           children: [
-            // 1. شريط البحث الفوري + زر الفلتر
+            // 1. شريط البحث
             Padding(
               padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 8),
               child: TextField(
                 onChanged: (value) => context.read<HomeCubit>().searchProducts(value),
                 decoration: InputDecoration(
-                  hintText: 'ابحث عن منتج (مثال: HP ZBook)...',
+                  hintText: 'ابحث عن منتج...',
                   hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                   prefixIcon: const Icon(Icons.search, color: ColorsManager.neonBlue),
-                  // أيقونة الفلتر هنا!
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.tune, color: ColorsManager.neonBlue),
                     onPressed: () => _showFilterSheet(context),
@@ -215,41 +217,70 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // 2. شريط التصنيفات الأفقي
-            SizedBox(
-              height: 60,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                itemCount: categories.length,
-                itemBuilder: (context, index) {
-                  final isSelected = selectedCategoryIndex == index;
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() => selectedCategoryIndex = index);
-                      context.read<HomeCubit>().applyAdvancedFilters(category: categories[index]);
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(left: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? ColorsManager.neonBlue : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isSelected ? ColorsManager.neonBlue : Colors.grey.shade300),
-                      ),
-                      child: Center(
-                        child: Text(
-                          categories[index],
-                          style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+            // 2. شريط التصنيفات الأفقي (الديناميكي)
+            BlocBuilder<HomeCubit, HomeState>(
+              builder: (context, state) {
+                if (state is HomeLoaded) {
+                  final categories = state.categories;
+                  final currentCubitCategory = context.read<HomeCubit>().currentCategory;
+
+                  return SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      itemCount: categories.length,
+                      itemBuilder: (context, index) {
+                        final cat = categories[index];
+                        final isSelected = currentCubitCategory == cat.name;
+
+                        return GestureDetector(
+                          onTap: () {
+                            // التحديث يتم مباشرة عبر الكيوبيت
+                            context.read<HomeCubit>().applyAdvancedFilters(category: cat.name);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? ColorsManager.neonBlue : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: isSelected ? ColorsManager.neonBlue : Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // 👈 إضافة دعم ذكي لظهور أيقونة القسم لو موجودة في الفايربيز
+                                if (cat.imageUrl.isNotEmpty) ...[
+                                  Image.network(
+                                    cat.imageUrl,
+                                    width: 20,
+                                    height: 20,
+                                    color: isSelected ? Colors.white : ColorsManager.neonBlue,
+                                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  cat.name,
+                                  style: TextStyle(
+                                      color: isSelected ? Colors.white : Colors.black87,
+                                      fontWeight: FontWeight.bold
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   );
-                },
-              ),
+                }
+                // شكل تحميل وهمي للأقسام
+                return const SizedBox(height: 60);
+              },
             ),
 
-            // 3. شبكة المنتجات
             // 3. شبكة المنتجات
             Expanded(
               child: BlocBuilder<HomeCubit, HomeState>(
@@ -274,9 +305,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           await context.read<HomeCubit>().fetchProducts();
                         },
                         child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(), // 👈 السر هنا: إجبار الشاشة على السحب
+                          physics: const AlwaysScrollableScrollPhysics(),
                           children: [
-                            SizedBox(height: MediaQuery.of(context).size.height * 0.25), // مسافة من فوق
+                            SizedBox(height: MediaQuery.of(context).size.height * 0.25),
                             const Icon(Icons.search_off, size: 80, color: Colors.grey),
                             const SizedBox(height: 16),
                             const Center(
@@ -290,16 +321,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }
 
-                    // 👈 التعديل هنا: تغليف الـ GridView بـ RefreshIndicator
-                    // 👈 التعديل تم هنا بنجاح
                     return RefreshIndicator(
                       color: ColorsManager.neonBlue,
                       onRefresh: () async {
-                        // استدعاء الدالة الصحيحة الموجودة في الكيوبيت
                         await context.read<HomeCubit>().fetchProducts();
                       },
                       child: GridView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(), // مهمة عشان السحب يشتغل دايماً
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(16),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2, childAspectRatio: 0.68, crossAxisSpacing: 16, mainAxisSpacing: 16,
@@ -346,7 +374,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                         if (favoritesState is FavoritesLoaded) isFavorite = favoritesState.favoriteIds.contains(product.id);
 
                                         return CircleAvatar(
-                                          // 👈 تم حل تحذير الألوان هنا باستخدام withValues
                                           backgroundColor: Colors.white.withValues(alpha: 0.9),
                                           radius: 16,
                                           child: IconButton(
@@ -368,7 +395,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
 
                   if (state is HomeError) {
-                    return const Center(child: Text('حدث خطأ في تحميل البيانات', style: TextStyle(color: Colors.red, fontSize: 16)));
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: SelectableText( // 👈 استخدمنا SelectableText عشان تقدر تنسخ الرابط بسهولة
+                          state.error, // 👈 هنا هيظهرلك سبب الرفض والرابط السري بتاع الفايربيز
+                          style: const TextStyle(color: Colors.red, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
                   }
 
                   return const SizedBox.shrink();

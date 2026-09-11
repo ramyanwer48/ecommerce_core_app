@@ -89,17 +89,22 @@ class CartCubit extends Cubit<CartState> {
   }
 
   // 6. إتمام الطلب وإرساله إلى Firebase
-  Future<void> checkout({required String address, required String phone}) async {
+  // 6. إتمام الطلب وإرساله إلى Firebase
+  Future<void> checkout({
+    required String address,
+    required String phone,
+    required double finalTotal, // 👈 الإجمالي بعد الخصم
+    required String paymentMethod, // 👈 طريقة الدفع
+  }) async {
     if (_items.isEmpty) return;
 
     try {
-      final currentTotal = _items.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
       emit(CartLoading());
 
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("حدث خطأ: المستخدم غير مسجل الدخول");
 
-      // 🚀 إحضار رقم الطلب التسلسلي (حل مشكلة اختفاء الرقم)
+      // 🚀 إحضار رقم الطلب التسلسلي
       final counterRef = FirebaseFirestore.instance.collection('system').doc('counters');
       final counterDoc = await counterRef.get();
       int newOrderNumber = 1;
@@ -112,26 +117,27 @@ class CartCubit extends Cubit<CartState> {
       }
 
       final orderData = {
-        'orderNumber': newOrderNumber, // 👈 الرقم المتسلسل
+        'orderNumber': newOrderNumber,
         'userId': user.uid,
         'userEmail': user.email ?? 'غير معروف',
         'address': address,
         'phone': phone,
-        'totalPrice': currentTotal,
+        'totalPrice': finalTotal, // 👈 حفظنا الإجمالي النهائي
+        'paymentMethod': paymentMethod, // 👈 حفظنا طريقة الدفع في الفاتورة
         'orderDate': FieldValue.serverTimestamp(),
         'status': 'Pending',
         'items': _items.map((item) => {
           'productId': item.product.id,
           'name': item.product.name,
           'price': item.product.price,
-          'quantity': item.quantity, // 👈 حفظ الكمية في الفاتورة
-          'imageUrl': item.product.imageUrl, // ضفنا الصورة للفاتورة
+          'quantity': item.quantity,
+          'imageUrl': item.product.imageUrl,
         }).toList(),
       };
 
       await FirebaseFirestore.instance.collection('orders').add(orderData);
 
-      _items.clear(); // 👈 تفريغ السلة تماماً
+      _items.clear(); // تفريغ السلة
       emit(CartCheckoutSuccess());
       emit(CartUpdated([], 0));
     } catch (e) {

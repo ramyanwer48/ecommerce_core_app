@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 إضافة مكتبة الفايربيز
 import '../logic/add_product_cubit.dart';
 import '../logic/add_product_state.dart';
 
@@ -19,8 +20,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _descController = TextEditingController();
   final _variationsController = TextEditingController();
 
-  String _selectedCategory = 'Laptops';
-  final List<String> _categories = ['Laptops', 'Accessories', 'Screens'];
+  // 👈 التعديل الأول: جعلنا القسم المختار يقبل (null) في البداية حتى يتم تحميل البيانات
+  String? _selectedCategory;
   bool _inStock = true;
 
   // الصورة الأساسية
@@ -82,6 +83,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             setState(() {
               _inStock = true;
               _selectedImage = null;
+              _selectedCategory = null; // 👈 تصفير الاختيار بعد النجاح
               _extraImages.clear();
             });
           } else if (state is AddProductError) {
@@ -126,7 +128,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // 2. اختيار صور إضافية للمعرض (مباشرة من الموبايل)
+                // 2. اختيار صور إضافية للمعرض
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -175,12 +177,48 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   validator: (value) => value!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory,
-                  decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder()),
-                  items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                  onChanged: (val) => setState(() => _selectedCategory = val!),
+
+                // 👇 التعديل الجوهري: StreamBuilder لجلب الأقسام ديناميكياً 👇
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('categories')
+                      .where('isActive', isEqualTo: true) // جلب الأقسام النشطة فقط
+                      .orderBy('orderIndex')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: LinearProgressIndicator(color: Color(0xFF00D4FF)));
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Text('⚠️ لا توجد أقسام متاحة. الرجاء إضافة قسم من إدارة الأقسام أولاً.', style: TextStyle(color: Colors.red));
+                    }
+
+                    // استخراج الأسماء من قاعدة البيانات
+                    final List<String> dynamicCategories = snapshot.data!.docs
+                        .map((doc) => doc['name'] as String)
+                        .toList();
+
+                    // التأكد من أن القسم المختار موجود في القائمة، وإلا نختار أول عنصر كافتراضي
+                    if (_selectedCategory == null || !dynamicCategories.contains(_selectedCategory)) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        setState(() {
+                          _selectedCategory = dynamicCategories.first;
+                        });
+                      });
+                    }
+
+                    return DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder()),
+                      items: dynamicCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                      onChanged: (val) => setState(() => _selectedCategory = val),
+                      validator: (value) => value == null ? 'الرجاء اختيار قسم' : null,
+                    );
+                  },
                 ),
+                // 👆 نهاية التعديل 👆
+
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _variationsController,
@@ -217,6 +255,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       );
                       return;
                     }
+                    if (_selectedCategory == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('الرجاء اختيار القسم أولاً'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
                     if (_formKey.currentState!.validate()) {
                       List<String> variationsList = _variationsController.text.isNotEmpty
                           ? _variationsController.text.split(',').map((e) => e.trim()).toList()
@@ -225,10 +269,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       context.read<AddProductCubit>().addProductToFirestore(
                         name: _nameController.text,
                         price: double.parse(_priceController.text),
-                        category: _selectedCategory,
+                        category: _selectedCategory!, // 👈 تأكيد إرسال القسم
                         description: _descController.text,
                         mainImageFile: _selectedImage!,
-                        extraImageFiles: _extraImages, // تمرير ملفات الصور الإضافية
+                        extraImageFiles: _extraImages,
                         variations: variationsList,
                         inStock: _inStock,
                       );

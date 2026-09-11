@@ -1,4 +1,5 @@
-import '../data/models/product_model.dart'; // مسار الاستدعاء الصحيح
+import '../data/models/product_model.dart';
+import '../data/models/category_model.dart'; // 👈 استدعاء الموديل الجديد
 
 abstract class HomeState {}
 
@@ -8,10 +9,12 @@ class HomeLoading extends HomeState {}
 
 class HomeLoaded extends HomeState {
   final List<ProductModel> products;
-  HomeLoaded(this.products);
+  final List<CategoryModel> categories; // 👈 إضافة الأقسام للـ State
+
+  HomeLoaded(this.products, this.categories);
 }
 
 class HomeError extends HomeState {
-  final String message;
-  HomeError(this.message);
+  final String error;
+  HomeError(this.error);
 }

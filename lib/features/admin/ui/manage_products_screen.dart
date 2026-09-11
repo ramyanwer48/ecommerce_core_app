@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart'; // 👈 تم إضافة استدعاء الراوتر هنا
+import '../../../core/routing/routes.dart'; // 👈 تم إضافة مسارات الشاشات هنا
 import '../data/repos/admin_repo.dart';
 
 class ManageProductsScreen extends StatefulWidget {
@@ -36,6 +38,18 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         title: const Text('إدارة المنتجات', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
+        // 👇👇 التعديل الجديد: زرار الدخول لإدارة الأقسام 👇👇
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              context.push(Routes.manageCategories); // فتح شاشة الأقسام
+            },
+            icon: const Icon(Icons.category, color: Colors.white),
+            label: const Text('الأقسام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8), // مسافة صغيرة من الحافة
+        ],
+        // 👆👆 نهاية التعديل 👆👆
       ),
       body: Column(
         children: [

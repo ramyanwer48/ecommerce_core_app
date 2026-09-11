@@ -11,4 +11,5 @@ class Routes {
   static const String adminOrders = '/adminOrders';
   static const String manageProducts = '/manageProducts';
   static const String wishlist = '/wishlist';
+  static const String manageCategories = '/manageCategories';
 }

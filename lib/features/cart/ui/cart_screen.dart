@@ -8,78 +8,6 @@ import '../logic/cart_state.dart';
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
-  void _showCheckoutForm(BuildContext context, CartCubit cubit) {
-    final formKey = GlobalKey<FormState>();
-    final phoneController = TextEditingController();
-    final addressController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 24, left: 24, right: 24,
-          ),
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('بيانات التوصيل 🚚', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF000826))),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    prefixIcon: const Icon(Icons.phone, color: Color(0xFF00D4FF)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00D4FF))),
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? 'برجاء إدخال رقم الهاتف' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: addressController,
-                  decoration: InputDecoration(
-                    labelText: 'عنوان التوصيل بالتفصيل',
-                    prefixIcon: const Icon(Icons.location_on, color: Color(0xFF00D4FF)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00D4FF))),
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? 'برجاء إدخال العنوان' : null,
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D4FF),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      if (formKey.currentState!.validate()) {
-                        Navigator.pop(context);
-                        cubit.checkout(address: addressController.text, phone: phoneController.text);
-                      }
-                    },
-                    child: const Text('تأكيد الطلب', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,16 +21,8 @@ class CartScreen extends StatelessWidget {
       ),
       body: BlocConsumer<CartCubit, CartState>(
         listener: (context, state) {
-          if (state is CartCheckoutSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('تم إرسال طلبك بنجاح! 🚀', style: TextStyle(fontSize: 16)),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            context.pushReplacement(Routes.orders); // 👈 تغيير التوجيه لـ Replacement لتنظيف الهيستوري
-          } else if (state is CartError) {
+          // سيتم نقل منطق نجاح الطلب لاحقاً إلى CheckoutCubit
+          if (state is CartError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.error), backgroundColor: Colors.red),
             );
@@ -130,7 +50,6 @@ class CartScreen extends StatelessWidget {
                     itemCount: state.cartItems.length,
                     itemBuilder: (context, index) {
                       final item = state.cartItems[index];
-                      // 👈 قراءة الكمية الخاصة بهذا المنتج من الكيوبيت
                       final quantity = cubit.getQuantity(item);
 
                       return Card(
@@ -157,7 +76,6 @@ class CartScreen extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              // 👈 أزرار التحكم في الكمية (+) و (-)
                               Column(
                                 children: [
                                   Row(
@@ -183,7 +101,6 @@ class CartScreen extends StatelessWidget {
                                       ),
                                     ],
                                   ),
-                                  // زر الحذف
                                   TextButton(
                                     onPressed: () => cubit.removeFromCart(item),
                                     child: const Text('حذف', style: TextStyle(color: Colors.red, fontSize: 12)),
@@ -202,8 +119,8 @@ class CartScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(24),
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
+                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -222,7 +139,8 @@ class CartScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () {
-                          _showCheckoutForm(context, cubit);
+                          // 👇 هنا السحر: هننتقل لشاشة الدفع ونبعت الإجمالي الحقيقي للسلة كـ Extra
+                          context.push('/checkout', extra: state.totalPrice);
                         },
                         child: const Text('إتمام الطلب', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                       ),

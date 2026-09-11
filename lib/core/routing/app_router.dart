@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 // استدعاءات Auth
+import '../../features/admin/data/repos/admin_categories_repo.dart';
+import '../../features/admin/logic/admin_categories_cubit.dart';
+import '../../features/admin/ui/manage_categories_screen.dart';
 import '../../features/admin/ui/manage_products_screen.dart';
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/ui/auth_gate.dart';
@@ -10,6 +13,9 @@ import '../../features/auth/ui/login_screen.dart';
 import '../../features/auth/ui/signup_screen.dart';
 
 // استدعاءات Home
+import '../../features/checkout/data/repos/checkout_repo.dart';
+import '../../features/checkout/logic/checkout_cubit.dart';
+import '../../features/checkout/ui/checkout_screen.dart';
 import '../../features/home/logic/home_cubit.dart';
 import '../../features/home/ui/home_screen.dart';
 import '../../features/home/ui/product_details_screen.dart';
@@ -125,7 +131,30 @@ class AppRouter {
       path: Routes.wishlist,
   builder: (context, state) => const WishlistScreen(),
   ),
-    ],
+      GoRoute(
+        path: Routes.manageCategories,
+        builder: (context, state) {
+          return BlocProvider(
+            // 👈 هنا بنقول للتطبيق: الشاشة دي بتشتغل بالكيوبيت ده والريبو ده
+            create: (context) => AdminCategoriesCubit(AdminCategoriesRepo()),
+            child: const ManageCategoriesScreen(),
+          );
+        },
+      ),
 
+      // 👇 هنا المكان الصحيح لمسار الـ Checkout (بره المسار اللي فوقيه) 👇
+      GoRoute(
+        path: '/checkout',
+        builder: (context, state) {
+          // هنا بنستقبل الإجمالي اللي جيالنا من السلة، ولو مفيش بنخليه 0.0
+          final cartTotal = state.extra as double? ?? 0.0;
+
+          return BlocProvider(
+            create: (context) => CheckoutCubit(CheckoutRepo()),
+            child: CheckoutScreen(cartTotal: cartTotal),
+          );
+        },
+      ),
+    ], // 👈 قفلة مصفوفة الـ routes
   );
 }
