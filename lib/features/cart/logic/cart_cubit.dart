@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../home/data/models/product_model.dart';
 import 'cart_state.dart';
 
-// 👈 كلاس صغير لربط المنتج بكميته المطلوبة في السلة
+// كلاس لربط المنتج بكميته المطلوبة في السلة
 class CartItemModel {
   final ProductModel product;
   int quantity;
@@ -15,35 +15,46 @@ class CartItemModel {
 class CartCubit extends Cubit<CartState> {
   CartCubit() : super(CartInitial());
 
-  // 👈 تحويل الليستة لتعتمد على الموديل الجديد
   final List<CartItemModel> _items = [];
 
-  // 1. إضافة منتج للسلة (أو زيادة كميته لو موجود)
+  // 1. إضافة منتج للسلة مع فحص المخزون المتاح
   void addToCart(ProductModel product) {
-    // التحقق هل المنتج موجود بالفعل؟
+    final availableStock = product.stockQuantity;
+
+    // التأكد من توفر المنتج بالمستودع
+    if (availableStock <= 0) {
+      emit(CartError("عذراً، هذا المنتج غير متوفر في المخزن حالياً"));
+      _calculateTotal();
+      return;
+    }
+
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
 
     if (existingIndex >= 0) {
-      // لو موجود، زود الكمية
-      _items[existingIndex].quantity++;
+      // التحقق من عدم تخطي الكمية المخزنية
+      if (_items[existingIndex].quantity < availableStock) {
+        _items[existingIndex].quantity++;
+      } else {
+        emit(CartError("لا يمكنك إضافة المزيد، الكمية المتوفرة في المخزن هي $availableStock قطع فقط"));
+      }
     } else {
-      // لو جديد، ضيفه كعنصر جديد
       _items.add(CartItemModel(product: product));
     }
     _calculateTotal();
   }
 
-  // 2. زيادة كمية المنتج من داخل السلة (+)
+  // 2. زيادة كمية المنتج من داخل السلة (+) مقيدة بالمخزون الفعلي
   void increaseQuantity(ProductModel product) {
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
-      // 🛡️ حارس المخزون الافتراضي (يمكنك تعديل الرقم لو عندك حقل للمخزون)
-      if (_items[existingIndex].quantity < 10) {
+      final availableStock = product.stockQuantity;
+
+      if (_items[existingIndex].quantity < availableStock) {
         _items[existingIndex].quantity++;
         _calculateTotal();
       } else {
-        emit(CartError("وصلت للحد الأقصى للكمية المتاحة"));
-        _calculateTotal(); // للرجوع للحالة الصحيحة وعرض البيانات
+        emit(CartError("عذراً، أقصى كمية متوفرة في المخزن هي $availableStock فقط"));
+        _calculateTotal();
       }
     }
   }
@@ -53,10 +64,8 @@ class CartCubit extends Cubit<CartState> {
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
       if (_items[existingIndex].quantity > 1) {
-        // تقليل الكمية
         _items[existingIndex].quantity--;
       } else {
-        // لو الكمية 1 ونقصها، نحذفه من السلة خالص
         _items.removeAt(existingIndex);
       }
       _calculateTotal();
@@ -69,17 +78,16 @@ class CartCubit extends Cubit<CartState> {
     _calculateTotal();
   }
 
-  // 5. حساب الإجمالي بدقة (السعر × الكمية)
+  // 5. حساب الإجمالي بدقة وإجمالي عدد القطع
   void _calculateTotal() {
-    double total = _items.fold(0, (sum, item) => sum + (item.product.price * item.quantity));
+    double total = _items.fold(0, (totalSum, item) => totalSum + (item.product.price * item.quantity));
+    int totalQuantity = _items.fold(0, (sum, item) => sum + item.quantity);
 
-    // استخراج قائمة المنتجات العادية لإرسالها للـ State عشان متبوظش الـ UI القديم عندك
     final List<ProductModel> rawProducts = _items.map((e) => e.product).toList();
-
-    emit(CartUpdated(List.from(rawProducts), total));
+    emit(CartUpdated(List.from(rawProducts), total, totalQuantity));
   }
 
-  // للحصول على كمية منتج معين (لشاشة السلة)
+  // الحصول على كمية منتج معين داخل السلة
   int getQuantity(ProductModel product) {
     final item = _items.firstWhere(
           (e) => e.product.id == product.id,
@@ -88,13 +96,12 @@ class CartCubit extends Cubit<CartState> {
     return item.quantity;
   }
 
-  // 6. إتمام الطلب وإرساله إلى Firebase
-  // 6. إتمام الطلب وإرساله إلى Firebase
+  // 6. إتمام الطلب والخصم الآمن من المخزون بواسطة Transaction
   Future<void> checkout({
     required String address,
     required String phone,
-    required double finalTotal, // 👈 الإجمالي بعد الخصم
-    required String paymentMethod, // 👈 طريقة الدفع
+    required double finalTotal,
+    required String paymentMethod,
   }) async {
     if (_items.isEmpty) return;
 
@@ -104,44 +111,76 @@ class CartCubit extends Cubit<CartState> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("حدث خطأ: المستخدم غير مسجل الدخول");
 
-      // 🚀 إحضار رقم الطلب التسلسلي
-      final counterRef = FirebaseFirestore.instance.collection('system').doc('counters');
-      final counterDoc = await counterRef.get();
-      int newOrderNumber = 1;
+      final firestore = FirebaseFirestore.instance;
+      final counterRef = firestore.collection('system').doc('counters');
 
-      if (counterDoc.exists) {
-        newOrderNumber = (counterDoc.data()?['lastOrderNumber'] ?? 0) + 1;
-        await counterRef.update({'lastOrderNumber': newOrderNumber});
-      } else {
-        await counterRef.set({'lastOrderNumber': 1});
-      }
+      // 🛡️ تنفيذ العملية عبر Transaction لضمان الذرية (Atomic) ومطابقة المخزون
+      await firestore.runTransaction((transaction) async {
+        // أ. قراءة العداد التسلسلي
+        final counterDoc = await transaction.get(counterRef);
+        int newOrderNumber = 1;
+        if (counterDoc.exists) {
+          newOrderNumber = (counterDoc.data()?['lastOrderNumber'] ?? 0) + 1;
+        }
 
-      final orderData = {
-        'orderNumber': newOrderNumber,
-        'userId': user.uid,
-        'userEmail': user.email ?? 'غير معروف',
-        'address': address,
-        'phone': phone,
-        'totalPrice': finalTotal, // 👈 حفظنا الإجمالي النهائي
-        'paymentMethod': paymentMethod, // 👈 حفظنا طريقة الدفع في الفاتورة
-        'orderDate': FieldValue.serverTimestamp(),
-        'status': 'Pending',
-        'items': _items.map((item) => {
-          'productId': item.product.id,
-          'name': item.product.name,
-          'price': item.product.price,
-          'quantity': item.quantity,
-          'imageUrl': item.product.imageUrl,
-        }).toList(),
-      };
+        // ب. قراءة المخزون الفعلي للمنتجات في السلة للتحقق قبل الخصم
+        for (final item in _items) {
+          final productRef = firestore.collection('products').doc(item.product.id);
+          final productDoc = await transaction.get(productRef);
 
-      await FirebaseFirestore.instance.collection('orders').add(orderData);
+          if (!productDoc.exists) {
+            throw Exception("المنتج ${item.product.name} لم يعد متاحاً!");
+          }
 
-      _items.clear(); // تفريغ السلة
+          final currentStock = (productDoc.data()?['stockQuantity'] as num?)?.toInt() ?? 0;
+          if (currentStock < item.quantity) {
+            throw Exception("عذراً، نفد مخزون: ${item.product.name} (المتبقي: $currentStock فقط)");
+          }
+        }
+
+        // ج. تحديث العداد
+        transaction.set(
+          counterRef,
+          {'lastOrderNumber': newOrderNumber},
+          SetOptions(merge: true),
+        );
+
+        // د. إنشاء الفاتورة داخل مجموعة orders
+        final newOrderRef = firestore.collection('orders').doc();
+        final orderData = {
+          'orderNumber': newOrderNumber,
+          'userId': user.uid,
+          'userEmail': user.email ?? 'غير معروف',
+          'address': address,
+          'phone': phone,
+          'totalPrice': finalTotal,
+          'paymentMethod': paymentMethod,
+          'orderDate': FieldValue.serverTimestamp(),
+          'status': 'Pending',
+          'items': _items.map((item) => {
+            'productId': item.product.id,
+            'name': item.product.name,
+            'price': item.product.price,
+            'quantity': item.quantity,
+            'imageUrl': item.product.imageUrl,
+          }).toList(),
+        };
+        transaction.set(newOrderRef, orderData);
+
+        // هـ. خصم الكميات المباعة من المستودع مباشرة
+        for (final item in _items) {
+          final productRef = firestore.collection('products').doc(item.product.id);
+          transaction.update(productRef, {
+            'stockQuantity': FieldValue.increment(-item.quantity),
+          });
+        }
+      });
+
+      _items.clear();
       emit(CartCheckoutSuccess());
-      emit(CartUpdated([], 0));
+      emit(CartUpdated([], 0, 0));
     } catch (e) {
-      emit(CartError(e.toString()));
+      emit(CartError(e.toString().replaceAll("Exception: ", "")));
       _calculateTotal();
     }
   }

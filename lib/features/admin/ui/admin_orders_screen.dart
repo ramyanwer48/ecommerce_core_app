@@ -44,6 +44,11 @@ class AdminOrdersScreen extends StatelessWidget {
               itemCount: orders.length,
               itemBuilder: (context, index) {
                 final order = orders[index];
+
+                // 👈 تعريف الحالات المسموح بها والتحقق من سلامة القيمة الحالية
+                final List<String> validStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+                final currentStatus = validStatuses.contains(order.status) ? order.status : 'Pending';
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -82,10 +87,12 @@ class AdminOrdersScreen extends StatelessWidget {
                           children: [
                             const Text('تغيير الحالة:', style: TextStyle(fontWeight: FontWeight.bold)),
                             DropdownButton<String>(
-                              value: ['Pending', 'Delivered', 'Cancelled'].contains(order.status) ? order.status : 'Pending',
+                              value: currentStatus,
                               underline: Container(height: 2, color: const Color(0xFF00D4FF)),
                               items: const [
-                                DropdownMenuItem(value: 'Pending', child: Text('قيد التنفيذ ⏳', style: TextStyle(color: Colors.orange))),
+                                DropdownMenuItem(value: 'Pending', child: Text('قيد الانتظار ⏳', style: TextStyle(color: Colors.orange))),
+                                DropdownMenuItem(value: 'Processing', child: Text('جاري التجهيز 📦', style: TextStyle(color: Colors.blue))),
+                                DropdownMenuItem(value: 'Shipped', child: Text('تم الشحن 🚚', style: TextStyle(color: Colors.deepPurple))),
                                 DropdownMenuItem(value: 'Delivered', child: Text('تم التوصيل ✅', style: TextStyle(color: Colors.green))),
                                 DropdownMenuItem(value: 'Cancelled', child: Text('ملغي ❌', style: TextStyle(color: Colors.red))),
                               ],

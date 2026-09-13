@@ -424,6 +424,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       variations: widget.product.variations,
                       category: widget.product.category,
                       inStock: widget.product.inStock,
+                      stockQuantity: widget.product.stockQuantity,
                     );
 
                     getIt<CartCubit>().addToCart(productToAdd);

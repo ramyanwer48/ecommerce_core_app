@@ -1,43 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'core/networking/paymob_manager.dart'; // تأكد من تهجئة Paymob بشكل صحيح أو حسب ملفك
 import 'core/theming/colors.dart';
 import 'firebase_options.dart';
 import 'core/routing/app_router.dart';
-import 'core/routing/routes.dart'; // 👈 استدعاء مسارات التطبيق
+import 'core/routing/routes.dart';
 import 'core/di/dependency_injection.dart';
 import 'features/home/logic/favorites/favorites_cubit.dart';
-import 'dart:async'; // 👈 ضروري عشان الرادار (Timer) يشتغل
-import 'dart:async'; // 👈 ضروري عشان الرادار (Timer) يشتغل
+import 'features/cart/logic/cart_cubit.dart';
+import 'dart:async';
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  print("🔔 تم استقبال إشعار في الخلفية: ${message.messageId}");
 }
 
-// 🚀 دالة التوجيه الذكي (Deep Linking)
-// 🚀 دالة التوجيه الذكي (Deep Linking) مع المعالجة
-// 🚀 دالة التوجيه الذكي (Deep Linking) المعالجة بالكامل
+Future<void> _saveFCMTokenToFirestore(String token) async {
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmToken': token,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+  } catch (_) {}
+}
+
 void _handleNotificationClick(RemoteMessage message) {
   final data = message.data;
 
   if (data.containsKey('type') && data['type'] == 'order_update') {
-    final orderId = data['orderId'];
-    print("🎯 توجيه ذكي لتفاصيل الطلب رقم: $orderId");
-
-    // 👈 العداد الذكي (الرادار): يراقب مسار التطبيق كل 300 جزء من الثانية
     Timer.periodic(const Duration(milliseconds: 300), (timer) {
-      // قراءة اسم الشاشة اللي التطبيق واقف عليها حالياً
       final currentPath = AppRouter.router.routerDelegate.currentConfiguration.uri.toString();
 
       if (currentPath == Routes.home) {
-        // بمجرد ما الـ AuthGate يخلص ويوصلنا للرئيسية وتستقر -> نفتح الطلبات
-        timer.cancel(); // نوقف الرادار
+        timer.cancel();
         AppRouter.router.push(Routes.orders);
-      }
-      else if (currentPath == Routes.login || currentPath == Routes.orders) {
-        // لو العميل مش مسجل دخول وراح للوجين، أو لو الشاشة فتحت بنجاح -> نلغي الرادار عشان مايفضلش شغال
+      } else if (currentPath == Routes.login || currentPath == Routes.orders) {
         timer.cancel();
       }
     });
@@ -45,14 +49,13 @@ void _handleNotificationClick(RemoteMessage message) {
 }
 
 void main() async {
+  PaymobManager.init();
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. تهيئة الاتصال بالسحابة
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // 2. تهيئة نظام الإشعارات الفورية (FCM)
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   await FirebaseMessaging.instance.requestPermission(
@@ -62,33 +65,30 @@ void main() async {
   );
 
   FirebaseMessaging.instance.getToken().then((fcmToken) {
-    print("==============================================");
-    print("📱 بصمة الجهاز (FCM Token): $fcmToken");
-    print("==============================================");
-  }).catchError((error) {
-    print("❌ حدث خطأ أثناء جلب التوكن: $error");
+    if (fcmToken != null) {
+      _saveFCMTokenToFirestore(fcmToken);
+    }
+  }).catchError((_) {});
+
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    _saveFCMTokenToFirestore(newToken);
   });
 
-  // 🚀 3. تفعيل الـ Deep Linking لفتح الإشعارات
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {});
 
-  // الحالة الأولى: التطبيق في الخلفية (العميل ضغط على الإشعار)
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     _handleNotificationClick(message);
   });
 
-  // الحالة الثانية: التطبيق مغلق تماماً (Terminated) والعميل ضغط على الإشعار
   final RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
   if (initialMessage != null) {
-    // ننتظر نصف ثانية حتى يكتمل بناء الواجهة (Widgets) ثم نوجه العميل
     Future.delayed(const Duration(milliseconds: 500), () {
       _handleNotificationClick(initialMessage);
     });
   }
 
-  // 4. تهيئة نظام حقن الاعتماديات قبل تشغيل واجهة التطبيق
   await setupGetIt();
 
-  // تشغيل التطبيق فوراً
   runApp(const EcommerceApp());
 }
 
@@ -101,6 +101,9 @@ class EcommerceApp extends StatelessWidget {
       providers: [
         BlocProvider(
           create: (context) => getIt<FavoritesCubit>()..fetchFavorites(),
+        ),
+        BlocProvider(
+          create: (context) => getIt<CartCubit>(),
         ),
       ],
       child: MaterialApp.router(

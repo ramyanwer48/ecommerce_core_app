@@ -7,10 +7,12 @@ class CartInitial extends CartState {}
 class CartUpdated extends CartState {
   final List<ProductModel> cartItems;
   final double totalPrice;
-  CartUpdated(this.cartItems, this.totalPrice);
+  final int totalQuantity; // 👈 عدد القطع الكلي للـ Badge
+
+  CartUpdated(this.cartItems, this.totalPrice, this.totalQuantity);
 }
 
-// أضفنا هذه الحالات للتحكم في عملية الشراء
+// حالات التحكم في عملية الشراء
 class CartLoading extends CartState {}
 
 class CartCheckoutSuccess extends CartState {}

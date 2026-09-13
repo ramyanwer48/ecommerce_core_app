@@ -9,7 +9,9 @@ import '../logic/home_state.dart';
 import 'product_shimmer.dart';
 import '../logic/favorites/favorites_cubit.dart';
 import '../logic/favorites/favorites_state.dart';
-import '../data/models/category_model.dart'; // 👈 استدعاء موديل الأقسام الجديد
+import '../data/models/category_model.dart';
+import '../../cart/logic/cart_cubit.dart';
+import '../../cart/logic/cart_state.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,18 +21,24 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // 👈 1. المتحكم النصي لشريط البحث
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   // 🎛️ دالة عرض الفلتر الاحترافي
   void _showFilterSheet(BuildContext context) {
     final cubit = context.read<HomeCubit>();
 
-    // سحب القيم الحالية من الـ Cubit
     String localCategory = cubit.currentCategory;
     double localMin = cubit.currentMinPrice;
     double localMax = cubit.currentMaxPrice;
     String localSortBy = cubit.currentSortBy;
 
-    // 👈 سحب الأقسام الديناميكية من الـ State الحالي
     List<CategoryModel> sheetCategories = [];
     if (cubit.state is HomeLoaded) {
       sheetCategories = (cubit.state as HomeLoaded).categories;
@@ -40,106 +48,105 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       title: 'تصفية وترتيب 🎛️',
       child: StatefulBuilder(
-          builder: (context, setStateSheet) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. الترتيب
-                const Text('الترتيب حسب:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  children: [
-                    _buildChoiceChip('الافتراضي', localSortBy == 'none', () {
-                      setStateSheet(() => localSortBy = 'none');
-                      cubit.applyAdvancedFilters(sortBy: 'none');
-                    }),
-                    _buildChoiceChip('الأقل سعراً', localSortBy == 'price_asc', () {
-                      setStateSheet(() => localSortBy = 'price_asc');
-                      cubit.applyAdvancedFilters(sortBy: 'price_asc');
-                    }),
-                    _buildChoiceChip('الأعلى سعراً', localSortBy == 'price_desc', () {
-                      setStateSheet(() => localSortBy = 'price_desc');
-                      cubit.applyAdvancedFilters(sortBy: 'price_desc');
-                    }),
-                  ],
-                ),
-                const Divider(height: 32),
+        builder: (context, setStateSheet) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. الترتيب
+              const Text('الترتيب حسب:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                children: [
+                  _buildChoiceChip('الافتراضي', localSortBy == 'none', () {
+                    setStateSheet(() => localSortBy = 'none');
+                    cubit.applyAdvancedFilters(sortBy: 'none');
+                  }),
+                  _buildChoiceChip('الأقل سعراً', localSortBy == 'price_asc', () {
+                    setStateSheet(() => localSortBy = 'price_asc');
+                    cubit.applyAdvancedFilters(sortBy: 'price_asc');
+                  }),
+                  _buildChoiceChip('الأعلى سعراً', localSortBy == 'price_desc', () {
+                    setStateSheet(() => localSortBy = 'price_desc');
+                    cubit.applyAdvancedFilters(sortBy: 'price_desc');
+                  }),
+                ],
+              ),
+              const Divider(height: 32),
 
-                // 2. نطاق السعر
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('نطاق السعر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(
-                      '${localMin.toInt()} - ${localMax.toInt()} ج.م',
-                      style: const TextStyle(color: ColorsManager.neonBlue, fontWeight: FontWeight.bold),
+              // 2. نطاق السعر
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('نطاق السعر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(
+                    '${localMin.toInt()} - ${localMax.toInt()} ج.م',
+                    style: const TextStyle(color: ColorsManager.neonBlue, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              RangeSlider(
+                values: RangeValues(localMin, localMax),
+                min: 0,
+                max: 100000,
+                divisions: 100,
+                activeColor: ColorsManager.neonBlue,
+                inactiveColor: Colors.grey.shade300,
+                onChanged: (values) {
+                  setStateSheet(() {
+                    localMin = values.start;
+                    localMax = values.end;
+                  });
+                  cubit.applyAdvancedFilters(minPrice: localMin, maxPrice: localMax);
+                },
+              ),
+              const Divider(height: 32),
+
+              // 3. التصنيفات (الديناميكية)
+              const Text('التصنيف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: sheetCategories.map((cat) {
+                  return _buildChoiceChip(cat.name, localCategory == cat.name, () {
+                    setStateSheet(() => localCategory = cat.name);
+                    cubit.applyAdvancedFilters(category: cat.name);
+                  });
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+
+              // 4. زر التطبيق الذكي
+              BlocBuilder<HomeCubit, HomeState>(
+                bloc: cubit,
+                builder: (context, state) {
+                  int count = 0;
+                  if (state is HomeLoaded) count = state.products.length;
+
+                  bool hasResults = count > 0;
+
+                  return SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: hasResults ? ColorsManager.neonBlue : Colors.grey.shade400,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: hasResults ? () => Navigator.pop(context) : null,
+                      child: Text(
+                        hasResults ? 'عرض $count منتج 🚀' : 'لا توجد منتجات مطابقة',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                     ),
-                  ],
-                ),
-                RangeSlider(
-                  values: RangeValues(localMin, localMax),
-                  min: 0,
-                  max: 100000,
-                  divisions: 100,
-                  activeColor: ColorsManager.neonBlue,
-                  inactiveColor: Colors.grey.shade300,
-                  onChanged: (values) {
-                    setStateSheet(() {
-                      localMin = values.start;
-                      localMax = values.end;
-                    });
-                    cubit.applyAdvancedFilters(minPrice: localMin, maxPrice: localMax);
-                  },
-                ),
-                const Divider(height: 32),
-
-                // 3. التصنيفات (الديناميكية)
-                const Text('التصنيف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: sheetCategories.map((cat) {
-                    return _buildChoiceChip(cat.name, localCategory == cat.name, () {
-                      setStateSheet(() => localCategory = cat.name);
-                      // تم حذف setState الخاصة بالشاشة الرئيسية لأن الكيوبيت سيتولى الأمر
-                      cubit.applyAdvancedFilters(category: cat.name);
-                    });
-                  }).toList(),
-                ),
-                const SizedBox(height: 32),
-
-                // 4. زر التطبيق الذكي
-                BlocBuilder<HomeCubit, HomeState>(
-                    bloc: cubit,
-                    builder: (context, state) {
-                      int count = 0;
-                      if (state is HomeLoaded) count = state.products.length;
-
-                      bool hasResults = count > 0;
-
-                      return SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: hasResults ? ColorsManager.neonBlue : Colors.grey.shade400,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: hasResults ? () => Navigator.pop(context) : null,
-                          child: Text(
-                            hasResults ? 'عرض $count منتج 🚀' : 'لا توجد منتجات مطابقة',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ),
-                      );
-                    }
-                ),
-              ],
-            );
-          }
+                  );
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -175,7 +182,41 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(icon: const Icon(Icons.favorite), onPressed: () => context.push(Routes.wishlist)),
           IconButton(icon: const Icon(Icons.person_outline), onPressed: () => context.push(Routes.profile)),
-          IconButton(icon: const Icon(Icons.shopping_cart), onPressed: () => context.push(Routes.cart)),
+          BlocBuilder<CartCubit, CartState>(
+            builder: (context, state) {
+              int badgeCount = 0;
+              if (state is CartUpdated) {
+                badgeCount = state.totalQuantity;
+              }
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.shopping_cart),
+                    onPressed: () => context.push(Routes.cart),
+                  ),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          '$badgeCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -189,18 +230,39 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: Column(
           children: [
-            // 1. شريط البحث
+            // 👈 2. شريط البحث مع دعم RTL وزر المسح (X)
             Padding(
               padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 8),
               child: TextField(
-                onChanged: (value) => context.read<HomeCubit>().searchProducts(value),
+                controller: _searchController,
+                textDirection: TextDirection.rtl,
+                onChanged: (value) {
+                  setState(() {});
+                  context.read<HomeCubit>().searchProducts(value);
+                },
                 decoration: InputDecoration(
                   hintText: 'ابحث عن منتج...',
                   hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                   prefixIcon: const Icon(Icons.search, color: ColorsManager.neonBlue),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.tune, color: ColorsManager.neonBlue),
-                    onPressed: () => _showFilterSheet(context),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchController.text.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.grey),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              context.read<HomeCubit>().searchProducts('');
+                            });
+                            FocusScope.of(context).unfocus();
+                          },
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.tune, color: ColorsManager.neonBlue),
+                        onPressed: () => _showFilterSheet(context),
+                      ),
+                    ],
                   ),
                   filled: true,
                   fillColor: Colors.white,
@@ -217,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // 2. شريط التصنيفات الأفقي (الديناميكي)
+            // 3. شريط التصنيفات الأفقي (الديناميكي) مع تصفير البحث عند الاختيار
             BlocBuilder<HomeCubit, HomeState>(
               builder: (context, state) {
                 if (state is HomeLoaded) {
@@ -236,8 +298,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         return GestureDetector(
                           onTap: () {
-                            // التحديث يتم مباشرة عبر الكيوبيت
-                            context.read<HomeCubit>().applyAdvancedFilters(category: cat.name);
+                            // 👈 3. تصفير البحث عند تبديل القسم لتحسين الـ UX
+                            _searchController.clear();
+                            final cubit = context.read<HomeCubit>();
+                            cubit.searchProducts('');
+                            cubit.applyAdvancedFilters(category: cat.name);
+                            setState(() {});
                           },
                           child: Container(
                             margin: const EdgeInsets.only(left: 10),
@@ -250,7 +316,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // 👈 إضافة دعم ذكي لظهور أيقونة القسم لو موجودة في الفايربيز
                                 if (cat.imageUrl.isNotEmpty) ...[
                                   Image.network(
                                     cat.imageUrl,
@@ -276,12 +341,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 }
-                // شكل تحميل وهمي للأقسام
                 return const SizedBox(height: 60);
               },
             ),
 
-            // 3. شبكة المنتجات
+            // 4. شبكة المنتجات
             Expanded(
               child: BlocBuilder<HomeCubit, HomeState>(
                 builder: (context, state) {
@@ -377,7 +441,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           backgroundColor: Colors.white.withValues(alpha: 0.9),
                                           radius: 16,
                                           child: IconButton(
-                                            padding: EdgeInsets.zero, iconSize: 20,
+                                            padding: EdgeInsets.zero,
                                             icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? Colors.red : Colors.grey),
                                             onPressed: () => context.read<FavoritesCubit>().toggleFavorite(product),
                                           ),
@@ -398,8 +462,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     return Center(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: SelectableText( // 👈 استخدمنا SelectableText عشان تقدر تنسخ الرابط بسهولة
-                          state.error, // 👈 هنا هيظهرلك سبب الرفض والرابط السري بتاع الفايربيز
+                        child: SelectableText(
+                          state.error,
                           style: const TextStyle(color: Colors.red, fontSize: 16),
                           textAlign: TextAlign.center,
                         ),

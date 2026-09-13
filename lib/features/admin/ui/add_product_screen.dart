@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 إضافة مكتبة الفايربيز
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../logic/add_product_cubit.dart';
 import '../logic/add_product_state.dart';
 
@@ -17,21 +17,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
+  final _stockController = TextEditingController(text: '0'); // 👈 حقل كمية المخزون
   final _descController = TextEditingController();
   final _variationsController = TextEditingController();
 
-  // 👈 التعديل الأول: جعلنا القسم المختار يقبل (null) في البداية حتى يتم تحميل البيانات
   String? _selectedCategory;
   bool _inStock = true;
 
-  // الصورة الأساسية
   File? _selectedImage;
-  // قائمة الصور الإضافية من الموبايل
   List<File> _extraImages = [];
 
   final ImagePicker _picker = ImagePicker();
 
-  // اختيار الصورة الأساسية
   Future<void> _pickMainImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
@@ -41,7 +38,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // اختيار عدة صور إضافية معاً
   Future<void> _pickExtraImages() async {
     final List<XFile> images = await _picker.pickMultiImage();
     if (images.isNotEmpty) {
@@ -55,6 +51,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
+    _stockController.dispose(); // 👈 تنظيف الـ controller
     _descController.dispose();
     _variationsController.dispose();
     super.dispose();
@@ -78,12 +75,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
             _formKey.currentState?.reset();
             _nameController.clear();
             _priceController.clear();
+            _stockController.text = '0'; // 👈 تصفير المخزون
             _descController.clear();
             _variationsController.clear();
             setState(() {
               _inStock = true;
               _selectedImage = null;
-              _selectedCategory = null; // 👈 تصفير الاختيار بعد النجاح
+              _selectedCategory = null;
               _extraImages.clear();
             });
           } else if (state is AddProductError) {
@@ -177,12 +175,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   validator: (value) => value!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
+                // 👇 حقل الكمية في المخزون
+                TextFormField(
+                  controller: _stockController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'الكمية المتاحة في المخزن (Stock Quantity)', border: OutlineInputBorder()),
+                  validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                ),
+                const SizedBox(height: 12),
 
-                // 👇 التعديل الجوهري: StreamBuilder لجلب الأقسام ديناميكياً 👇
+                // StreamBuilder لجلب الأقسام ديناميكياً
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('categories')
-                      .where('isActive', isEqualTo: true) // جلب الأقسام النشطة فقط
+                      .where('isActive', isEqualTo: true)
                       .orderBy('orderIndex')
                       .snapshots(),
                   builder: (context, snapshot) {
@@ -194,12 +200,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       return const Text('⚠️ لا توجد أقسام متاحة. الرجاء إضافة قسم من إدارة الأقسام أولاً.', style: TextStyle(color: Colors.red));
                     }
 
-                    // استخراج الأسماء من قاعدة البيانات
                     final List<String> dynamicCategories = snapshot.data!.docs
                         .map((doc) => doc['name'] as String)
                         .toList();
 
-                    // التأكد من أن القسم المختار موجود في القائمة، وإلا نختار أول عنصر كافتراضي
                     if (_selectedCategory == null || !dynamicCategories.contains(_selectedCategory)) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         setState(() {
@@ -217,7 +221,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     );
                   },
                 ),
-                // 👆 نهاية التعديل 👆
 
                 const SizedBox(height: 12),
                 TextFormField(
@@ -269,12 +272,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       context.read<AddProductCubit>().addProductToFirestore(
                         name: _nameController.text,
                         price: double.parse(_priceController.text),
-                        category: _selectedCategory!, // 👈 تأكيد إرسال القسم
+                        category: _selectedCategory!,
                         description: _descController.text,
                         mainImageFile: _selectedImage!,
                         extraImageFiles: _extraImages,
                         variations: variationsList,
                         inStock: _inStock,
+                        stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0, // 👈 تمرير الكمية
                       );
                     }
                   },

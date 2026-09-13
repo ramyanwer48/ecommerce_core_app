@@ -8,7 +8,8 @@ class ProductModel {
   final List<String> variations;
   final String category;
   final bool inStock;
-  final bool isActive; // 👈 المتغير الجديد (True = المنتج يظهر في المتجر، False = المنتج محذوف ومخفي)
+  final bool isActive; // True = المنتج يظهر في المتجر، False = المنتج محذوف ومخفي
+  final int stockQuantity; // 👈 الكمية الفعلية المتاحة في المخزن
 
   ProductModel({
     required this.id,
@@ -20,7 +21,8 @@ class ProductModel {
     required this.variations,
     required this.category,
     this.inStock = true,
-    this.isActive = true, // 👈 القيمة الافتراضية لأي منتج جديد إنه شغال ومتاح
+    this.isActive = true,
+    this.stockQuantity = 0, // 👈 القيمة الافتراضية للرصيد
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -48,7 +50,8 @@ class ProductModel {
       variations: parsedVariations,
       category: json['category'] ?? 'General',
       inStock: json['inStock'] ?? true,
-      isActive: json['isActive'] ?? true, // 👈 قراءة حالة المنتج (لو مش موجودة في منتج قديم هتعتبر true أوتوماتيك)
+      isActive: json['isActive'] ?? true,
+      stockQuantity: json['stockQuantity'] != null ? (json['stockQuantity'] as num).toInt() : 0, // 👈 قراءة المخزون بأمان
     );
   }
 
@@ -62,7 +65,8 @@ class ProductModel {
       'variations': variations,
       'category': category,
       'inStock': inStock,
-      'isActive': isActive, // 👈 حفظ الحالة الجديدة في الفايربيز
+      'isActive': isActive,
+      'stockQuantity': stockQuantity, // 👈 حفظ المخزون في الفايربيز
     };
   }
 }

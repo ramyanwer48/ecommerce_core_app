@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/routing/routes.dart';
-import '../../../core/di/dependency_injection.dart'; // عشان نقرأ الـ CartCubit
+import '../../../core/di/dependency_injection.dart';
 import '../../cart/logic/cart_cubit.dart';
 import '../../cart/logic/cart_state.dart';
 import '../logic/checkout_cubit.dart';
+import '../data/models/address_model.dart'; // 👈 استدعاء AddressModel
+import 'addresses_screen.dart'; // 👈 استدعاء شاشة العناوين
+import 'paymob_webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final double cartTotal;
@@ -21,6 +24,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _walletPhoneController = TextEditingController();
+
   String _selectedPaymentMethod = 'cash';
 
   @override
@@ -34,7 +39,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _couponController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
+    _walletPhoneController.dispose();
     super.dispose();
+  }
+
+  // 👈 دالة فتح شاشة اختيار العنوان المحفوظ وملء الحقول
+  Future<void> _openAddressPicker() async {
+    final AddressModel? selectedAddress = await Navigator.push<AddressModel>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddressesScreen(isPickerMode: true),
+      ),
+    );
+
+    if (selectedAddress != null) {
+      setState(() {
+        _phoneController.text = selectedAddress.phone;
+        _addressController.text = selectedAddress.fullAddressText;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم اختيار العنوان بنجاح ✅'), backgroundColor: Colors.blue),
+        );
+      }
+    }
   }
 
   @override
@@ -46,15 +74,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
       ),
-      // 👇 بنستمع للـ CartCubit عشان نعرف امتى الطلب اتسجل بنجاح
       body: BlocListener<CartCubit, CartState>(
-        bloc: getIt<CartCubit>(), // استدعاء الكيوبيت العام بتاع السلة
+        bloc: getIt<CartCubit>(),
         listener: (context, state) {
           if (state is CartCheckoutSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('تم تسجيل الطلب بنجاح! 🚀'), backgroundColor: Colors.green),
             );
-            context.pushReplacement(Routes.orders); // نقل العميل لشاشة طلباتي
+            context.pushReplacement(Routes.orders);
           } else if (state is CartError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.error), backgroundColor: Colors.red),
@@ -62,7 +89,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           }
         },
         child: BlocConsumer<CheckoutCubit, CheckoutState>(
-          listener: (context, state) {
+          listener: (context, state) async {
             if (state is CheckoutCouponApplied) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('تم تفعيل الكوبون! 🎉'), backgroundColor: Colors.green),
@@ -70,6 +97,65 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             } else if (state is CheckoutCouponError) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+              );
+            }
+
+            if (state is CheckoutPaymobSuccess) {
+              final bool? paymentResult = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymobWebviewScreen(paymentKey: state.paymentKey),
+                ),
+              );
+
+              if (paymentResult == true && context.mounted) {
+                final checkoutCubit = context.read<CheckoutCubit>();
+                double finalTotal = checkoutCubit.appliedCoupon != null
+                    ? checkoutCubit.subTotal - ((checkoutCubit.subTotal * checkoutCubit.appliedCoupon!.discountPercentage) / 100)
+                    : checkoutCubit.subTotal;
+
+                getIt<CartCubit>().checkout(
+                  address: _addressController.text,
+                  phone: _phoneController.text,
+                  finalTotal: finalTotal,
+                  paymentMethod: 'Online - Card',
+                );
+              } else if (paymentResult == false && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم إلغاء أو فشل عملية الدفع بالفيزا ❌'), backgroundColor: Colors.red),
+                );
+              }
+            } else if (state is CheckoutWalletSuccess) {
+              final bool? paymentResult = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymobWebviewScreen(url: state.redirectUrl),
+                ),
+              );
+
+              if (paymentResult == true && context.mounted) {
+                final checkoutCubit = context.read<CheckoutCubit>();
+                double finalTotal = checkoutCubit.appliedCoupon != null
+                    ? checkoutCubit.subTotal - ((checkoutCubit.subTotal * checkoutCubit.appliedCoupon!.discountPercentage) / 100)
+                    : checkoutCubit.subTotal;
+
+                getIt<CartCubit>().checkout(
+                  address: _addressController.text,
+                  phone: _phoneController.text,
+                  finalTotal: finalTotal,
+                  paymentMethod: 'Online - Wallet',
+                );
+              } else if (paymentResult == false && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم إلغاء أو فشل عملية الدفع بالمحفظة ❌'), backgroundColor: Colors.red),
+                );
+              }
+            } else if (state is CheckoutPaymobError || state is CheckoutWalletError) {
+              final errorMsg = state is CheckoutPaymobError
+                  ? state.error
+                  : (state as CheckoutWalletError).error;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
               );
             }
           },
@@ -89,7 +175,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // 1. ملخص الطلب
                   _buildSectionTitle('ملخص الطلب 🧾'),
                   Card(
                     color: Colors.white,
@@ -129,7 +214,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 2. إدخال الكوبون
                   _buildSectionTitle('كوبون الخصم 🎁'),
                   Row(
                     children: [
@@ -164,8 +248,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 3. بيانات التوصيل (الجديدة)
-                  _buildSectionTitle('بيانات التوصيل 🚚'),
+                  // 👇 عنوان القسم مع زر اختيار عنوان محفوظ
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('بيانات التوصيل 🚚'),
+                      TextButton.icon(
+                        onPressed: _openAddressPicker,
+                        icon: const Icon(Icons.bookmark_border, size: 18, color: Color(0xFF007BFF)),
+                        label: const Text('اختيار من عناويني', style: TextStyle(color: Color(0xFF007BFF), fontSize: 13)),
+                      ),
+                    ],
+                  ),
                   Card(
                     color: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -177,7 +271,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
                             decoration: InputDecoration(
-                              labelText: 'رقم الهاتف',
+                              labelText: 'رقم الهاتف للتواصل',
                               prefixIcon: const Icon(Icons.phone, color: Color(0xFF00D4FF)),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
@@ -186,6 +280,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _addressController,
+                            maxLines: 2,
                             decoration: InputDecoration(
                               labelText: 'عنوان التوصيل بالتفصيل',
                               prefixIcon: const Icon(Icons.location_on, color: Color(0xFF00D4FF)),
@@ -199,7 +294,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 4. طريقة الدفع
                   _buildSectionTitle('طريقة الدفع 💳'),
                   Card(
                     color: Colors.white,
@@ -215,36 +309,68 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                         const Divider(height: 1),
                         RadioListTile<String>(
-                          title: const Text('الدفع أونلاين (بطاقة / محفظة)', style: TextStyle(fontWeight: FontWeight.bold)),
-                          value: 'online',
+                          title: const Text('الدفع بالفيزا (Online Card)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          value: 'card',
                           groupValue: _selectedPaymentMethod,
                           activeColor: const Color(0xFF00D4FF),
                           onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
                         ),
+                        const Divider(height: 1),
+                        RadioListTile<String>(
+                          title: const Text('المحفظة الإلكترونية (فودافون/اتصالات/أورانج/وي)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          value: 'wallet',
+                          groupValue: _selectedPaymentMethod,
+                          activeColor: const Color(0xFF00D4FF),
+                          onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
+                        ),
+                        if (_selectedPaymentMethod == 'wallet') ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: TextFormField(
+                              controller: _walletPhoneController,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                labelText: 'رقم المحفظة الإلكترونية (مثال: 010xxxxxxxx)',
+                                prefixIcon: const Icon(Icons.account_balance_wallet, color: Color(0xFF00D4FF)),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              validator: (value) {
+                                if (_selectedPaymentMethod == 'wallet' && (value == null || value.isEmpty)) {
+                                  return 'برجاء إدخال رقم المحفظة الإلكترونية';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                   const SizedBox(height: 32),
 
-                  // 5. زرار الدفع الرئيسي
                   BlocBuilder<CartCubit, CartState>(
                     bloc: getIt<CartCubit>(),
                     builder: (context, cartState) {
+                      bool isLoading = cartState is CartLoading ||
+                          state is CheckoutPaymobLoading ||
+                          state is CheckoutWalletLoading;
+
                       return ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF00D4FF),
                           minimumSize: const Size(double.infinity, 55),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        onPressed: cartState is CartLoading ? null : () {
+                        onPressed: isLoading ? null : () {
                           if (_formKey.currentState!.validate()) {
-                            if (_selectedPaymentMethod == 'online') {
-                              // 👇 هنا مكان كود بيموب اللي هنعمله الخطوة الجاية
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('جاري التحويل لبوابة Paymob... 💳')),
+                            if (_selectedPaymentMethod == 'card') {
+                              cubit.getPaymobPaymentKey(totalAmount: displayTotal);
+                            } else if (_selectedPaymentMethod == 'wallet') {
+                              cubit.payWithWallet(
+                                totalAmount: displayTotal,
+                                walletPhoneNumber: _walletPhoneController.text.trim(),
                               );
                             } else {
-                              // 👇 تنفيذ الدفع كاش
                               getIt<CartCubit>().checkout(
                                 address: _addressController.text,
                                 phone: _phoneController.text,
@@ -254,7 +380,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             }
                           }
                         },
-                        child: cartState is CartLoading
+                        child: isLoading
                             ? const CircularProgressIndicator(color: Colors.white)
                             : const Text('تأكيد الطلب الآن', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
                       );

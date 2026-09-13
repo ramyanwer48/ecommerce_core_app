@@ -49,6 +49,8 @@ dependencies:
   firebase_messaging: ^16.6.0
   http: ^1.6.0
   googleapis_auth: ^2.3.3
+  dio: ^5.4.0
+  webview_flutter: ^4.8.0
 
 dev_dependencies:
   flutter_test:

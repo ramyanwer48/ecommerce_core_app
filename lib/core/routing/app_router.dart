@@ -12,9 +12,10 @@ import '../../features/auth/ui/auth_gate.dart';
 import '../../features/auth/ui/login_screen.dart';
 import '../../features/auth/ui/signup_screen.dart';
 
-// استدعاءات Home
+// استدعاءات Home & Checkout & Addresses
 import '../../features/checkout/data/repos/checkout_repo.dart';
 import '../../features/checkout/logic/checkout_cubit.dart';
+import '../../features/checkout/ui/addresses_screen.dart';
 import '../../features/checkout/ui/checkout_screen.dart';
 import '../../features/home/logic/home_cubit.dart';
 import '../../features/home/ui/home_screen.dart';
@@ -29,16 +30,11 @@ import '../../features/cart/logic/cart_cubit.dart';
 import '../../features/profile/data/repos/order_repo.dart';
 import '../../features/profile/logic/order_cubit.dart';
 import '../../features/profile/ui/orders_screen.dart';
-import '../../features/profile/ui/profile_screen.dart'; // <--- استدعاء شاشة الملف الشخصي
+import '../../features/profile/ui/profile_screen.dart';
 
 // استدعاءات الأساسيات (Core)
 import '../di/dependency_injection.dart';
 import 'routes.dart';
-
-// في الأعلى ضع الاستدعاءات:
-// import '../../features/profile/ui/orders_screen.dart';
-// import '../../features/profile/logic/order_cubit.dart';
-// import '../../features/profile/data/repos/order_repo.dart';
 
 // استدعاءات قسم الإدارة (Admin)
 import '../../features/admin/ui/add_product_screen.dart';
@@ -91,12 +87,8 @@ class AppRouter {
       ),
       GoRoute(
         path: Routes.cart,
-        builder: (context, state) => BlocProvider.value(
-          value: getIt<CartCubit>(),
-          child: const CartScreen(),
-        ),
+        builder: (context, state) => const CartScreen(),
       ),
-      // مسار شاشة الملف الشخصي الجديد
       GoRoute(
         path: Routes.profile,
         builder: (context, state) => const ProfileScreen(),
@@ -104,7 +96,7 @@ class AppRouter {
       GoRoute(
         path: Routes.orders,
         builder: (context, state) => BlocProvider(
-          create: (context) => OrderCubit(OrderRepo())..fetchOrders(), // سيقوم بجلب الطلبات فور فتح الشاشة
+          create: (context) => OrderCubit(OrderRepo())..fetchOrders(),
           child: const OrdersScreen(),
         ),
       ),
@@ -118,7 +110,6 @@ class AppRouter {
       GoRoute(
         path: Routes.adminOrders,
         builder: (context, state) => BlocProvider(
-          // استدعاء fetchAllOrders() هنا مهم جداً لجلب الطلبات تلقائياً بمجرد فتح الشاشة
           create: (context) => AdminOrdersCubit(AdminOrdersRepo())..fetchAllOrders(),
           child: const AdminOrdersScreen(),
         ),
@@ -128,33 +119,33 @@ class AppRouter {
         builder: (context, state) => ManageProductsScreen(),
       ),
       GoRoute(
-      path: Routes.wishlist,
-  builder: (context, state) => const WishlistScreen(),
-  ),
+        path: Routes.wishlist,
+        builder: (context, state) => const WishlistScreen(),
+      ),
       GoRoute(
         path: Routes.manageCategories,
         builder: (context, state) {
           return BlocProvider(
-            // 👈 هنا بنقول للتطبيق: الشاشة دي بتشتغل بالكيوبيت ده والريبو ده
             create: (context) => AdminCategoriesCubit(AdminCategoriesRepo()),
             child: const ManageCategoriesScreen(),
           );
         },
       ),
-
-      // 👇 هنا المكان الصحيح لمسار الـ Checkout (بره المسار اللي فوقيه) 👇
       GoRoute(
         path: '/checkout',
         builder: (context, state) {
-          // هنا بنستقبل الإجمالي اللي جيالنا من السلة، ولو مفيش بنخليه 0.0
           final cartTotal = state.extra as double? ?? 0.0;
-
           return BlocProvider(
             create: (context) => CheckoutCubit(CheckoutRepo()),
             child: CheckoutScreen(cartTotal: cartTotal),
           );
         },
       ),
-    ], // 👈 قفلة مصفوفة الـ routes
+      // 👈 مسار العناوين مستقل في المضيف الرئيسي
+      GoRoute(
+        path: '/addresses',
+        builder: (context, state) => const AddressesScreen(),
+      ),
+    ],
   );
 }

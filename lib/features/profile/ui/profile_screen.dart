@@ -8,7 +8,6 @@ import '../../../core/routing/routes.dart';
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
-  // دالة تسجيل الخروج
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     final prefs = await SharedPreferences.getInstance();
@@ -18,7 +17,6 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
-  // دالة فحص صلاحيات المدير من قاعدة البيانات
   Future<bool> _checkIfAdmin(String uid) async {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -44,7 +42,7 @@ class ProfileScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
@@ -73,16 +71,26 @@ class ProfileScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // بناء قسم الإدارة بناءً على الصلاحيات
+            // زر عناويني المحفوظة (يظهر للجميع)
+            ListTile(
+              leading: const Icon(Icons.location_on_outlined, color: Color(0xFF007BFF)),
+              title: const Text('عناويني المحفوظة', style: TextStyle(fontWeight: FontWeight.bold)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              tileColor: Colors.white,
+              onTap: () => context.push('/addresses'),
+            ),
+
+            const SizedBox(height: 16),
+
+            // بناء قسم الإدارة بالكامل بناءً على الصلاحيات
             if (user != null)
               FutureBuilder<bool>(
                 future: _checkIfAdmin(user.uid),
                 builder: (context, snapshot) {
-                  // إذا كان لا يزال يفحص، لا نعرض شيئاً (أو نعرض تحميل بسيط)
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const SizedBox.shrink();
                   }
-                  // إذا كان المستخدم مديراً، نعرض أزرار الإدارة
                   if (snapshot.hasData && snapshot.data == true) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,15 +116,24 @@ class ProfileScreen extends StatelessWidget {
                           tileColor: Colors.white,
                           onTap: () => context.push(Routes.adminOrders),
                         ),
+                        const SizedBox(height: 12),
+                        // 👈 إدارة المنتجات انحطت هنا جوا صلاحيات الإدارة بس
+                        ListTile(
+                          leading: const Icon(Icons.inventory, color: Colors.orange),
+                          title: const Text('إدارة المنتجات (تعديل/حذف)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          tileColor: Colors.white,
+                          onTap: () => context.push(Routes.manageProducts),
+                        ),
                       ],
                     );
                   }
-                  // إذا لم يكن مديراً، لا نعرض شيئاً
                   return const SizedBox.shrink();
                 },
               ),
 
-            const Spacer(),
+            const SizedBox(height: 32),
 
             SizedBox(
               width: double.infinity,
@@ -132,22 +149,9 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.inventory, color: Colors.orange),
-              title: const Text('إدارة المنتجات (تعديل/حذف)', style: TextStyle(fontWeight: FontWeight.bold)),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              tileColor: Colors.white,
-              onTap: () => context.push(Routes.manageProducts),
-            ),
-            const SizedBox(height: 12),
           ],
-
         ),
-
       ),
-
     );
-
   }
 }

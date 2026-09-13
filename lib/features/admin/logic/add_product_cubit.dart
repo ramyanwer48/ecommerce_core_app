@@ -16,6 +16,7 @@ class AddProductCubit extends Cubit<AddProductState> {
     required List<File> extraImageFiles,
     required List<String> variations,
     required bool inStock,
+    required int stockQuantity, // 👈 أضفنا كمية المخزون هنا
   }) async {
     emit(AddProductLoading());
     try {
@@ -32,7 +33,7 @@ class AddProductCubit extends Cubit<AddProductState> {
       // 3. تجميع الصورة الرئيسية مع الصور الإضافية في مصفوفة واحدة للمعرض
       List<String> allImages = [mainImageUrl, ...extraImageUrls];
 
-      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة
+      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة شاملة المخزون
       await _adminRepo.addProduct(
         name: name,
         price: price,
@@ -42,6 +43,7 @@ class AddProductCubit extends Cubit<AddProductState> {
         images: allImages,
         variations: variations,
         inStock: inStock,
+        stockQuantity: stockQuantity, // 👈 تمريرها للـ Repo
       );
 
       emit(AddProductSuccess());

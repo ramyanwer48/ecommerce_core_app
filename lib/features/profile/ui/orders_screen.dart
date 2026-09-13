@@ -6,15 +6,23 @@ import '../logic/order_state.dart';
 class OrdersScreen extends StatelessWidget {
   const OrdersScreen({super.key});
 
-  // دالة الشارة العلوية (Status Badge)
+  // 👈 دالة الشارة العلوية المحدثة للحالات الخمسة
   Widget _buildOrderStatus(String status) {
     String text;
     Color color;
 
     switch (status.toLowerCase()) {
       case 'pending':
-        text = 'قيد التنفيذ';
+        text = 'قيد الانتظار';
         color = Colors.orange;
+        break;
+      case 'processing':
+        text = 'جاري التجهيز';
+        color = Colors.blue;
+        break;
+      case 'shipped':
+        text = 'تم الشحن';
+        color = Colors.deepPurple;
         break;
       case 'delivered':
         text = 'تم التوصيل';
@@ -26,7 +34,7 @@ class OrdersScreen extends StatelessWidget {
         break;
       default:
         text = status;
-        color = Colors.blue;
+        color = Colors.grey;
     }
 
     return Container(
@@ -40,11 +48,14 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  // بناء الخط الزمني التفاعلي (Order Timeline)
+  // 👈 بناء الخط الزمني التفاعلي المحدث (4 خطوات: الطلب، التجهيز، الشحن، التوصيل)
   Widget _buildTrackingTimeline(String status) {
-    final isCancelled = status.toLowerCase() == 'cancelled';
-    final isDelivered = status.toLowerCase() == 'delivered';
-    final isPending = status.toLowerCase() == 'pending';
+    final String currentStatus = status.toLowerCase();
+
+    final isCancelled = currentStatus == 'cancelled';
+    final isProcessing = currentStatus == 'processing' || currentStatus == 'shipped' || currentStatus == 'delivered';
+    final isShipped = currentStatus == 'shipped' || currentStatus == 'delivered';
+    final isDelivered = currentStatus == 'delivered';
 
     if (isCancelled) {
       return Container(
@@ -64,45 +75,49 @@ class OrdersScreen extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTimelineStep(Icons.receipt_long, 'تم الطلب', true),
-        _buildTimelineDivider(isPending || isDelivered),
-        _buildTimelineStep(Icons.local_shipping, 'قيد التنفيذ', isPending || isDelivered),
+        _buildTimelineStep(Icons.receipt_long, 'الطلب', true),
+        _buildTimelineDivider(isProcessing),
+        _buildTimelineStep(Icons.inventory_2, 'التجهيز', isProcessing),
+        _buildTimelineDivider(isShipped),
+        _buildTimelineStep(Icons.local_shipping, 'الشحن', isShipped),
         _buildTimelineDivider(isDelivered),
-        _buildTimelineStep(Icons.check_circle, 'تم التوصيل', isDelivered),
+        _buildTimelineStep(Icons.check_circle, 'التوصيل', isDelivered),
       ],
     );
   }
 
   // تصميم دائرة الخط الزمني
   Widget _buildTimelineStep(IconData icon, String label, bool isActive) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: isActive ? const Color(0xFF00D4FF) : Colors.grey.shade300,
-          child: Icon(icon, size: 16, color: Colors.white),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            color: isActive ? const Color(0xFF000826) : Colors.grey,
+    return Expanded(
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: isActive ? const Color(0xFF00D4FF) : Colors.grey.shade300,
+            child: Icon(icon, size: 14, color: Colors.white),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              color: isActive ? const Color(0xFF000826) : Colors.grey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   // تصميم الخط الواصل بين الدوائر
   Widget _buildTimelineDivider(bool isActive) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(top: 15), // لضبط المحاذاة مع منتصف الدوائر
-        height: 3,
-        color: isActive ? const Color(0xFF00D4FF) : Colors.grey.shade300,
-      ),
+    return Container(
+      width: 15,
+      margin: const EdgeInsets.only(top: 13), // لضبط المحاذاة مع منتصف الدوائر
+      height: 2,
+      color: isActive ? const Color(0xFF00D4FF) : Colors.grey.shade300,
     );
   }
 
@@ -181,7 +196,7 @@ class OrdersScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        // عرض الخط الزمني هنا
+                        // عرض الخط الزمني المحدث
                         _buildTrackingTimeline(order.status),
                       ],
                     ),

@@ -48,7 +48,7 @@ class HomeCubit extends Cubit<HomeState> {
   }
 
   void searchProducts(String query) {
-    currentSearchQuery = query.toLowerCase().trim();
+    currentSearchQuery = query.replaceAll(RegExp(r'\s+'), ' ').toLowerCase().trim();
     _applyFilters();
   }
 
