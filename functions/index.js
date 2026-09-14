@@ -1,10 +1,12 @@
-const functions = require("firebase-functions/v1"); // 👈 التعديل هنا (إضافة /v1)
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 const axios = require("axios");
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
+
+const db = admin.firestore();
 
 // 1. دالة الإشعارات الفورية عند تغيير حالة الطلب
 exports.sendNotificationOnStatusChange = functions.firestore
@@ -15,8 +17,8 @@ exports.sendNotificationOnStatusChange = functions.firestore
 
     if (newValue.status !== previousValue.status) {
       try {
-        const userDoc = await admin.firestore().collection('users').doc(newValue.userId).get();
-        const fcmToken = userDoc.data().fcmToken;
+        const userDoc = await db.collection('users').doc(newValue.userId).get();
+        const fcmToken = userDoc.data()?.fcmToken;
 
         if (fcmToken) {
           const payload = {
@@ -38,7 +40,6 @@ exports.sendNotificationOnStatusChange = functions.firestore
 exports.createSecurePaymobOrder = functions
   .runWith({ secrets: ["PAYMOB_API_KEY"] })
   .https.onCall(async (data, context) => {
-    // حماية: التأكد أن المستخدم مسجل دخول
     if (!context.auth) {
       throw new functions.https.HttpsError(
         "unauthenticated",
@@ -48,16 +49,12 @@ exports.createSecurePaymobOrder = functions
 
     const userId = context.auth.uid;
     const { totalAmount, billingData, items, address, phone } = data;
-
-    // سحب المفتاح السري من خزنة فايربيز (لا يمكن للهاكر الوصول إليه)
     const apiKey = process.env.PAYMOB_API_KEY;
-
-    // ضع رقم الـ Integration ID الخاص بك هنا (رقم عام وليس سري)
-    const integrationId = "ضع_رقم_الانتجريشن_هنا";
+    const integrationId = "5911923"
 
     try {
-      // إنشاء الطلب في Firestore بحالة Pending لحماية المعاملة
-      const orderRef = admin.firestore().collection("orders").doc();
+      // إنشاء الطلب في Firestore بحالة Pending
+      const orderRef = db.collection("orders").doc();
       await orderRef.set({
         id: orderRef.id,
         userId: userId,
@@ -65,7 +62,7 @@ exports.createSecurePaymobOrder = functions
         address: address,
         status: "Pending",
         totalPrice: totalAmount,
-        items: items,
+        items: items || [],
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -75,12 +72,13 @@ exports.createSecurePaymobOrder = functions
       });
       const token = authRes.data.token;
 
-      // تسجيل الطلب في بايموب
+      // تسجيل الطلب في بايموب مع ربطه بـ merchant_order_id (رقم الطلب في فايربيز)
       const orderRes = await axios.post("https://accept.paymob.com/api/ecommerce/orders", {
         auth_token: token,
         delivery_needed: "false",
         amount_cents: Math.round(totalAmount * 100),
         currency: "EGP",
+        merchant_order_id: orderRef.id, // 👈 الربط الجوهري للويب هوك
         items: [],
       });
       const paymobOrderId = orderRes.data.id;
@@ -96,14 +94,76 @@ exports.createSecurePaymobOrder = functions
         integration_id: integrationId
       });
 
-      // إرجاع مفتاح الدفع ورقم الطلب للموبايل لفتح الـ WebView فقط
       return {
         paymentToken: keyRes.data.token,
         orderId: orderRef.id
       };
 
     } catch (error) {
-      console.error("❌ حدث خطأ في الدفع:", error.message);
+      console.error("❌ حدث خطأ في الدفع:", error.response?.data || error.message);
       throw new functions.https.HttpsError("internal", "فشل في تهيئة الدفع");
     }
   });
+
+// 3. دالة الويب هوك لاستقبال تأكيد الدفع من بايموب (Idempotent)
+exports.paymobWebhook = functions.https.onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      return res.status(405).send("Method Not Allowed");
+    }
+
+    const data = req.body;
+    const obj = data.obj;
+
+    if (!obj || !obj.id) {
+      return res.status(400).send("Invalid payload");
+    }
+
+    const transactionId = obj.id.toString();
+    const isSuccess = obj.success === true;
+    const merchantOrderId = obj.order?.merchant_order_id; // استخراج ID الطلب في فايربيز
+
+    console.log(`Paymob Webhook -> Tx: ${transactionId}, Success: ${isSuccess}, OrderId: ${merchantOrderId}`);
+
+    const txRef = db.collection("processed_transactions").doc(transactionId);
+
+    await db.runTransaction(async (transaction) => {
+      const existingTx = await transaction.get(txRef);
+      if (existingTx.exists) {
+        console.log(`Transaction ${transactionId} already processed.`);
+        return;
+      }
+
+      if (merchantOrderId) {
+        const orderRef = db.collection("orders").doc(merchantOrderId);
+        const orderDoc = await transaction.get(orderRef);
+
+        if (orderDoc.exists) {
+          const currentStatus = orderDoc.data().status;
+          if (currentStatus === "Pending") {
+            transaction.update(orderRef, {
+              status: isSuccess ? "Paid" : "PaymentFailed",
+              paymentTransactionId: transactionId,
+              paidAt: isSuccess ? admin.firestore.FieldValue.serverTimestamp() : null,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            console.log(`Order ${merchantOrderId} updated to ${isSuccess ? 'Paid' : 'PaymentFailed'}`);
+          }
+        } else {
+          console.warn(`Order ${merchantOrderId} not found.`);
+        }
+      }
+
+      transaction.set(txRef, {
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: isSuccess ? "Paid" : "Failed",
+        merchantOrderId: merchantOrderId || null,
+      });
+    });
+
+    return res.status(200).send("Webhook processed successfully");
+  } catch (error) {
+    console.error("Error processing Paymob webhook:", error);
+    return res.status(500).send("Internal Server Error");
+  }
+});
