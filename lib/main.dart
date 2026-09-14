@@ -4,7 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'core/networking/paymob_manager.dart'; // تأكد من تهجئة Paymob بشكل صحيح أو حسب ملفك
+// تم إزالة استيراد PaymobManager لأنه لم يعد مطلوباً في التهيئة الأولية للتطبيق
 import 'core/theming/colors.dart';
 import 'firebase_options.dart';
 import 'core/routing/app_router.dart';
@@ -49,7 +49,6 @@ void _handleNotificationClick(RemoteMessage message) {
 }
 
 void main() async {
-  PaymobManager.init();
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(

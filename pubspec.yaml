@@ -51,6 +51,7 @@ dependencies:
   googleapis_auth: ^2.3.3
   dio: ^5.4.0
   webview_flutter: ^4.8.0
+  cloud_functions: ^6.5.0
 
 dev_dependencies:
   flutter_test:

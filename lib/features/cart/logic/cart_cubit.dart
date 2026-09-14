@@ -17,11 +17,21 @@ class CartCubit extends Cubit<CartState> {
 
   final List<CartItemModel> _items = [];
 
+  // 👇 إضافة Getter لتحويل بيانات السلة لـ JSON لإرسالها للسيرفر (Cloud Function)
+  List<Map<String, dynamic>> get cartItemsAsMap {
+    return _items.map((item) => {
+      'productId': item.product.id,
+      'name': item.product.name,
+      'price': item.product.price,
+      'quantity': item.quantity,
+      'imageUrl': item.product.imageUrl,
+    }).toList();
+  }
+
   // 1. إضافة منتج للسلة مع فحص المخزون المتاح
   void addToCart(ProductModel product) {
     final availableStock = product.stockQuantity;
 
-    // التأكد من توفر المنتج بالمستودع
     if (availableStock <= 0) {
       emit(CartError("عذراً، هذا المنتج غير متوفر في المخزن حالياً"));
       _calculateTotal();
@@ -31,11 +41,10 @@ class CartCubit extends Cubit<CartState> {
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
 
     if (existingIndex >= 0) {
-      // التحقق من عدم تخطي الكمية المخزنية
       if (_items[existingIndex].quantity < availableStock) {
         _items[existingIndex].quantity++;
       } else {
-        emit(CartError("لا يمكنك إضافة المزيد، الكمية المتوفرة في المخزن هي $availableStock قطع فقط"));
+        emit(CartError("لا يمكنك إضافة المزيد، الكمية المتوفرة هي $availableStock قطع فقط"));
       }
     } else {
       _items.add(CartItemModel(product: product));
@@ -43,7 +52,7 @@ class CartCubit extends Cubit<CartState> {
     _calculateTotal();
   }
 
-  // 2. زيادة كمية المنتج من داخل السلة (+) مقيدة بالمخزون الفعلي
+  // 2. زيادة كمية المنتج
   void increaseQuantity(ProductModel product) {
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
@@ -59,7 +68,7 @@ class CartCubit extends Cubit<CartState> {
     }
   }
 
-  // 3. تقليل كمية المنتج من داخل السلة (-)
+  // 3. تقليل كمية المنتج
   void decreaseQuantity(ProductModel product) {
     final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
     if (existingIndex >= 0) {
@@ -78,7 +87,7 @@ class CartCubit extends Cubit<CartState> {
     _calculateTotal();
   }
 
-  // 5. حساب الإجمالي بدقة وإجمالي عدد القطع
+  // 5. حساب الإجمالي بدقة
   void _calculateTotal() {
     double total = _items.fold(0, (totalSum, item) => totalSum + (item.product.price * item.quantity));
     int totalQuantity = _items.fold(0, (sum, item) => sum + item.quantity);
@@ -87,7 +96,7 @@ class CartCubit extends Cubit<CartState> {
     emit(CartUpdated(List.from(rawProducts), total, totalQuantity));
   }
 
-  // الحصول على كمية منتج معين داخل السلة
+  // الحصول على كمية منتج معين
   int getQuantity(ProductModel product) {
     final item = _items.firstWhere(
           (e) => e.product.id == product.id,
@@ -96,7 +105,7 @@ class CartCubit extends Cubit<CartState> {
     return item.quantity;
   }
 
-  // 6. إتمام الطلب والخصم الآمن من المخزون بواسطة Transaction
+  // 6. إتمام الطلب (تم التحديث لمنع تكرار الطلبات وحماية المخزون)
   Future<void> checkout({
     required String address,
     required String phone,
@@ -108,22 +117,31 @@ class CartCubit extends Cubit<CartState> {
     try {
       emit(CartLoading());
 
+      // 🛡️ إذا كان الدفع إلكترونياً (فيزا أو محفظة):
+      // السيرفر قام مسبقاً بإنشاء الطلب في قاعدة البيانات، لذا نكتفي بتفريغ السلة فقط.
+      if (paymentMethod != 'Cash') {
+        _items.clear();
+        emit(CartCheckoutSuccess());
+        emit(CartUpdated([], 0, 0));
+        return;
+      }
+
+      // 💵 إذا كان الدفع عند الاستلام (Cash):
+      // يتم إنشاء الطلب محلياً وخصم المخزون بنظام المعاملات الآمنة (Transaction)
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("حدث خطأ: المستخدم غير مسجل الدخول");
 
       final firestore = FirebaseFirestore.instance;
       final counterRef = firestore.collection('system').doc('counters');
 
-      // 🛡️ تنفيذ العملية عبر Transaction لضمان الذرية (Atomic) ومطابقة المخزون
       await firestore.runTransaction((transaction) async {
-        // أ. قراءة العداد التسلسلي
         final counterDoc = await transaction.get(counterRef);
         int newOrderNumber = 1;
         if (counterDoc.exists) {
           newOrderNumber = (counterDoc.data()?['lastOrderNumber'] ?? 0) + 1;
         }
 
-        // ب. قراءة المخزون الفعلي للمنتجات في السلة للتحقق قبل الخصم
+        // فحص المخزون الفعلي
         for (final item in _items) {
           final productRef = firestore.collection('products').doc(item.product.id);
           final productDoc = await transaction.get(productRef);
@@ -138,14 +156,14 @@ class CartCubit extends Cubit<CartState> {
           }
         }
 
-        // ج. تحديث العداد
+        // تحديث العداد
         transaction.set(
           counterRef,
           {'lastOrderNumber': newOrderNumber},
           SetOptions(merge: true),
         );
 
-        // د. إنشاء الفاتورة داخل مجموعة orders
+        // إنشاء الفاتورة
         final newOrderRef = firestore.collection('orders').doc();
         final orderData = {
           'orderNumber': newOrderNumber,
@@ -157,17 +175,11 @@ class CartCubit extends Cubit<CartState> {
           'paymentMethod': paymentMethod,
           'orderDate': FieldValue.serverTimestamp(),
           'status': 'Pending',
-          'items': _items.map((item) => {
-            'productId': item.product.id,
-            'name': item.product.name,
-            'price': item.product.price,
-            'quantity': item.quantity,
-            'imageUrl': item.product.imageUrl,
-          }).toList(),
+          'items': cartItemsAsMap, // 👈 استخدام الـ Getter الجديد هنا للتنظيم
         };
         transaction.set(newOrderRef, orderData);
 
-        // هـ. خصم الكميات المباعة من المستودع مباشرة
+        // خصم الكميات من المخزون
         for (final item in _items) {
           final productRef = firestore.collection('products').doc(item.product.id);
           transaction.update(productRef, {

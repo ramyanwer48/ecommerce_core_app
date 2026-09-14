@@ -6,8 +6,8 @@ import '../../../core/di/dependency_injection.dart';
 import '../../cart/logic/cart_cubit.dart';
 import '../../cart/logic/cart_state.dart';
 import '../logic/checkout_cubit.dart';
-import '../data/models/address_model.dart'; // 👈 استدعاء AddressModel
-import 'addresses_screen.dart'; // 👈 استدعاء شاشة العناوين
+import '../data/models/address_model.dart';
+import 'addresses_screen.dart';
 import 'paymob_webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -43,7 +43,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
-  // 👈 دالة فتح شاشة اختيار العنوان المحفوظ وملء الحقول
   Future<void> _openAddressPicker() async {
     final AddressModel? selectedAddress = await Navigator.push<AddressModel>(
       context,
@@ -114,6 +113,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ? checkoutCubit.subTotal - ((checkoutCubit.subTotal * checkoutCubit.appliedCoupon!.discountPercentage) / 100)
                     : checkoutCubit.subTotal;
 
+                // ملاحظة: الطلب تم إنشاؤه بالفعل كـ Pending في الفايربيز عبر السيرفر
+                // الدالة هنا ستقوم بتفريغ السلة فقط لتجنب تكرار الطلب
                 getIt<CartCubit>().checkout(
                   address: _addressController.text,
                   phone: _phoneController.text,
@@ -248,7 +249,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 👇 عنوان القسم مع زر اختيار عنوان محفوظ
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -364,7 +364,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         onPressed: isLoading ? null : () {
                           if (_formKey.currentState!.validate()) {
                             if (_selectedPaymentMethod == 'card') {
-                              cubit.getPaymobPaymentKey(totalAmount: displayTotal);
+                              // 👇 التمرير الآمن لبيانات المنتجات عبر Getter إلى السيرفر
+                              cubit.getPaymobPaymentKey(
+                                totalAmount: displayTotal,
+                                phone: _phoneController.text.trim(),
+                                address: _addressController.text.trim(),
+                                items: getIt<CartCubit>().cartItemsAsMap,
+                              );
                             } else if (_selectedPaymentMethod == 'wallet') {
                               cubit.payWithWallet(
                                 totalAmount: displayTotal,
