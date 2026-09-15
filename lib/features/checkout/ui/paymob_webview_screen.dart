@@ -41,7 +41,7 @@ class _PaymobWebviewScreenState extends State<PaymobWebviewScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            print('Paymob Redirect URL: ${request.url}');
+            debugPrint('Paymob Redirect URL: ${request.url}');
 
             if (request.url.contains('success=true')) {
               Navigator.pop(context, true);

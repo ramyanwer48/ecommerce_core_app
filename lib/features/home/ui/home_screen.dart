@@ -13,6 +13,9 @@ import '../data/models/category_model.dart';
 import '../../cart/logic/cart_cubit.dart';
 import '../../cart/logic/cart_state.dart';
 
+// 👈 1. استدعاء واجهة المساعد الذكي "ناصح" (تأكد من مطابقة المسار لمشروعك)
+import '../../ai_assistant/ui/naaseh_sheet.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 👈 1. المتحكم النصي لشريط البحث
+  // المتحكم النصي لشريط البحث
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -220,6 +223,22 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 8),
         ],
       ),
+
+      // 👈 2. زر استدعاء المساعد الذكي "المهندس ناصح"
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF00D4FF), // السيان المضيء الخاص بهويتنا
+        elevation: 4,
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true, // ضروري لرفع المودال مع الكيبورد
+            backgroundColor: Colors.transparent, // شفاف لكي تظهر الحواف الدائرية للمودال
+            builder: (context) => const NaasehSheet(),
+          );
+        },
+        child: const Icon(Icons.support_agent, color: Colors.white, size: 28),
+      ),
+
       body: BlocListener<FavoritesCubit, FavoritesState>(
         listener: (context, state) {
           if (state is FavoritesError) {
@@ -230,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: Column(
           children: [
-            // 👈 2. شريط البحث مع دعم RTL وزر المسح (X)
+            // شريط البحث مع دعم RTL وزر المسح (X)
             Padding(
               padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 8),
               child: TextField(
@@ -279,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // 3. شريط التصنيفات الأفقي (الديناميكي) مع تصفير البحث عند الاختيار
+            // شريط التصنيفات الأفقي (الديناميكي) مع تصفير البحث عند الاختيار
             BlocBuilder<HomeCubit, HomeState>(
               builder: (context, state) {
                 if (state is HomeLoaded) {
@@ -298,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         return GestureDetector(
                           onTap: () {
-                            // 👈 3. تصفير البحث عند تبديل القسم لتحسين الـ UX
+                            // تصفير البحث عند تبديل القسم لتحسين الـ UX
                             _searchController.clear();
                             final cubit = context.read<HomeCubit>();
                             cubit.searchProducts('');
@@ -345,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // 4. شبكة المنتجات
+            // شبكة المنتجات
             Expanded(
               child: BlocBuilder<HomeCubit, HomeState>(
                 builder: (context, state) {

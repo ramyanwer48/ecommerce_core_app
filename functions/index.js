@@ -1,169 +1,62 @@
-const functions = require("firebase-functions/v1");
-const admin = require("firebase-admin");
-const axios = require("axios");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const admin = require('firebase-admin');
+const axios = require('axios');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
+admin.initializeApp();
 
-const db = admin.firestore();
-
-// 1. دالة الإشعارات الفورية عند تغيير حالة الطلب
-exports.sendNotificationOnStatusChange = functions.firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change, context) => {
-    const newValue = change.after.data();
-    const previousValue = change.before.data();
-
-    if (newValue.status !== previousValue.status) {
-      try {
-        const userDoc = await db.collection('users').doc(newValue.userId).get();
-        const fcmToken = userDoc.data()?.fcmToken;
-
-        if (fcmToken) {
-          const payload = {
-            notification: {
-              title: 'تحديث حالة الطلب 📦',
-              body: `تم تحديث حالة طلبك إلى: ${newValue.status}`,
-            }
-          };
-          await admin.messaging().sendToDevice(fcmToken, payload);
-          console.log(`Notification sent to ${newValue.userId} for status ${newValue.status}`);
-        }
-      } catch (error) {
-        console.error("Error sending notification:", error);
-      }
-    }
-  });
-
-// 2. دالة إنشاء الطلب والدفع الآمن باستخدام Paymob (Zero-Trust)
-exports.createSecurePaymobOrder = functions
-  .runWith({ secrets: ["PAYMOB_API_KEY"] })
-  .https.onCall(async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "يجب تسجيل الدخول لإتمام الدفع"
-      );
+exports.askNaaseh = onCall(
+  { secrets: ["GEMINI_API_KEY"] },
+  async (request) => {
+    // في الجيل الثاني، البيانات تأتي عبر request.data
+    const userPrompt = request.data?.prompt;
+    if (!userPrompt) {
+      throw new HttpsError("invalid-argument", "برجاء إدخال السؤال");
     }
 
-    const userId = context.auth.uid;
-    const { totalAmount, billingData, items, address, phone } = data;
-    const apiKey = process.env.PAYMOB_API_KEY;
-    const integrationId = "5911923"
+    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
 
     try {
-      // إنشاء الطلب في Firestore بحالة Pending
-      const orderRef = db.collection("orders").doc();
-      await orderRef.set({
-        id: orderRef.id,
-        userId: userId,
-        phone: phone,
-        address: address,
-        status: "Pending",
-        totalPrice: totalAmount,
-        items: items || [],
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      const db = admin.firestore();
 
-      // توثيق السيرفر مع بايموب
-      const authRes = await axios.post("https://accept.paymob.com/api/auth/tokens", {
-        api_key: apiKey
-      });
-      const token = authRes.data.token;
+      // سحب المنتجات والأسعار من الكتالوج
+      const productSnap = await db.collection('products').limit(15).get();
+      const catalogContext = productSnap.docs
+        .map(d => `${d.data().name} بسعر ${d.data().price} ج.م`)
+        .join(' | ');
 
-      // تسجيل الطلب في بايموب مع ربطه بـ merchant_order_id (رقم الطلب في فايربيز)
-      const orderRes = await axios.post("https://accept.paymob.com/api/ecommerce/orders", {
-        auth_token: token,
-        delivery_needed: "false",
-        amount_cents: Math.round(totalAmount * 100),
-        currency: "EGP",
-        merchant_order_id: orderRef.id, // 👈 الربط الجوهري للويب هوك
-        items: [],
-      });
-      const paymobOrderId = orderRes.data.id;
+      // توجيهات النظام لفهم المنتجات والميزانية
+      const systemInstruction = `
+      أنت "ناصح"، مساعد مبيعات ذكي وودود لمتجر Ramy Store.
+      الكاتالوج الحالي للمتجر بالأسعار: ${catalogContext}.
+      مهامك الأساسية:
+      1. إذا سأل العميل عن منتج معين، أعطه تفاصيله وسعره بدقة.
+      2. إذا ذكر العميل ميزانية مالية محددة (مثلاً: معي مبلغ كذا)، اقترح عليه المنتج المناسب لهذه الميزانية تماماً، أو مجموعة منتجات (كومبو) لا تتجاوز هذا المبلغ.
+      3. كن دقيقاً، مختصرًا، وتحدث باللغة العربية الفصحى فقط.
+      `;
 
-      // استخراج مفتاح الدفع
-      const keyRes = await axios.post("https://accept.paymob.com/api/acceptance/payment_keys", {
-        auth_token: token,
-        amount_cents: Math.round(totalAmount * 100),
-        expiration: 3600,
-        order_id: paymobOrderId,
-        billing_data: billingData,
-        currency: "EGP",
-        integration_id: integrationId
-      });
+      // استخدام موديل gemini-3.6-flash الأحدث
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
-      return {
-        paymentToken: keyRes.data.token,
-        orderId: orderRef.id
-      };
-
-    } catch (error) {
-      console.error("❌ حدث خطأ في الدفع:", error.response?.data || error.message);
-      throw new functions.https.HttpsError("internal", "فشل في تهيئة الدفع");
-    }
-  });
-
-// 3. دالة الويب هوك لاستقبال تأكيد الدفع من بايموب (Idempotent)
-exports.paymobWebhook = functions.https.onRequest(async (req, res) => {
-  try {
-    if (req.method !== "POST") {
-      return res.status(405).send("Method Not Allowed");
-    }
-
-    const data = req.body;
-    const obj = data.obj;
-
-    if (!obj || !obj.id) {
-      return res.status(400).send("Invalid payload");
-    }
-
-    const transactionId = obj.id.toString();
-    const isSuccess = obj.success === true;
-    const merchantOrderId = obj.order?.merchant_order_id; // استخراج ID الطلب في فايربيز
-
-    console.log(`Paymob Webhook -> Tx: ${transactionId}, Success: ${isSuccess}, OrderId: ${merchantOrderId}`);
-
-    const txRef = db.collection("processed_transactions").doc(transactionId);
-
-    await db.runTransaction(async (transaction) => {
-      const existingTx = await transaction.get(txRef);
-      if (existingTx.exists) {
-        console.log(`Transaction ${transactionId} already processed.`);
-        return;
-      }
-
-      if (merchantOrderId) {
-        const orderRef = db.collection("orders").doc(merchantOrderId);
-        const orderDoc = await transaction.get(orderRef);
-
-        if (orderDoc.exists) {
-          const currentStatus = orderDoc.data().status;
-          if (currentStatus === "Pending") {
-            transaction.update(orderRef, {
-              status: isSuccess ? "Paid" : "PaymentFailed",
-              paymentTransactionId: transactionId,
-              paidAt: isSuccess ? admin.firestore.FieldValue.serverTimestamp() : null,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            console.log(`Order ${merchantOrderId} updated to ${isSuccess ? 'Paid' : 'PaymentFailed'}`);
+      const res = await axios.post(
+        url,
+        {
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ parts: [{ text: userPrompt }] }]
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
           }
-        } else {
-          console.warn(`Order ${merchantOrderId} not found.`);
         }
-      }
+      );
 
-      transaction.set(txRef, {
-        processedAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: isSuccess ? "Paid" : "Failed",
-        merchantOrderId: merchantOrderId || null,
-      });
-    });
+      const replyText = res.data.candidates?.[0]?.content?.parts?.[0]?.text || "عفواً، لم أستطع صياغة رد حالياً.";
+      return { reply: replyText };
 
-    return res.status(200).send("Webhook processed successfully");
-  } catch (error) {
-    console.error("Error processing Paymob webhook:", error);
-    return res.status(500).send("Internal Server Error");
+    } catch (e) {
+      const errorMsg = e.response?.data?.error?.message || e.message;
+      console.error("Gemini Real Error:", errorMsg);
+      throw new HttpsError("internal", errorMsg);
+    }
   }
-});
+);
