@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:go_router/go_router.dart'; // 👈 تم إضافة استدعاء الراوتر هنا
-import '../../../core/routing/routes.dart'; // 👈 تم إضافة مسارات الشاشات هنا
+import 'package:go_router/go_router.dart';
+import '../../../core/routing/routes.dart';
 import '../data/repos/admin_repo.dart';
 
 class ManageProductsScreen extends StatefulWidget {
-  ManageProductsScreen({super.key});
+  const ManageProductsScreen({super.key});
 
   @override
   State<ManageProductsScreen> createState() => _ManageProductsScreenState();
@@ -14,10 +14,10 @@ class ManageProductsScreen extends StatefulWidget {
 class _ManageProductsScreenState extends State<ManageProductsScreen> {
   final AdminRepo adminRepo = AdminRepo();
 
-  // 👈 متغير للتحكم في الفلتر الحالي (الكل - متاح - أرشيف)
+  // متغير للتحكم في الفلتر الحالي (الكل - متاح - أرشيف)
   String currentFilter = 'all';
 
-  // 👈 دالة ذكية لتحديد نوع الاستعلام (Query) بناءً على الفلتر المختار
+  // دالة ذكية لتحديد نوع الاستعلام (Query) بناءً على الفلتر المختار
   Stream<QuerySnapshot> _getProductsStream() {
     final collection = FirebaseFirestore.instance.collection('products');
 
@@ -35,21 +35,10 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('إدارة المنتجات', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('إدارة المنتجات والمخزون', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
-        // 👇👇 التعديل الجديد: زرار الدخول لإدارة الأقسام 👇👇
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              context.push(Routes.manageCategories); // فتح شاشة الأقسام
-            },
-            icon: const Icon(Icons.category, color: Colors.white),
-            label: const Text('الأقسام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 8), // مسافة صغيرة من الحافة
-        ],
-        // 👆👆 نهاية التعديل 👆👆
+        centerTitle: true,
       ),
       body: Column(
         children: [
@@ -82,7 +71,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                       children: [
                         Icon(Icons.inbox, size: 60, color: Colors.grey.shade400),
                         const SizedBox(height: 16),
-                        const Text('لا توجد منتجات مطابقة للفلتر', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                        const Text('لا توجد منتجات مطابقة للفلتر', style: TextStyle(fontSize: 16, color: Colors.grey, fontFamily: 'Cairo')),
                       ],
                     ),
                   );
@@ -98,6 +87,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     final data = doc.data() as Map<String, dynamic>;
 
                     final bool isActive = data['isActive'] ?? true;
+                    final String imageUrl = data['imageUrl'] ?? data['image'] ?? '';
+                    final String name = data['name'] ?? data['title'] ?? 'بدون اسم';
+                    final price = data['price'] ?? data['currentSalePrice'] ?? 0.0;
 
                     return Card(
                       color: isActive ? Colors.white : Colors.grey.shade200,
@@ -112,7 +104,11 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                               opacity: isActive ? 1.0 : 0.4,
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.network(data['imageUrl'], width: 60, height: 60, fit: BoxFit.cover),
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(imageUrl, width: 60, height: 60, fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(Icons.broken_image, size: 40, color: Colors.grey))
+                                    : const Icon(Icons.image, size: 40, color: Colors.grey),
                               ),
                             ),
                             if (!isActive)
@@ -123,9 +119,10 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                data['name'],
+                                name,
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
+                                  fontFamily: 'Cairo',
                                   decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
                                   color: isActive ? Colors.black : Colors.grey.shade600,
                                 ),
@@ -141,15 +138,16 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                                     color: Colors.red.shade100,
                                     borderRadius: BorderRadius.circular(8)
                                 ),
-                                child: const Text('مخفي', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                                child: const Text('مخفي', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               ),
                           ],
                         ),
                         subtitle: Text(
-                            '${data['price']} ج.م',
+                            '$price ج.م',
                             style: TextStyle(
                                 color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade600,
-                                fontWeight: FontWeight.bold
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo'
                             )
                         ),
                         trailing: Row(
@@ -157,7 +155,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           children: [
                             IconButton(
                               icon: Icon(Icons.edit, color: isActive ? Colors.green : Colors.grey),
-                              onPressed: isActive ? () => _showEditPriceDialog(context, doc.id, data['price'].toString()) : null,
+                              onPressed: isActive ? () => _showEditPriceDialog(context, doc.id, price.toString()) : null,
                             ),
                             IconButton(
                               icon: Icon(
@@ -182,10 +180,18 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           ),
         ],
       ),
+      // 👈 زر عائم واضح ومباشر لإضافة منتج جديد جوا شاشة إدارة المنتجات
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push(Routes.addProduct),
+        backgroundColor: const Color(0xFF000826),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('إضافة منتج جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+      ),
     );
   }
 
-  // 🎛️ أداة مساعدة لرسم زراير الفلتر بشكل أنيق
+  // أداة مساعدة لرسم زراير الفلتر بشكل أنيق
   Widget _buildFilterChip(String label, String filterValue, IconData icon) {
     final isSelected = currentFilter == filterValue;
     return ChoiceChip(
@@ -194,7 +200,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         children: [
           Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.black87),
           const SizedBox(width: 4),
-          Text(label),
+          Text(label, style: const TextStyle(fontFamily: 'Cairo')),
         ],
       ),
       selected: isSelected,
@@ -217,14 +223,14 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تعديل السعر', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('تعديل السعر', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: 'السعر الجديد', border: OutlineInputBorder()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D4FF)),
             onPressed: () {
@@ -233,7 +239,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('حفظ التعديل', style: TextStyle(color: Colors.white)),
+            child: const Text('حفظ التعديل', style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
           ),
         ],
       ),

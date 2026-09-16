@@ -36,16 +36,19 @@ import '../../features/profile/ui/profile_screen.dart';
 import '../di/dependency_injection.dart';
 import 'routes.dart';
 
-// استدعاءات قسم الإدارة (Admin)
+// استدعاءات قسم الإدارة (Admin & ERP Hub)
 import '../../features/admin/ui/add_product_screen.dart';
 import '../../features/admin/logic/add_product_cubit.dart';
 import '../../features/admin/data/repos/admin_repo.dart';
-
 import '../../features/admin/ui/admin_orders_screen.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
+import '../../features/admin/ui/admin_dashboard_screen.dart'; // 👈 استدعاء لوحة التحكم المركزية
 
 import '../../features/wishlist/ui/wishlist_screen.dart';
+
+// استدعاء شاشة إدارة الأطراف (العملاء والموردين)
+import '../../features/partners/ui/partners_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -100,6 +103,13 @@ class AppRouter {
           child: const OrdersScreen(),
         ),
       ),
+
+      // 👈 مسار لوحة تحكم الأدمن المركزية الجديد
+      GoRoute(
+        path: Routes.adminDashboard,
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+
       GoRoute(
         path: Routes.addProduct,
         builder: (context, state) => BlocProvider(
@@ -141,10 +151,13 @@ class AppRouter {
           );
         },
       ),
-      // 👈 مسار العناوين مستقل في المضيف الرئيسي
       GoRoute(
         path: '/addresses',
         builder: (context, state) => const AddressesScreen(),
+      ),
+      GoRoute(
+        path: Routes.partners,
+        builder: (context, state) => const PartnersScreen(),
       ),
     ],
   );

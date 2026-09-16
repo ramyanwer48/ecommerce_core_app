@@ -36,7 +36,7 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         centerTitle: true,
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
@@ -62,7 +62,7 @@ class ProfileScreen extends StatelessWidget {
             // زر سجل الطلبات (يظهر للجميع)
             ListTile(
               leading: const Icon(Icons.receipt_long, color: Color(0xFF00D4FF)),
-              title: const Text('سجل الطلبات', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('سجل الطلبات', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               tileColor: Colors.white,
@@ -74,7 +74,7 @@ class ProfileScreen extends StatelessWidget {
             // زر عناويني المحفوظة (يظهر للجميع)
             ListTile(
               leading: const Icon(Icons.location_on_outlined, color: Color(0xFF007BFF)),
-              title: const Text('عناويني المحفوظة', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('عناويني المحفوظة', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               tileColor: Colors.white,
@@ -83,7 +83,7 @@ class ProfileScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // بناء قسم الإدارة بالكامل بناءً على الصلاحيات
+            // 🛡️ قسم الإدارة الموحد (يظهر للأدمن فقط ويؤدي لوحة التحكم الشاملة)
             if (user != null)
               FutureBuilder<bool>(
                 future: _checkIfAdmin(user.uid),
@@ -97,34 +97,17 @@ class ProfileScreen extends StatelessWidget {
                       children: [
                         const Padding(
                           padding: EdgeInsets.only(bottom: 8.0, right: 8.0),
-                          child: Text('صلاحيات الإدارة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                          child: Text('صلاحيات الإدارة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontFamily: 'Cairo')),
                         ),
+                        // 👈 الزر البوابي الوحيد الذي يجمع كل أقسام الإدارة والـ ERP (المنتجات، التصنيفات، الطلبات، الأطراف)
                         ListTile(
-                          leading: const Icon(Icons.add_business, color: Colors.green),
-                          title: const Text('إضافة منتج جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+                          leading: const Icon(Icons.admin_panel_settings, color: Colors.blueAccent, size: 28),
+                          title: const Text('لوحة تحكم الإدارة (ERP Hub)', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                          subtitle: const Text('المنتجات، الطلبات، الأطراف، والموردين', style: TextStyle(fontSize: 12, fontFamily: 'Cairo')),
                           trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           tileColor: Colors.white,
-                          onTap: () => context.push(Routes.addProduct),
-                        ),
-                        const SizedBox(height: 12),
-                        ListTile(
-                          leading: const Icon(Icons.manage_history, color: Colors.purple),
-                          title: const Text('إدارة طلبات العملاء', style: TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          tileColor: Colors.white,
-                          onTap: () => context.push(Routes.adminOrders),
-                        ),
-                        const SizedBox(height: 12),
-                        // 👈 إدارة المنتجات انحطت هنا جوا صلاحيات الإدارة بس
-                        ListTile(
-                          leading: const Icon(Icons.inventory, color: Colors.orange),
-                          title: const Text('إدارة المنتجات (تعديل/حذف)', style: TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          tileColor: Colors.white,
-                          onTap: () => context.push(Routes.manageProducts),
+                          onTap: () => context.push(Routes.adminDashboard),
                         ),
                       ],
                     );
@@ -144,7 +127,7 @@ class ProfileScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 icon: const Icon(Icons.logout, color: Colors.white),
-                label: const Text('تسجيل الخروج', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                label: const Text('تسجيل الخروج', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
                 onPressed: () => _logout(context),
               ),
             ),
