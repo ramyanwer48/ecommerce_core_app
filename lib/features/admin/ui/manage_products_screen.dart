@@ -13,20 +13,17 @@ class ManageProductsScreen extends StatefulWidget {
 
 class _ManageProductsScreenState extends State<ManageProductsScreen> {
   final AdminRepo adminRepo = AdminRepo();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // متغير للتحكم في الفلتر الحالي (الكل - متاح - أرشيف)
   String currentFilter = 'all';
 
-  // دالة ذكية لتحديد نوع الاستعلام (Query) بناءً على الفلتر المختار
   Stream<QuerySnapshot> _getProductsStream() {
-    final collection = FirebaseFirestore.instance.collection('products');
-
+    final collection = _firestore.collection('products');
     if (currentFilter == 'active') {
       return collection.where('isActive', isEqualTo: true).snapshots();
     } else if (currentFilter == 'archived') {
       return collection.where('isActive', isEqualTo: false).snapshots();
     }
-    // 'all'
     return collection.snapshots();
   }
 
@@ -42,7 +39,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       ),
       body: Column(
         children: [
-          // 🗂️ 1. شريط الأرشفة الذكية (الفلاتر)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             color: Colors.white,
@@ -55,8 +51,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
               ],
             ),
           ),
-
-          // 📦 2. قائمة المنتجات
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _getProductsStream(),
@@ -90,86 +84,111 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     final String imageUrl = data['imageUrl'] ?? data['image'] ?? '';
                     final String name = data['name'] ?? data['title'] ?? 'بدون اسم';
                     final price = data['price'] ?? data['currentSalePrice'] ?? 0.0;
+                    final int stock = data['stockQuantity'] ?? data['stock'] ?? data['quantity'] ?? 0;
 
                     return Card(
                       color: isActive ? Colors.white : Colors.grey.shade200,
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        leading: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Opacity(
-                              opacity: isActive ? 1.0 : 0.4,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: imageUrl.isNotEmpty
-                                    ? Image.network(imageUrl, width: 60, height: 60, fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(Icons.broken_image, size: 40, color: Colors.grey))
-                                    : const Icon(Icons.image, size: 40, color: Colors.grey),
-                              ),
-                            ),
-                            if (!isActive)
-                              const Icon(Icons.block, color: Colors.red, size: 30),
-                          ],
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Cairo',
-                                  decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
-                                  color: isActive ? Colors.black : Colors.grey.shade600,
+                      elevation: 3,
+                      shadowColor: Colors.black12,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(12),
+                          leading: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Opacity(
+                                opacity: isActive ? 1.0 : 0.4,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(imageUrl, width: 60, height: 60, fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.broken_image, size: 40, color: Colors.grey))
+                                      : const Icon(Icons.image, size: 40, color: Colors.grey),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            if (!isActive)
-                              Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                    color: Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(8)
+                              if (!isActive)
+                                const Icon(Icons.block, color: Colors.red, size: 30),
+                            ],
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo',
+                                    decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
+                                    color: isActive ? Colors.black : Colors.grey.shade600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                child: const Text('مخفي', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               ),
-                          ],
-                        ),
-                        subtitle: Text(
-                            '$price ج.م',
-                            style: TextStyle(
-                                color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade600,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Cairo'
-                            )
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.edit, color: isActive ? Colors.green : Colors.grey),
-                              onPressed: isActive ? () => _showEditPriceDialog(context, doc.id, price.toString()) : null,
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                    '$price ج.م',
+                                    style: TextStyle(
+                                        color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Cairo'
+                                    )
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'المتوفر في المخزن: $stock',
+                                  style: TextStyle(
+                                    color: stock > 0 ? Colors.green.shade700 : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: Icon(
-                                  isActive ? Icons.visibility_off : Icons.visibility,
-                                  color: isActive ? Colors.red : Colors.blue
-                              ),
-                              tooltip: isActive ? 'إخفاء المنتج' : 'إعادة النشر',
-                              onPressed: () {
-                                FirebaseFirestore.instance.collection('products').doc(doc.id).update({
-                                  'isActive': !isActive,
-                                });
-                              },
+                          ),
+                          trailing: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 🌟 زر إضافة دفعة جديدة (سعر التكلفة)
+                                IconButton(
+                                  icon: Icon(Icons.add_box_rounded, color: isActive ? Colors.orange.shade600 : Colors.grey, size: 28),
+                                  tooltip: 'إضافة شحنة/كمية جديدة',
+                                  onPressed: isActive ? () => _showAddBatchModal(context, doc.id, name) : null,
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.edit, color: isActive ? Colors.green : Colors.grey, size: 26),
+                                  tooltip: 'تعديل السعر الأساسي',
+                                  onPressed: isActive ? () => _showEditPriceDialog(context, doc.id, price.toString()) : null,
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                      isActive ? Icons.visibility_off : Icons.visibility,
+                                      color: isActive ? Colors.red : Colors.blue,
+                                      size: 26
+                                  ),
+                                  tooltip: isActive ? 'إخفاء المنتج' : 'إعادة النشر',
+                                  onPressed: () {
+                                    _firestore.collection('products').doc(doc.id).update({
+                                      'isActive': !isActive,
+                                    });
+                                  },
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     );
@@ -180,7 +199,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           ),
         ],
       ),
-      // 👈 زر عائم واضح ومباشر لإضافة منتج جديد جوا شاشة إدارة المنتجات
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(Routes.addProduct),
         backgroundColor: const Color(0xFF000826),
@@ -191,7 +209,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     );
   }
 
-  // أداة مساعدة لرسم زراير الفلتر بشكل أنيق
   Widget _buildFilterChip(String label, String filterValue, IconData icon) {
     final isSelected = currentFilter == filterValue;
     return ChoiceChip(
@@ -218,16 +235,114 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     );
   }
 
+  // 📦 نافذة إضافة شحنة/كمية جديدة (سعر التكلفة)
+  void _showAddBatchModal(BuildContext context, String docId, String productName) {
+    final TextEditingController qtyController = TextEditingController();
+    final TextEditingController costController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (modalContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'إضافة كمية لـ $productName',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+
+                TextField(
+                  controller: qtyController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'الكمية الجديدة المستلمة',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.inventory_2_outlined),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: costController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'سعر التكلفة (الشراء) للقطعة الواحدة', // 👈 توضيح أنه سعر التكلفة
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.price_change_outlined),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.orange.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () async {
+                    final int qty = int.tryParse(qtyController.text.trim()) ?? 0;
+                    final double cost = double.tryParse(costController.text.trim()) ?? 0.0;
+
+                    if (qty <= 0 || cost <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال كمية وسعر تكلفة صحيحين', style: TextStyle(fontFamily: 'Cairo'))));
+                      return;
+                    }
+
+                    final newBatch = {
+                      'batchId': DateTime.now().millisecondsSinceEpoch.toString(),
+                      'quantity': qty,
+                      'costPrice': cost, // 👈 تخزين سعر التكلفة
+                      'dateAdded': Timestamp.now(),
+                    };
+
+                    await _firestore.collection('products').doc(docId).update({
+                      'batches': FieldValue.arrayUnion([newBatch]),
+                      'stockQuantity': FieldValue.increment(qty),
+                      'stock': FieldValue.increment(qty),
+                    });
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم إضافة الشحنة بنجاح!', style: TextStyle(fontFamily: 'Cairo'))),
+                      );
+                    }
+                  },
+                  child: const Text('حفظ الشحنة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showEditPriceDialog(BuildContext context, String docId, String currentPrice) {
     final controller = TextEditingController(text: currentPrice);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تعديل السعر', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+        title: const Text('تعديل السعر الأساسي', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'السعر الجديد', border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'السعر الجديد للعميل', border: OutlineInputBorder()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'))),

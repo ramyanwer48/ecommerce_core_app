@@ -27,6 +27,7 @@ import '../../features/cart/ui/cart_screen.dart';
 import '../../features/cart/logic/cart_cubit.dart';
 
 // استدعاءات Profile
+import '../../features/invoices/ui/create_invoice_screen.dart' show CreateInvoiceScreen;
 import '../../features/profile/data/repos/order_repo.dart';
 import '../../features/profile/logic/order_cubit.dart';
 import '../../features/profile/ui/orders_screen.dart';
@@ -49,7 +50,9 @@ import '../../features/wishlist/ui/wishlist_screen.dart';
 
 // استدعاء شاشة إدارة الأطراف (العملاء والموردين)
 import '../../features/partners/ui/partners_screen.dart';
-
+import '../../features/invoices/data/repos/invoice_repo.dart';
+import '../../features/invoices/logic/invoice_cubit.dart';
+import '../../features/invoices/ui/create_invoice_screen.dart';
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -158,6 +161,13 @@ class AppRouter {
       GoRoute(
         path: Routes.partners,
         builder: (context, state) => const PartnersScreen(),
+      ),
+      GoRoute(
+        path: Routes.createInvoice,
+        builder: (context, state) => BlocProvider(
+          create: (context) => InvoiceCubit(InvoiceRepo()),
+          child: const CreateInvoiceScreen(),
+        ),
       ),
     ],
   );

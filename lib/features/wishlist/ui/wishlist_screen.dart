@@ -15,7 +15,7 @@ class WishlistScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('المفضلة', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('المفضلة', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         centerTitle: true,
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
@@ -33,7 +33,7 @@ class WishlistScreen extends StatelessWidget {
 
           if (state is FavoritesError) {
             return Center(
-              child: Text(state.error, style: const TextStyle(color: Colors.red, fontSize: 16)),
+              child: Text(state.error, style: const TextStyle(color: Colors.red, fontSize: 16, fontFamily: 'Cairo')),
             );
           }
 
@@ -45,39 +45,43 @@ class WishlistScreen extends StatelessWidget {
             return RefreshIndicator(
               color: ColorsManager.neonBlue,
               onRefresh: () async {
-                // 👈 السطر اللي تم تعديله ليتطابق مع الكيوبيت الخاص بك
                 await context.read<FavoritesCubit>().fetchFavorites();
               },
               child: ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(), // إجبار السحب للأسفل
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 itemCount: state.favoriteProducts.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final item = state.favoriteProducts[index];
-
-                  // قراءة حالة المنتج من الموديل الجديد
                   final bool isActive = item.isActive;
 
                   return Card(
-                    color: isActive ? Colors.white : Colors.grey.shade100, // لون باهت للمنتج المخفي
+                    color: isActive ? Colors.white : Colors.grey.shade100,
                     elevation: 2,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      // تعطيل الضغط لو المنتج غير متاح
                       onTap: isActive ? () {
                         final tempProduct = ProductModel(
                           id: item.productId,
                           name: item.name,
                           description: 'جاري تحميل التفاصيل...',
-                          price: item.price,
+                          price: item.price, // 👈 تمرير سعر البيع الإجباري
                           imageUrl: item.imageUrl,
                           images: [],
                           variations: [],
                           category: '',
                           inStock: true,
                           isActive: isActive,
+                          batches: [
+                            ProductBatch(
+                              batchId: 'temp_${item.productId}',
+                              quantity: 1,
+                              costPrice: item.price,
+                              dateAdded: DateTime.now(),
+                            ),
+                          ],
                         );
                         context.push(Routes.productDetails, extra: tempProduct);
                       } : null,
@@ -85,7 +89,6 @@ class WishlistScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(12.0),
                         child: Row(
                           children: [
-                            // تقليل شفافية الصورة للمنتج المخفي
                             Opacity(
                               opacity: isActive ? 1.0 : 0.4,
                               child: ClipRRect(
@@ -110,7 +113,7 @@ class WishlistScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      // شطب الاسم للمنتج المخفي
+                                      fontFamily: 'Cairo',
                                       decoration: isActive ? TextDecoration.none : TextDecoration.lineThrough,
                                       color: isActive ? Colors.black : Colors.grey.shade600,
                                     ),
@@ -122,33 +125,41 @@ class WishlistScreen extends StatelessWidget {
                                     '${item.price} ج.م',
                                     style: TextStyle(
                                         fontSize: 16,
+                                        fontFamily: 'Cairo',
                                         color: isActive ? const Color(0xFF007BFF) : Colors.grey.shade500,
                                         fontWeight: FontWeight.bold
                                     ),
                                   ),
-                                  // بادج التنبيه
                                   if (!isActive)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 4.0),
-                                      child: Text('غير متوفر حالياً', style: TextStyle(color: Colors.red.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      child: Text('غير متوفر حالياً', style: TextStyle(color: Colors.red.shade400, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                                     ),
                                 ],
                               ),
                             ),
-                            // زر الحذف من المفضلة
                             IconButton(
-                              icon: const Icon(Icons.favorite, color: Colors.red, size: 28),
+                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 28),
+                              tooltip: 'إزالة من المفضلة',
                               onPressed: () {
                                 final tempProduct = ProductModel(
                                   id: item.productId,
                                   name: item.name,
                                   description: '',
-                                  price: item.price,
+                                  price: item.price, // 👈 تمرير سعر البيع الإجباري هنا أيضاً
                                   imageUrl: item.imageUrl,
                                   images: [],
                                   variations: [],
                                   category: '',
                                   inStock: true,
+                                  batches: [
+                                    ProductBatch(
+                                      batchId: 'temp_${item.productId}',
+                                      quantity: 1,
+                                      costPrice: item.price,
+                                      dateAdded: DateTime.now(),
+                                    ),
+                                  ],
                                 );
                                 context.read<FavoritesCubit>().toggleFavorite(tempProduct);
                               },
@@ -178,12 +189,12 @@ class WishlistScreen extends StatelessWidget {
           const SizedBox(height: 24),
           const Text(
             'قائمة المفضلة فارغة',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Cairo'),
           ),
           const SizedBox(height: 12),
           Text(
             'تصفح المنتجات واضغط على القلب لإضافتها هنا',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontFamily: 'Cairo'),
             textAlign: TextAlign.center,
           ),
         ],

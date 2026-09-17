@@ -18,8 +18,52 @@ class AdminOrdersRepo {
 
   // تحديث حالة الطلب
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
-    await _firestore.collection('orders').doc(orderId).update({
-      'status': newStatus,
-    });
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final orderRef = firestore.collection('orders').doc(orderId);
+
+    // لو تغيير حالة عادية مش إلغاء، حدث وامشي
+    if (newStatus != 'Cancelled') {
+      await orderRef.update({'status': newStatus});
+      return;
+    }
+
+    // 🔥 لو الحالة إلغاء (Cancelled)، لازم نعمل مرتجع مخزني بالسعر القديم 🔥
+    final orderDoc = await orderRef.get();
+    if (!orderDoc.exists) return;
+
+    final orderData = orderDoc.data()!;
+    if (orderData['status'] == 'Cancelled') return; // منع التكرار
+
+    final List<dynamic> items = orderData['items'] ?? orderData['cartItems'] ?? [];
+
+    WriteBatch batch = firestore.batch();
+    batch.update(orderRef, {'status': newStatus}); // إلغاء الطلب
+
+    // عمل مرتجع لكل منتج في الطلب
+    for (var item in items) {
+      final String productId = item['productId'] ?? item['id'] ?? '';
+      final int quantity = item['quantity'] ?? 1;
+      final double oldPrice = (item['price'] ?? 0.0).toDouble();
+
+      if (productId.isEmpty) continue;
+
+      final productRef = firestore.collection('products').doc(productId);
+
+      // 👈 هنا بنصنع الشحنة المرتجعة بالسعر اللي العميل اشترى بيه زمان (مثلاً 300)
+      final returnedBatch = {
+        'batchId': 'return_${orderId}_${DateTime.now().millisecondsSinceEpoch}',
+        'quantity': quantity,
+        'sellingPrice': oldPrice,
+        'dateAdded': Timestamp.now(),
+      };
+
+      batch.update(productRef, {
+        'batches': FieldValue.arrayUnion([returnedBatch]),
+        'stockQuantity': FieldValue.increment(quantity),
+        'stock': FieldValue.increment(quantity),
+      });
+    }
+
+    await batch.commit(); // تنفيذ الإلغاء والمرتجع في خبطة واحدة
   }
 }

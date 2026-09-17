@@ -52,11 +52,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final nameController = TextEditingController();
     final commentController = TextEditingController();
 
-    // استدعاء الأداة الموحدة اللي عملناها
     CustomBottomSheet.show(
       context: context,
       title: 'أضف تقييمك ⭐️',
-      // بنبعت المحتوى الخاص بالتقييم بس (نجوم + حقول إدخال + زرار)
       child: StatefulBuilder(
           builder: (context, setStateSheet) {
             return Column(
@@ -107,9 +105,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         rating: selectedRating,
                         comment: commentController.text,
                       );
-                      Navigator.pop(context); // إغلاق النافذة
+                      Navigator.pop(context);
                     },
-                    child: const Text('نشر التقييم', style: TextStyle(fontSize: 16, color: Colors.white)),
+                    child: const Text('نشر التقييم', style: TextStyle(fontSize: 16, color: Colors.white, fontFamily: 'Cairo')),
                   ),
                 ),
               ],
@@ -134,20 +132,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           return Scaffold(
             backgroundColor: Colors.white,
             appBar: AppBar(
-              title: const Text('تفاصيل المنتج', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('تفاصيل المنتج', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
               centerTitle: true,
               backgroundColor: const Color(0xFF000826),
               foregroundColor: Colors.white,
               elevation: 0,
-              // التعديل الجديد: استخدام BlocConsumer للاستماع للأخطاء
               actions: [
                 BlocConsumer<FavoritesCubit, FavoritesState>(
                   listener: (context, state) {
                     if (state is FavoritesError) {
-                      // إظهار تنبيه شيك للمستخدم الزائر
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(state.error),
+                          content: Text(state.error, style: const TextStyle(fontFamily: 'Cairo')),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 3),
                         ),
@@ -156,7 +152,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   },
                   builder: (context, state) {
                     bool isFavorite = false;
-                    // نتحقق مما إذا كان الـ ID الخاص بالمنتج موجوداً في قائمة المفضلة
                     if (state is FavoritesLoaded) {
                       isFavorite = state.favoriteIds.contains(widget.product.id);
                     }
@@ -167,7 +162,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         size: 28,
                       ),
                       onPressed: () {
-                        // عند الضغط، نقوم بإضافة أو إزالة المنتج من المفضلة السحابية
                         context.read<FavoritesCubit>().toggleFavorite(widget.product);
                       },
                     );
@@ -240,13 +234,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               Expanded(
                                 child: Text(
                                   widget.product.name,
-                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Text(
                                 '${widget.product.price} ج.م',
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF007BFF)),
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF007BFF), fontFamily: 'Cairo'),
                               ),
                             ],
                           ),
@@ -265,7 +259,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     '${avg.toStringAsFixed(1)} ($count تقييم)',
-                                    style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                                   ),
                                 ],
                               );
@@ -283,15 +277,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               Text(
                                 widget.product.inStock ? 'متوفر في المخزن' : 'نفذت الكمية',
                                 style: TextStyle(
-                                  color: widget.product.inStock ? Colors.green : Colors.red,
-                                  fontWeight: FontWeight.bold,
+                                    color: widget.product.inStock ? Colors.green : Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Cairo'
                                 ),
                               ),
                             ],
                           ),
                           const Divider(height: 24),
                           if (widget.product.variations.isNotEmpty) ...[
-                            const Text('الخيارات المتاحة:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const Text('الخيارات المتاحة:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                             const SizedBox(height: 12),
                             Wrap(
                               spacing: 10,
@@ -315,8 +310,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     child: Text(
                                       variation,
                                       style: TextStyle(
-                                        color: isSelected ? Colors.white : Colors.black87,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                          color: isSelected ? Colors.white : Colors.black87,
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                          fontFamily: 'Cairo'
                                       ),
                                     ),
                                   ),
@@ -325,21 +321,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                             const Divider(height: 24),
                           ],
-                          const Text('الوصف:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const Text('الوصف:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                           const SizedBox(height: 8),
                           Text(
                             widget.product.description,
-                            style: const TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
+                            style: const TextStyle(fontSize: 16, color: Colors.grey, height: 1.5, fontFamily: 'Cairo'),
                           ),
                           const Divider(height: 32),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('المراجعات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Text('المراجعات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                               TextButton.icon(
                                 onPressed: () => _showAddReviewDialog(context, reviewsCubit),
                                 icon: const Icon(Icons.edit, size: 18, color: Color(0xFF007BFF)),
-                                label: const Text('أضف تقييمك', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF007BFF))),
+                                label: const Text('أضف تقييمك', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF007BFF), fontFamily: 'Cairo')),
                               ),
                             ],
                           ),
@@ -352,7 +348,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 if (state.reviews.isEmpty) {
                                   return const Padding(
                                     padding: EdgeInsets.all(16.0),
-                                    child: Center(child: Text('لا توجد تقييمات بعد. كن أول من يقيم هذا المنتج!', style: TextStyle(color: Colors.grey))),
+                                    child: Center(child: Text('لا توجد تقييمات بعد. كن أول من يقيم هذا المنتج!', style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'))),
                                   );
                                 }
                                 return ListView.separated(
@@ -370,21 +366,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Text(review.userName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                              Text(review.date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                              Text(review.userName, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                              Text(review.date, style: const TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Cairo')),
                                             ],
                                           ),
                                           const SizedBox(height: 4),
                                           _buildStars(review.rating, size: 14),
                                           const SizedBox(height: 8),
-                                          Text(review.comment, style: const TextStyle(fontSize: 14)),
+                                          Text(review.comment, style: const TextStyle(fontSize: 14, fontFamily: 'Cairo')),
                                         ],
                                       ),
                                     );
                                   },
                                 );
                               } else if (state is ReviewsError) {
-                                return Center(child: Text(state.error, style: const TextStyle(color: Colors.red)));
+                                return Center(child: Text(state.error, style: const TextStyle(color: Colors.red, fontFamily: 'Cairo')));
                               }
                               return const SizedBox.shrink();
                             },
@@ -414,17 +410,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         ? '${widget.product.name} ($_selectedVariation)'
                         : widget.product.name;
 
+                    // 👇 التعديل هنا: أضفنا price: widget.product.price لتتوافق مع الموديل الجديد
                     final productToAdd = ProductModel(
                       id: widget.product.id,
                       name: finalName,
                       description: widget.product.description,
-                      price: widget.product.price,
+                      price: widget.product.price, // 👈 تم إضافتها بنجاح
                       imageUrl: widget.product.imageUrl,
                       images: widget.product.images,
                       variations: widget.product.variations,
                       category: widget.product.category,
                       inStock: widget.product.inStock,
-                      stockQuantity: widget.product.stockQuantity,
+                      isActive: widget.product.isActive,
+                      batches: widget.product.batches,
                     );
 
                     getIt<CartCubit>().addToCart(productToAdd);
@@ -432,14 +430,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     final optionText = _selectedVariation != null ? '($_selectedVariation) ' : '';
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('تم إضافة ${widget.product.name} $optionTextللسلة بنجاح!'),
+                        content: Text('تم إضافة ${widget.product.name} $optionTextللسلة بنجاح!', style: const TextStyle(fontFamily: 'Cairo')),
                         backgroundColor: Colors.green,
                         duration: const Duration(seconds: 2),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
                   },
-                  child: const Text('أضف للسلة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  child: const Text('أضف للسلة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
                 ),
               ),
             ),

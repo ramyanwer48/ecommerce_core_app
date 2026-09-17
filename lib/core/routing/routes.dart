@@ -21,4 +21,5 @@ class Routes {
 
   // مسار شاشة الأطراف (العملاء والموردين)
   static const String partners = '/partners';
+  static const String createInvoice = '/createInvoice';
 }
