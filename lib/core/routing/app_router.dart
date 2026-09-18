@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 // استدعاءات Auth
 import '../../features/admin/data/repos/admin_categories_repo.dart';
+import '../../features/admin/data/repos/admin_coupons_repo.dart';
 import '../../features/admin/logic/admin_categories_cubit.dart';
 import '../../features/admin/ui/manage_categories_screen.dart';
 import '../../features/admin/ui/manage_products_screen.dart';
@@ -44,7 +45,11 @@ import '../../features/admin/data/repos/admin_repo.dart';
 import '../../features/admin/ui/admin_orders_screen.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
-import '../../features/admin/ui/admin_dashboard_screen.dart'; // 👈 استدعاء لوحة التحكم المركزية
+import '../../features/admin/ui/admin_dashboard_screen.dart';
+
+// 👈 استدعاءات إدارة الكوبونات للأدمن
+import '../../features/admin/logic/admin_coupons_cubit.dart';
+import '../../features/admin/ui/admin_coupons_screen.dart';
 
 import '../../features/wishlist/ui/wishlist_screen.dart';
 
@@ -52,7 +57,7 @@ import '../../features/wishlist/ui/wishlist_screen.dart';
 import '../../features/partners/ui/partners_screen.dart';
 import '../../features/invoices/data/repos/invoice_repo.dart';
 import '../../features/invoices/logic/invoice_cubit.dart';
-import '../../features/invoices/ui/create_invoice_screen.dart';
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -107,7 +112,7 @@ class AppRouter {
         ),
       ),
 
-      // 👈 مسار لوحة تحكم الأدمن المركزية الجديد
+      // مسار لوحة تحكم الأدمن المركزية
       GoRoute(
         path: Routes.adminDashboard,
         builder: (context, state) => const AdminDashboardScreen(),
@@ -123,11 +128,20 @@ class AppRouter {
       GoRoute(
         path: Routes.adminOrders,
         builder: (context, state) => BlocProvider(
-          // 👈 استخدام GetIt لجلب الكيوبت بالتبعيتين اللي بيحتاجهم
           create: (context) => getIt<AdminOrdersCubit>()..fetchAllOrders(),
           child: const AdminOrdersScreen(),
         ),
       ),
+
+      // 👈 مسار شاشة إدارة الكوبونات الجديد
+      GoRoute(
+        path: Routes.manageCoupons,
+        builder: (context, state) => BlocProvider(
+          create: (context) => AdminCouponsCubit(AdminCouponsRepo()),
+          child: const AdminCouponsScreen(),
+        ),
+      ),
+
       GoRoute(
         path: Routes.manageProducts,
         builder: (context, state) => ManageProductsScreen(),

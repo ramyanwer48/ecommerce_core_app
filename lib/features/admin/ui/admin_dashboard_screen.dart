@@ -8,7 +8,7 @@ class AdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9), // خلفية هادئة واحترافية
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         title: const Text(
           'لوحة تحكم الإدارة (Admin Hub)',
@@ -30,17 +30,17 @@ class AdminDashboardScreen extends StatelessWidget {
               subtitle: 'إصدار فواتير، خصم المخزون، الحسابات',
               icon: Icons.receipt_long_rounded,
               color: Colors.redAccent.shade700,
-              onTap: () => context.push(Routes.createInvoice), // 👈 مسار شاشة الفواتير
+              onTap: () => context.push(Routes.createInvoice),
             ),
             const SizedBox(height: 16),
 
-            // 🌟 2. باقي الأقسام الأربعة (كما هي بتصميمك المضبوط)
+            // 🌟 2. أقسام لوحة التحكم (تم إضافة كوبونات الخصم هنا)
             GridView.count(
-              crossAxisCount: 2, // كارتين جنب بعض
+              crossAxisCount: 2,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              shrinkWrap: true, // مهم جداً عشان الـ Scroll
-              physics: const NeverScrollableScrollPhysics(), // منع السكرول الداخلي
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               childAspectRatio: 0.88,
               children: [
                 _buildDashboardCard(
@@ -74,6 +74,15 @@ class AdminDashboardScreen extends StatelessWidget {
                   icon: Icons.handshake_rounded,
                   color: Colors.blue,
                   onTap: () => context.push(Routes.partners),
+                ),
+                // 👈 الكارت الجديد الخاص بإدارة الكوبونات
+                _buildDashboardCard(
+                  context,
+                  title: 'كوبونات الخصم',
+                  subtitle: 'إدارة العروض والخصومات',
+                  icon: Icons.local_offer_rounded,
+                  color: Colors.pink,
+                  onTap: () => context.push(Routes.manageCoupons),
                 ),
               ],
             ),
