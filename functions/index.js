@@ -60,3 +60,66 @@ exports.askNaaseh = onCall(
     }
   }
 );
+// =======================================================
+// دالة إرسال إشعار تلقائي للعميل عند تغير حالة الطلب
+// =======================================================
+const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+
+exports.sendOrderUpdateNotification = onDocumentUpdated("orders/{orderId}", async (event) => {
+    const newValue = event.data.after.data();
+    const previousValue = event.data.before.data();
+
+    // 1. لا نرسل الإشعار إلا إذا تغيرت حالة الطلب فقط
+    if (newValue.status === previousValue.status) {
+      return null;
+    }
+
+    const userId = newValue.userId;
+    const newStatus = newValue.status;
+    const orderId = event.params.orderId;
+
+    if (!userId) {
+      console.log("الطلب لا يحتوي على userId");
+      return null;
+    }
+
+    try {
+      // 2. جلب التوكن الخاص بالعميل من كوليكشن users
+      const userDoc = await admin.firestore().collection("users").doc(userId).get();
+      const fcmToken = userDoc.data()?.fcmToken;
+
+      if (!fcmToken) {
+        console.log(`لا يوجد fcmToken للعميل: ${userId}`);
+        return null;
+      }
+
+      // 3. تحديد نص الرسالة بناءً على الحالة
+      let bodyMsg = `تم تحديث حالة طلبك إلى: ${newStatus}`;
+      if (newStatus.toLowerCase() === 'processing') bodyMsg = 'طلبك قيد التجهيز الآن 📦';
+      if (newStatus.toLowerCase() === 'shipped') bodyMsg = 'مندوبنا في الطريق إليك 🚚';
+      if (newStatus.toLowerCase() === 'delivered') bodyMsg = 'شكراً لتسوقك من رامي ستور! نأمل أن يعجبك المنتج ✅';
+      if (newStatus.toLowerCase() === 'cancelled') bodyMsg = 'تم إلغاء طلبك، وإرجاع المبالغ لحسابك ❌';
+
+      // 4. تجهيز الإشعار مع الـ Deep Linking
+      const payload = {
+        token: fcmToken,
+        notification: {
+          title: "تحديث حالة الطلب 🛒",
+          body: bodyMsg,
+        },
+        data: {
+          type: "order_update",
+          orderId: orderId,
+        },
+      };
+
+      // 5. إرسال الإشعار
+      const response = await admin.messaging().send(payload);
+      console.log("✅ تم إرسال الإشعار بنجاح:", response);
+      return response;
+
+    } catch (error) {
+      console.error("❌ فشل إرسال الإشعار:", error);
+      return null;
+    }
+});

@@ -21,10 +21,11 @@ class AdminRepo {
     }
   }
 
-  // 🌟 التعديل هنا: دالة إضافة المنتج بقت تدعم نظام الدفعات (FIFO Batches)
+  // 🌟 دالة إضافة المنتج ودعم نظام الدفعات (FIFO Batches)
   Future<void> addProduct({
     required String name,
     required double price,
+    required double costPrice, // سعر التكلفة للدفعة الأولى
     required String category,
     required String description,
     required String imageUrl,
@@ -34,17 +35,17 @@ class AdminRepo {
     required int stockQuantity,
   }) async {
 
-    // تكوين "أول دفعة" للمنتج الجديد
+    // تكوين "أول دفعة" للمنتج الجديد بناءً على تكلفة الشراء
     final initialBatch = {
       'batchId': 'batch_${DateTime.now().millisecondsSinceEpoch}',
       'quantity': stockQuantity,
-      'sellingPrice': price,
+      'costPrice': costPrice,
       'dateAdded': Timestamp.now(),
     };
 
     await _firestore.collection('products').add({
       'name': name,
-      'price': price, // كمرجع احتياطي
+      'price': price, // سعر البيع الثابت للعميل في الواجهة
       'category': category,
       'description': description,
       'imageUrl': imageUrl,
@@ -52,8 +53,8 @@ class AdminRepo {
       'variations': variations,
       'inStock': stockQuantity > 0,
       'isActive': true,
-      'stockQuantity': stockQuantity, // كمرجع للبحث
-      'batches': [initialBatch], // 👈 حقن الدفعة الأولى هنا
+      'stockQuantity': stockQuantity, // إجمالي المخزون
+      'batches': [initialBatch], // حقن الدفعة الأولى
     });
   }
 
@@ -64,26 +65,73 @@ class AdminRepo {
     });
   }
 
-  // 🌟 التعديل هنا: تعديل السعر الأساسي بيحدث أسعار الدفعات المتاحة حالياً
+  // 🌟 تحديث سعر البيع الموحد للمنتج (في المستند الرئيسي فقط)
   Future<void> updateProductPrice(String productId, double newPrice) async {
-    final doc = await _firestore.collection('products').doc(productId).get();
-    if (!doc.exists) return;
-
-    final data = doc.data()!;
-    List<dynamic> rawBatches = data['batches'] ?? [];
-
-    // اللف على الدفعات وتحديث سعر الدفعات اللي لسه فيها مخزون فقط
-    List<Map<String, dynamic>> updatedBatches = rawBatches.map((b) {
-      final batch = Map<String, dynamic>.from(b as Map);
-      if (batch['quantity'] > 0) {
-        batch['sellingPrice'] = newPrice;
-      }
-      return batch;
-    }).toList();
-
     await _firestore.collection('products').doc(productId).update({
       'price': newPrice,
-      'batches': updatedBatches,
+    });
+  }
+
+  // 🌟 دالة تحديث حالة الطلب وإرجاع المخزون (في حال الإلغاء) بنظام الدفعات (Returns FIFO Reversal)
+  Future<void> updateOrderStatusAndRestoreStock({
+    required String orderId,
+    required String newStatus,
+  }) async {
+    final orderRef = _firestore.collection('orders').doc(orderId);
+
+    await _firestore.runTransaction((transaction) async {
+      // 1. جلب بيانات الطلب
+      final orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists) throw Exception('الطلب غير موجود');
+
+      final orderData = orderSnap.data() as Map<String, dynamic>;
+      final String oldStatus = orderData['status'] ?? '';
+      final List<dynamic> items = orderData['items'] ?? [];
+
+      // 2. إذا تم تغيير الحالة إلى "Cancelled" (أو "ملغي") ولم تكن ملغية من قبل، نقوم بإرجاع المنتجات للمخزن
+      if (newStatus.toLowerCase() == 'cancelled' && oldStatus.toLowerCase() != 'cancelled') {
+        for (var item in items) {
+          final String productId = item['productId'];
+          final int quantityToRestore = item['quantity'] ?? 0;
+          final double totalCost = (item['totalCost'] ?? 0.0).toDouble();
+
+          // حساب متوسط التكلفة للقطعة الواحدة المرتجعة
+          final double unitCostPrice = quantityToRestore > 0 ? (totalCost / quantityToRestore) : 0.0;
+
+          final productRef = _firestore.collection('products').doc(productId);
+          final productSnap = await transaction.get(productRef);
+
+          if (productSnap.exists) {
+            final productData = productSnap.data() as Map<String, dynamic>;
+            List<dynamic> batches = productData['batches'] ?? [];
+
+            // تكوين دفعة مرتجع جديدة بتكلفتها الأصلية
+            final returnBatch = {
+              'batchId': 'return_batch_${DateTime.now().millisecondsSinceEpoch}',
+              'quantity': quantityToRestore,
+              'costPrice': unitCostPrice,
+              'dateAdded': Timestamp.now(),
+            };
+
+            batches.add(returnBatch);
+
+            int currentStockQty = productData['stockQuantity'] ?? 0;
+            int newStockQty = currentStockQty + quantityToRestore;
+
+            // تحديث مخزون المنتج وإعادة حقن دفعة المرتجع داخل الـ batches
+            transaction.update(productRef, {
+              'batches': batches,
+              'stockQuantity': newStockQty,
+              'inStock': newStockQty > 0,
+            });
+          }
+        }
+      }
+
+      // 3. تحديث حالة الطلب أياً كانت في النهاية
+      transaction.update(orderRef, {
+        'status': newStatus,
+      });
     });
   }
 }

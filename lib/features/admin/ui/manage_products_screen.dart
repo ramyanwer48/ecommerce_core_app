@@ -84,7 +84,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     final String imageUrl = data['imageUrl'] ?? data['image'] ?? '';
                     final String name = data['name'] ?? data['title'] ?? 'بدون اسم';
                     final price = data['price'] ?? data['currentSalePrice'] ?? 0.0;
-                    final int stock = data['stockQuantity'] ?? data['stock'] ?? data['quantity'] ?? 0;
+
+                    // 👈 قراءة المخزون من stockQuantity كأولوية قصوى
+                    final int stock = data['stockQuantity'] ?? data['quantity'] ?? 0;
 
                     return Card(
                       color: isActive ? Colors.white : Colors.grey.shade200,
@@ -309,10 +311,10 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                       'dateAdded': Timestamp.now(),
                     };
 
+                    // 👇 تم إزالة حقل 'stock' القديم من هنا
                     await _firestore.collection('products').doc(docId).update({
                       'batches': FieldValue.arrayUnion([newBatch]),
                       'stockQuantity': FieldValue.increment(qty),
-                      'stock': FieldValue.increment(qty),
                     });
 
                     if (context.mounted) {

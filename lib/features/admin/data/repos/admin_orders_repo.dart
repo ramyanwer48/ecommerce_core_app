@@ -1,69 +1,113 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../profile/data/models/order_model.dart'; // تأكد من مطابقة المسار لموديل الطلب الخاص بك
+import '../../../profile/data/models/order_model.dart';
 
 class AdminOrdersRepo {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // جلب كل الطلبات في المتجر
+  // 1. جلب كل الطلبات في المتجر (بدون orderBy مسبق لمنع مشاكل الـ Indexes)
   Future<List<OrderModel>> getAllOrders() async {
-    final snapshot = await _firestore
-        .collection('orders')
-        .orderBy('orderDate', descending: true)
-        .get();
+    try {
+      final snapshot = await _firestore.collection('orders').get();
 
-    return snapshot.docs
-        .map((doc) => OrderModel.fromJson(doc.data(), doc.id))
-        .toList();
+      List<OrderModel> orders = snapshot.docs
+          .map((doc) => OrderModel.fromJson(doc.data(), doc.id))
+          .toList();
+
+      // ترتيب الطلبات محلياً من الأحدث للأقدم لضمان عدم حدوث أي مشاكل في فايربيز
+      orders.sort((a, b) => b.id.compareTo(a.id));
+
+      return orders;
+    } catch (e) {
+      throw Exception('فشل جلب الطلبات: $e');
+    }
   }
 
-  // تحديث حالة الطلب
+  // 2. تحديث حالة الطلب وإرجاع المخزون في حالة الإلغاء بدقة محاسبية (FIFO Reversal)
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
-    final FirebaseFirestore firestore = FirebaseFirestore.instance;
-    final orderRef = firestore.collection('orders').doc(orderId);
+    final orderRef = _firestore.collection('orders').doc(orderId);
 
-    // لو تغيير حالة عادية مش إلغاء، حدث وامشي
-    if (newStatus != 'Cancelled') {
-      await orderRef.update({'status': newStatus});
-      return;
-    }
+    await _firestore.runTransaction((transaction) async {
+      // ==========================================
+      // 1. مرحلة القراءات أولاً (Reads First)
+      // ==========================================
+      final orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists) throw Exception('الطلب غير موجود');
 
-    // 🔥 لو الحالة إلغاء (Cancelled)، لازم نعمل مرتجع مخزني بالسعر القديم 🔥
-    final orderDoc = await orderRef.get();
-    if (!orderDoc.exists) return;
+      final orderData = orderSnap.data() as Map<String, dynamic>;
+      final String oldStatus = orderData['status'] ?? '';
+      final List<dynamic> items = orderData['items'] ?? orderData['cartItems'] ?? [];
 
-    final orderData = orderDoc.data()!;
-    if (orderData['status'] == 'Cancelled') return; // منع التكرار
+      // خريطة لتخزين بيانات المنتجات والقراءات الخاصة بها مسبقاً لمنع خطأ الفايربيز
+      Map<String, DocumentSnapshot> productSnaps = {};
 
-    final List<dynamic> items = orderData['items'] ?? orderData['cartItems'] ?? [];
+      if (newStatus.toLowerCase() == 'cancelled' && oldStatus.toLowerCase() != 'cancelled') {
+        for (var item in items) {
+          final String productId = item['productId'] ?? item['id'] ?? '';
+          if (productId.isEmpty) continue;
 
-    WriteBatch batch = firestore.batch();
-    batch.update(orderRef, {'status': newStatus}); // إلغاء الطلب
+          final productRef = _firestore.collection('products').doc(productId);
+          final productSnap = await transaction.get(productRef); // 👈 قراءة قبل أي كتابة
+          productSnaps[productId] = productSnap;
+        }
+      }
 
-    // عمل مرتجع لكل منتج في الطلب
-    for (var item in items) {
-      final String productId = item['productId'] ?? item['id'] ?? '';
-      final int quantity = item['quantity'] ?? 1;
-      final double oldPrice = (item['price'] ?? 0.0).toDouble();
+      // ==========================================
+      // 2. مرحلة الكتابة والتحديثات ثانياً (Writes Second)
+      // ==========================================
+      if (newStatus.toLowerCase() == 'cancelled' && oldStatus.toLowerCase() != 'cancelled') {
+        for (var item in items) {
+          final String productId = item['productId'] ?? item['id'] ?? '';
+          final int quantityToRestore = item['quantity'] ?? 0;
+          final List<dynamic> consumedBatches = item['consumedBatches'] ?? [];
 
-      if (productId.isEmpty) continue;
+          if (productId.isEmpty || quantityToRestore <= 0) continue;
 
-      final productRef = firestore.collection('products').doc(productId);
+          final productRef = _firestore.collection('products').doc(productId);
+          final productSnap = productSnaps[productId];
 
-      // 👈 هنا بنصنع الشحنة المرتجعة بالسعر اللي العميل اشترى بيه زمان (مثلاً 300)
-      final returnedBatch = {
-        'batchId': 'return_${orderId}_${DateTime.now().millisecondsSinceEpoch}',
-        'quantity': quantity,
-        'sellingPrice': oldPrice,
-        'dateAdded': Timestamp.now(),
-      };
+          if (productSnap != null && productSnap.exists) {
+            final productData = productSnap.data() as Map<String, dynamic>;
+            List<dynamic> batches = productData['batches'] ?? [];
 
-      batch.update(productRef, {
-        'batches': FieldValue.arrayUnion([returnedBatch]),
-        'stockQuantity': FieldValue.increment(quantity),
-        'stock': FieldValue.increment(quantity),
+            // 👈 السر المحاسبي: إعادة كل قطعة لسعرها الحقيقي المخزن في consumedBatches
+            if (consumedBatches.isNotEmpty) {
+              for (var cb in consumedBatches) {
+                batches.add({
+                  'batchId': 'return_${cb['batchId'] ?? DateTime.now().millisecondsSinceEpoch}',
+                  'quantity': cb['quantity'],
+                  'costPrice': cb['costPrice'], // 👈 السعر الفعلي لكل قطعة
+                  'dateAdded': Timestamp.now(),
+                });
+              }
+            } else {
+              // مسار بديل (Fallback) لحماية الطلبات القديمة التي تمت قبل هذا التحديث
+              final double totalCost = (item['totalCost'] ?? 0.0).toDouble();
+              final double unitCostPrice = quantityToRestore > 0 ? (totalCost / quantityToRestore) : 0.0;
+
+              batches.add({
+                'batchId': 'return_batch_${DateTime.now().millisecondsSinceEpoch}',
+                'quantity': quantityToRestore,
+                'costPrice': unitCostPrice,
+                'dateAdded': Timestamp.now(),
+              });
+            }
+
+            int currentStockQty = productData['stockQuantity'] ?? 0;
+            int newStockQty = currentStockQty + quantityToRestore;
+
+            transaction.update(productRef, {
+              'batches': batches,
+              'stockQuantity': newStockQty,
+              'inStock': newStockQty > 0,
+            });
+          }
+        }
+      }
+
+      // تحديث حالة الأوردر النهائية
+      transaction.update(orderRef, {
+        'status': newStatus,
       });
-    }
-
-    await batch.commit(); // تنفيذ الإلغاء والمرتجع في خبطة واحدة
+    });
   }
 }

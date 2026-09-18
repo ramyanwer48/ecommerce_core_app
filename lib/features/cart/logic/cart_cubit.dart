@@ -1,6 +1,4 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../home/data/models/product_model.dart';
 import 'cart_state.dart';
 
@@ -17,7 +15,7 @@ class CartCubit extends Cubit<CartState> {
 
   final List<CartItemModel> _items = [];
 
-  // 👇 إضافة Getter لتحويل بيانات السلة لـ JSON لإرسالها للسيرفر (Cloud Function)
+  // 👇 إضافة Getter لتحويل بيانات السلة لـ JSON لإرسالها للسيرفر أو لـ CheckoutRepo
   List<Map<String, dynamic>> get cartItemsAsMap {
     return _items.map((item) => {
       'productId': item.product.id,
@@ -105,95 +103,10 @@ class CartCubit extends Cubit<CartState> {
     return item.quantity;
   }
 
-  // 6. إتمام الطلب (تم التحديث لمنع تكرار الطلبات وحماية المخزون)
-  Future<void> checkout({
-    required String address,
-    required String phone,
-    required double finalTotal,
-    required String paymentMethod,
-  }) async {
-    if (_items.isEmpty) return;
-
-    try {
-      emit(CartLoading());
-
-      // 🛡️ إذا كان الدفع إلكترونياً (فيزا أو محفظة):
-      // السيرفر قام مسبقاً بإنشاء الطلب في قاعدة البيانات، لذا نكتفي بتفريغ السلة فقط.
-      if (paymentMethod != 'Cash') {
-        _items.clear();
-        emit(CartCheckoutSuccess());
-        emit(CartUpdated([], 0, 0));
-        return;
-      }
-
-      // 💵 إذا كان الدفع عند الاستلام (Cash):
-      // يتم إنشاء الطلب محلياً وخصم المخزون بنظام المعاملات الآمنة (Transaction)
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("حدث خطأ: المستخدم غير مسجل الدخول");
-
-      final firestore = FirebaseFirestore.instance;
-      final counterRef = firestore.collection('system').doc('counters');
-
-      await firestore.runTransaction((transaction) async {
-        final counterDoc = await transaction.get(counterRef);
-        int newOrderNumber = 1;
-        if (counterDoc.exists) {
-          newOrderNumber = (counterDoc.data()?['lastOrderNumber'] ?? 0) + 1;
-        }
-
-        // فحص المخزون الفعلي
-        for (final item in _items) {
-          final productRef = firestore.collection('products').doc(item.product.id);
-          final productDoc = await transaction.get(productRef);
-
-          if (!productDoc.exists) {
-            throw Exception("المنتج ${item.product.name} لم يعد متاحاً!");
-          }
-
-          final currentStock = (productDoc.data()?['stockQuantity'] as num?)?.toInt() ?? 0;
-          if (currentStock < item.quantity) {
-            throw Exception("عذراً، نفد مخزون: ${item.product.name} (المتبقي: $currentStock فقط)");
-          }
-        }
-
-        // تحديث العداد
-        transaction.set(
-          counterRef,
-          {'lastOrderNumber': newOrderNumber},
-          SetOptions(merge: true),
-        );
-
-        // إنشاء الفاتورة
-        final newOrderRef = firestore.collection('orders').doc();
-        final orderData = {
-          'orderNumber': newOrderNumber,
-          'userId': user.uid,
-          'userEmail': user.email ?? 'غير معروف',
-          'address': address,
-          'phone': phone,
-          'totalPrice': finalTotal,
-          'paymentMethod': paymentMethod,
-          'orderDate': FieldValue.serverTimestamp(),
-          'status': 'Pending',
-          'items': cartItemsAsMap, // 👈 استخدام الـ Getter الجديد هنا للتنظيم
-        };
-        transaction.set(newOrderRef, orderData);
-
-        // خصم الكميات من المخزون
-        for (final item in _items) {
-          final productRef = firestore.collection('products').doc(item.product.id);
-          transaction.update(productRef, {
-            'stockQuantity': FieldValue.increment(-item.quantity),
-          });
-        }
-      });
-
-      _items.clear();
-      emit(CartCheckoutSuccess());
-      emit(CartUpdated([], 0, 0));
-    } catch (e) {
-      emit(CartError(e.toString().replaceAll("Exception: ", "")));
-      _calculateTotal();
-    }
+  // 🌟 تفريغ السلة بالكامل بعد نجاح الطلب 🌟
+  // (سيتم استدعاؤها من الـ CheckoutCubit بعد نجاح حفظ الأوردر في فايربيز)
+  void clearCart() {
+    _items.clear();
+    emit(CartUpdated([], 0, 0));
   }
 }

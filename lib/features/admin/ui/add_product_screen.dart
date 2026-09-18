@@ -17,7 +17,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
-  final _stockController = TextEditingController(text: '0'); // 👈 حقل كمية المخزون
+  final _costPriceController = TextEditingController(); // 👈 حقل سعر التكلفة الجديد
+  final _stockController = TextEditingController(text: '0');
   final _descController = TextEditingController();
   final _variationsController = TextEditingController();
 
@@ -51,7 +52,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
-    _stockController.dispose(); // 👈 تنظيف الـ controller
+    _costPriceController.dispose(); // 👈 تنظيف الـ controller الجديد
+    _stockController.dispose();
     _descController.dispose();
     _variationsController.dispose();
     super.dispose();
@@ -62,7 +64,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('إضافة منتج جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('إضافة منتج جديد', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         backgroundColor: const Color(0xFF000826),
         foregroundColor: Colors.white,
       ),
@@ -70,12 +72,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
         listener: (context, state) {
           if (state is AddProductSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تم رفع الصور ونشر المنتج بنجاح! 🚀'), backgroundColor: Colors.green),
+              const SnackBar(content: Text('تم رفع الصور ونشر المنتج بنجاح! 🚀', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
             );
             _formKey.currentState?.reset();
             _nameController.clear();
             _priceController.clear();
-            _stockController.text = '0'; // 👈 تصفير المخزون
+            _costPriceController.clear(); // 👈 تصفير حقل التكلفة
+            _stockController.text = '0';
             _descController.clear();
             _variationsController.clear();
             setState(() {
@@ -86,7 +89,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             });
           } else if (state is AddProductError) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+              SnackBar(content: Text(state.error, style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
             );
           }
         },
@@ -97,7 +100,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 // 1. اختيار الصورة الأساسية
-                const Text('الصورة الرئيسية للمنتج:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('الصورة الرئيسية للمنتج:', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: _pickMainImage,
@@ -119,7 +122,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       children: [
                         Icon(Icons.add_a_photo_outlined, size: 40, color: Color(0xFF00D4FF)),
                         SizedBox(height: 8),
-                        Text('اضغط لاختيار الصورة الرئيسية', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        Text('اضغط لاختيار الصورة الرئيسية', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                       ],
                     ),
                   ),
@@ -130,11 +133,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('معرض الصور الإضافية:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('معرض الصور الإضافية:', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                     TextButton.icon(
                       onPressed: _pickExtraImages,
                       icon: const Icon(Icons.add_photo_alternate, color: Color(0xFF007BFF)),
-                      label: Text('اختر (${_extraImages.length}) صور', style: const TextStyle(color: Color(0xFF007BFF))),
+                      label: Text('اختر (${_extraImages.length}) صور', style: const TextStyle(color: Color(0xFF007BFF), fontFamily: 'Cairo')),
                     ),
                   ],
                 ),
@@ -168,18 +171,42 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   validator: (value) => value!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
+
+                // 👇 حقل سعر البيع للعميل
                 TextFormField(
                   controller: _priceController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'السعر', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'سعر البيع للعميل (السعر الثابت)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.sell_outlined, color: Colors.green),
+                  ),
                   validator: (value) => value!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
+
+                // 👇 حقل سعر التكلفة الجديد
+                TextFormField(
+                  controller: _costPriceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'سعر التكلفة للقطعة (عليك كتاجر)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: Colors.orange),
+                  ),
+                  validator: (value) => value!.isEmpty ? 'مطلوب لحساب الأرباح لاحقاً' : null,
+                ),
+                const SizedBox(height: 12),
+
                 // 👇 حقل الكمية في المخزون
                 TextFormField(
                   controller: _stockController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'الكمية المتاحة في المخزن (Stock Quantity)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'الكمية الافتتاحية في المخزن',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.inventory_2_outlined),
+                  ),
                   validator: (value) => value!.isEmpty ? 'مطلوب' : null,
                 ),
                 const SizedBox(height: 12),
@@ -197,7 +224,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     }
 
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Text('⚠️ لا توجد أقسام متاحة. الرجاء إضافة قسم من إدارة الأقسام أولاً.', style: TextStyle(color: Colors.red));
+                      return const Text('⚠️ لا توجد أقسام متاحة. الرجاء إضافة قسم من إدارة الأقسام أولاً.', style: TextStyle(color: Colors.red, fontFamily: 'Cairo'));
                     }
 
                     final List<String> dynamicCategories = snapshot.data!.docs
@@ -215,7 +242,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     return DropdownButtonFormField<String>(
                       value: _selectedCategory,
                       decoration: const InputDecoration(labelText: 'التصنيف', border: OutlineInputBorder()),
-                      items: dynamicCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                      items: dynamicCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontFamily: 'Cairo')))).toList(),
                       onChanged: (val) => setState(() => _selectedCategory = val),
                       validator: (value) => value == null ? 'الرجاء اختيار قسم' : null,
                     );
@@ -239,7 +266,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
-                  title: const Text('متوفر في المخزن'),
+                  title: const Text('متوفر في المخزن', style: TextStyle(fontFamily: 'Cairo')),
                   value: _inStock,
                   onChanged: (val) => setState(() => _inStock = val),
                 ),
@@ -254,13 +281,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   onPressed: () {
                     if (_selectedImage == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً'), backgroundColor: Colors.red),
+                        const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
                       );
                       return;
                     }
                     if (_selectedCategory == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('الرجاء اختيار القسم أولاً'), backgroundColor: Colors.red),
+                        const SnackBar(content: Text('الرجاء اختيار القسم أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
                       );
                       return;
                     }
@@ -272,17 +299,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       context.read<AddProductCubit>().addProductToFirestore(
                         name: _nameController.text,
                         price: double.parse(_priceController.text),
+                        costPrice: double.parse(_costPriceController.text), // 👈 تمرير سعر التكلفة للـ Cubit
                         category: _selectedCategory!,
                         description: _descController.text,
                         mainImageFile: _selectedImage!,
                         extraImageFiles: _extraImages,
                         variations: variationsList,
                         inStock: _inStock,
-                        stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0, // 👈 تمرير الكمية
+                        stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
                       );
                     }
                   },
-                  child: const Text('نشر المنتج', style: TextStyle(fontSize: 18, color: Colors.white)),
+                  child: const Text('نشر المنتج', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 ),
               ],
             ),

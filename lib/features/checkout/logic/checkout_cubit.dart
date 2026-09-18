@@ -6,6 +6,8 @@ import '../../../core/networking/paymob_manager.dart';
 // --- الحالات (States) ---
 abstract class CheckoutState {}
 class CheckoutInitial extends CheckoutState {}
+
+// حالات الكوبون
 class CheckoutCouponLoading extends CheckoutState {}
 class CheckoutCouponApplied extends CheckoutState {
   final CouponModel coupon;
@@ -18,6 +20,7 @@ class CheckoutCouponError extends CheckoutState {
   CheckoutCouponError(this.error);
 }
 
+// حالات بوابات الدفع
 class CheckoutPaymobLoading extends CheckoutState {}
 class CheckoutPaymobSuccess extends CheckoutState {
   final String paymentKey;
@@ -36,6 +39,14 @@ class CheckoutWalletSuccess extends CheckoutState {
 class CheckoutWalletError extends CheckoutState {
   final String error;
   CheckoutWalletError(this.error);
+}
+
+// 🌟 الحالات الجديدة الخاصة بإنشاء الطلب وخصم المخزون (FIFO)
+class CheckoutOrderLoading extends CheckoutState {}
+class CheckoutOrderSuccess extends CheckoutState {}
+class CheckoutOrderError extends CheckoutState {
+  final String error;
+  CheckoutOrderError(this.error);
 }
 
 // --- المحرك (Cubit) ---
@@ -75,7 +86,7 @@ class CheckoutCubit extends Cubit<CheckoutState> {
     emit(CheckoutInitial());
   }
 
-  // 4. الدفع الآمن عبر Cloud Functions (تم التحديث)
+  // الدفع الآمن عبر Paymob
   Future<void> getPaymobPaymentKey({
     required double totalAmount,
     required String phone,
@@ -85,7 +96,7 @@ class CheckoutCubit extends Cubit<CheckoutState> {
     emit(CheckoutPaymobLoading());
     try {
       Map<String, dynamic> billingData = {
-        "first_name": "Client", // يمكن استبدالها ببيانات المستخدم الحقيقية لاحقاً
+        "first_name": "Client",
         "last_name": "Name",
         "email": "test@test.com",
         "phone_number": phone,
@@ -100,7 +111,6 @@ class CheckoutCubit extends Cubit<CheckoutState> {
         "state": "NA"
       };
 
-      // الاتصال بالدالة الآمنة في PaymobManager
       String paymentKey = await PaymobManager.getPaymentKey(
         amount: totalAmount,
         billingData: billingData,
@@ -115,17 +125,41 @@ class CheckoutCubit extends Cubit<CheckoutState> {
     }
   }
 
-  // 5. الدفع بالمحفظة الإلكترونية (معلق مؤقتاً لحين ربطه بالسيرفر)
+  // الدفع بالمحفظة الإلكترونية
   Future<void> payWithWallet({
     required double totalAmount,
     required String walletPhoneNumber,
   }) async {
     emit(CheckoutWalletLoading());
     try {
-      // TODO: سيتم إنشاء Cloud Function خاصة بالمحافظ الإلكترونية قريباً
       throw Exception('خدمة المحافظ الإلكترونية قيد التحديث لرفع مستوى الأمان.');
     } catch (e) {
       emit(CheckoutWalletError(e.toString()));
+    }
+  }
+
+  // 🌟 الدالة الجديدة: إنشاء الطلب وخصم المخزون بنظام الدفعات (FIFO)
+  Future<void> placeOrder({
+    required String userId,
+    required List<Map<String, dynamic>> cartItems,
+    required double totalSellingAmount,
+    required Map<String, dynamic> shippingAddress,
+    required String paymentMethod,
+  }) async {
+    emit(CheckoutOrderLoading());
+    try {
+      await _repo.placeOrderWithFIFO(
+        userId: userId,
+        cartItems: cartItems,
+        totalSellingAmount: totalSellingAmount,
+        shippingAddress: shippingAddress,
+        paymentMethod: paymentMethod,
+      );
+
+      emit(CheckoutOrderSuccess());
+    } catch (e) {
+      // الـ error هنا هيعرض الرسالة لو المخزون خلص أو مفيش كمية كافية
+      emit(CheckoutOrderError(e.toString().replaceAll('Exception: ', '')));
     }
   }
 }

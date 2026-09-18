@@ -10,13 +10,14 @@ class AddProductCubit extends Cubit<AddProductState> {
   Future<void> addProductToFirestore({
     required String name,
     required double price,
+    required double costPrice, // 👈 استقبال سعر التكلفة هنا
     required String category,
     required String description,
     required File mainImageFile,
     required List<File> extraImageFiles,
     required List<String> variations,
     required bool inStock,
-    required int stockQuantity, // 👈 أضفنا كمية المخزون هنا
+    required int stockQuantity,
   }) async {
     emit(AddProductLoading());
     try {
@@ -33,17 +34,18 @@ class AddProductCubit extends Cubit<AddProductState> {
       // 3. تجميع الصورة الرئيسية مع الصور الإضافية في مصفوفة واحدة للمعرض
       List<String> allImages = [mainImageUrl, ...extraImageUrls];
 
-      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة شاملة المخزون
+      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة شاملة المخزون وسعر التكلفة
       await _adminRepo.addProduct(
         name: name,
         price: price,
+        costPrice: costPrice, // 👈 تمرير سعر التكلفة إلى الـ Repo
         category: category,
         description: description,
         imageUrl: mainImageUrl,
         images: allImages,
         variations: variations,
         inStock: inStock,
-        stockQuantity: stockQuantity, // 👈 تمريرها للـ Repo
+        stockQuantity: stockQuantity,
       );
 
       emit(AddProductSuccess());

@@ -123,7 +123,8 @@ class AppRouter {
       GoRoute(
         path: Routes.adminOrders,
         builder: (context, state) => BlocProvider(
-          create: (context) => AdminOrdersCubit(AdminOrdersRepo())..fetchAllOrders(),
+          // 👈 استخدام GetIt لجلب الكيوبت بالتبعيتين اللي بيحتاجهم
+          create: (context) => getIt<AdminOrdersCubit>()..fetchAllOrders(),
           child: const AdminOrdersScreen(),
         ),
       ),

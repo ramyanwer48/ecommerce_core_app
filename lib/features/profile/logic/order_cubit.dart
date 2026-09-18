@@ -16,4 +16,17 @@ class OrderCubit extends Cubit<OrderState> {
       emit(OrderError(e.toString()));
     }
   }
+
+  // 👈 الدالة الجديدة لإلغاء الطلب من طرف العميل
+  Future<void> cancelOrder(String orderId) async {
+    try {
+      // إظهار حالة التحميل أثناء الإلغاء
+      emit(OrderLoading());
+      await _orderRepo.cancelOrder(orderId);
+      // بعد نجاح الإلغاء في فايربيز، نقوم بجلب الطلبات مجدداً لتحديث الواجهة
+      await fetchOrders();
+    } catch (e) {
+      emit(OrderError(e.toString()));
+    }
+  }
 }
