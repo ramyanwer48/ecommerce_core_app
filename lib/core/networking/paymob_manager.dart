@@ -1,7 +1,10 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart'; // 👈 أضفنا دي عشان debugPrint
+import 'package:flutter/foundation.dart';
 
 class PaymobManager {
+  // 👈 مفتاح التحويل السحري: خليه false دلوقتي، ولما البنك يوافق خليه true بس!
+  static const bool isLiveMode = false;
+
   static Future<String> getPaymentKey({
     required double amount,
     required Map<String, dynamic> billingData,
@@ -18,12 +21,13 @@ class PaymobManager {
         'phone': phone,
         'address': address,
         'items': items,
+        'isLive': isLiveMode, // 👈 بنبعت حالة التطبيق (تيست ولا حقيقي) للسيرفر
       });
 
       final String paymentToken = response.data['paymentToken'];
       return paymentToken;
     } catch (e) {
-      debugPrint('Secure Paymob Error: $e'); // 👈 استبدلنا print بـ debugPrint
+      debugPrint('Secure Paymob Error: $e');
       throw Exception('حدث خطأ أثناء إعداد الدفع عبر السيرفر الآمن');
     }
   }

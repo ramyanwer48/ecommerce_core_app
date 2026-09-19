@@ -53,7 +53,8 @@ dependencies:
   webview_flutter: ^4.8.0
   cloud_functions: ^6.5.0
   firebase_app_check: ^0.4.8
-
+  blue_thermal_printer: ^1.2.3
+  esc_pos_utils_plus: ^2.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

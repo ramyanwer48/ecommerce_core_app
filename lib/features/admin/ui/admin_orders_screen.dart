@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../profile/data/models/order_model.dart';
 import '../logic/admin_orders_cubit.dart';
 import '../logic/admin_orders_state.dart';
+import '../../../core/utils/printer_bottom_sheet.dart'; // 👈 مسار استدعاء نافذة الطباعة الحرارية
 
 class AdminOrdersScreen extends StatelessWidget {
   const AdminOrdersScreen({super.key});
@@ -185,6 +186,43 @@ class AdminOrdersScreen extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+
+                          // 6. 🖨️ زر الطباعة الحرارية
+                          SizedBox(
+                            width: double.infinity,
+                            height: 45,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                showPrinterBottomSheet(
+                                  context: context,
+                                  orderNumber: displayOrderNumber,                 // 👈 تمرير المتغير المنسق كاملاً (ORD-...)
+                                  customerName: 'عميل المتجر',
+                                  phone: order.phone,
+                                  address: order.address,
+                                  subtotal: order.subtotal,
+                                  discountAmount: order.discountAmount,
+                                  totalAmount: order.totalPrice,
+                                  paymentMethod: order.paymentMethod,
+                                  products: order.items.map((item) => {
+                                    'name': item.name,
+                                    'quantity': item.quantity,
+                                    'unitPrice': item.unitPrice,
+                                  }).toList(),
+                                );
+                              },
+                              icon: const Icon(Icons.print_rounded, size: 20),
+                              label: const Text('طباعة بوليصة الشحن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF000826),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                elevation: 0,
+                              ),
+                            ),
                           ),
                         ],
                       ),

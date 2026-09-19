@@ -45,19 +45,25 @@ class OrderModel {
   final int orderNumber;
   final String userId;
   final List<OrderItemModel> items;
-  final double totalPrice;
+  final double subtotal;         // 👈 الإجمالي قبل الخصم
+  final double discountAmount;   // 👈 قيمة الخصم (الكوبون)
+  final double totalPrice;       // 👈 الصافي النهائي المدفوع
   final String phone;
   final String address;
   final String paymentMethod;
   final DateTime orderDate;
   final String status;
-// 👈 ممر سحري عشان لو أي شاشة بتنادي على .date تشتغل معاك عادي
+
+  // 👈 ممر سحري عشان لو أي شاشة بتنادي على .date تشتغل معاك عادي
   DateTime get date => orderDate;
+
   OrderModel({
     required this.id,
     this.orderNumber = 0,
     required this.userId,
     required this.items,
+    required this.subtotal,
+    required this.discountAmount,
     required this.totalPrice,
     required this.phone,
     required this.address,
@@ -82,6 +88,10 @@ class OrderModel {
       resolvedTotal = (json['totalAmount'] as num).toDouble();
     }
 
+    // 👈 جلب الإجمالي قبل الخصم والخصم بسلامة ودون أخطاء
+    double resolvedSubtotal = (json['subtotal'] as num?)?.toDouble() ?? resolvedTotal;
+    double resolvedDiscount = (json['discountAmount'] as num?)?.toDouble() ?? 0.0;
+
     String resolvedPhone = json['phone'] ?? '';
     String resolvedAddress = json['address'] ?? '';
 
@@ -105,6 +115,8 @@ class OrderModel {
       orderNumber: (json['orderNumber'] ?? 0).toInt(),
       userId: json['userId'] ?? '',
       items: parsedItems,
+      subtotal: resolvedSubtotal,
+      discountAmount: resolvedDiscount,
       totalPrice: resolvedTotal,
       phone: resolvedPhone.isNotEmpty ? resolvedPhone : 'غير محدد',
       address: resolvedAddress.isNotEmpty ? resolvedAddress : 'غير محدد',
@@ -119,6 +131,8 @@ class OrderModel {
       'orderNumber': orderNumber,
       'userId': userId,
       'items': items.map((i) => i.toJson()).toList(),
+      'subtotal': subtotal,
+      'discountAmount': discountAmount,
       'totalPrice': totalPrice,
       'phone': phone,
       'address': address,

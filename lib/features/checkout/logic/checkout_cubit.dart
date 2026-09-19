@@ -41,7 +41,7 @@ class CheckoutWalletError extends CheckoutState {
   CheckoutWalletError(this.error);
 }
 
-// 🌟 الحالات الجديدة الخاصة بإنشاء الطلب وخصم المخزون (FIFO)
+// الحالات الخاصة بإنشاء الطلب وخصم المخزون (FIFO)
 class CheckoutOrderLoading extends CheckoutState {}
 class CheckoutOrderSuccess extends CheckoutState {}
 class CheckoutOrderError extends CheckoutState {
@@ -138,7 +138,7 @@ class CheckoutCubit extends Cubit<CheckoutState> {
     }
   }
 
-  // 🌟 الدالة الجديدة: إنشاء الطلب وخصم المخزون بنظام الدفعات (FIFO)
+  // الدالة الجديدة: إنشاء الطلب وخصم المخزون بنظام الدفعات (FIFO) والقيد المحاسبي
   Future<void> placeOrder({
     required String userId,
     required List<Map<String, dynamic>> cartItems,
@@ -148,9 +148,14 @@ class CheckoutCubit extends Cubit<CheckoutState> {
   }) async {
     emit(CheckoutOrderLoading());
     try {
+      // 👈 حساب قيمة الخصم (لو مفيش خصم، totalSellingAmount هيساوي subTotal والنتيجة صفر)
+      double discountAmount = subTotal - totalSellingAmount;
+
       await _repo.placeOrderWithFIFO(
         userId: userId,
         cartItems: cartItems,
+        subtotal: subTotal,             // 👈 تمرير الإجمالي قبل الخصم
+        discountAmount: discountAmount, // 👈 تمرير الخصم المسموح به
         totalSellingAmount: totalSellingAmount,
         shippingAddress: shippingAddress,
         paymentMethod: paymentMethod,
@@ -158,7 +163,6 @@ class CheckoutCubit extends Cubit<CheckoutState> {
 
       emit(CheckoutOrderSuccess());
     } catch (e) {
-      // الـ error هنا هيعرض الرسالة لو المخزون خلص أو مفيش كمية كافية
       emit(CheckoutOrderError(e.toString().replaceAll('Exception: ', '')));
     }
   }
