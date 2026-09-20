@@ -6,7 +6,13 @@ import '../data/repos/invoice_repo.dart';
 abstract class InvoiceState {}
 class InvoiceInitial extends InvoiceState {}
 class InvoiceLoading extends InvoiceState {}
-class InvoiceSuccess extends InvoiceState {}
+
+// 👈 التعديل هنا: خلينا حالة النجاح تستقبل الفاتورة
+class InvoiceSuccess extends InvoiceState {
+  final InvoiceModel invoice;
+  InvoiceSuccess(this.invoice);
+}
+
 class InvoiceFailure extends InvoiceState {
   final String error;
   InvoiceFailure(this.error);
@@ -21,7 +27,9 @@ class InvoiceCubit extends Cubit<InvoiceState> {
     emit(InvoiceLoading());
     try {
       await _invoiceRepo.createInvoiceAndSyncStock(invoice);
-      emit(InvoiceSuccess());
+
+      // 👈 التعديل هنا: بنبعت الفاتورة جوه حالة النجاح للشاشة
+      emit(InvoiceSuccess(invoice));
     } catch (e) {
       emit(InvoiceFailure(e.toString()));
     }

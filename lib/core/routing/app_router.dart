@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-
+import '../../features/splash/ui/splash_screen.dart'; // 👈 استدعاء السبلاش
 // استدعاءات Auth
 import '../../features/admin/data/repos/admin_categories_repo.dart';
 import '../../features/admin/data/repos/admin_coupons_repo.dart';
@@ -62,8 +62,14 @@ class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
     routes: [
+      // 👈 التعديل الأول: خلينا نقطة البداية تفتح الـ SplashScreen فعلياً
       GoRoute(
         path: Routes.splash,
+        builder: (context, state) => const SplashScreen(),
+      ),
+      // 👈 التعديل الثاني: عملنا مسار لـ AuthGate عشان السبلاش تحول عليه لما تخلص
+      GoRoute(
+        path: '/auth-gate',
         builder: (context, state) => const AuthGate(),
       ),
       GoRoute(

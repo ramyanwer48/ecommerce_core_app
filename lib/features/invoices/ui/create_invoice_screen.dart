@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../data/models/invoice_model.dart'; // 👈 تأكد من مسار الـ Model اللي لسه عاملينه
+import '../data/models/invoice_model.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../logic/invoice_cubit.dart';
+import '../../../../core/services/pdf_invoice_service.dart'; // مسار خدمة الـ PDF
+
 class CreateInvoiceScreen extends StatefulWidget {
   const CreateInvoiceScreen({super.key});
 
@@ -11,183 +13,208 @@ class CreateInvoiceScreen extends StatefulWidget {
 }
 
 class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
-  String invoiceType = 'sale'; // افتراضياً فاتورة مبيع
+  String invoiceType = 'sale';
   String? selectedPartnerId;
   String? selectedPartnerName;
   List<InvoiceItemModel> selectedItems = [];
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // حساب الإجمالي اللحظي
   double get invoiceTotal {
     return selectedItems.fold(0, (sum, item) => sum + item.totalItemPrice);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        title: const Text('إنشاء فاتورة جديدة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        backgroundColor: Colors.blue.shade900,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          // 1. تحديد نوع الفاتورة (بيع / شراء)
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildTypeChip('فاتورة مبيعات', 'sale', Icons.arrow_upward, Colors.green),
-                const SizedBox(width: 16),
-                _buildTypeChip('فاتورة مشتريات', 'purchase', Icons.arrow_downward, Colors.orange),
-              ],
-            ),
-          ),
+    return BlocListener<InvoiceCubit, InvoiceState>(
+      listener: (context, state) {
+        if (state is InvoiceLoading) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+          );
+        } else if (state is InvoiceSuccess) {
+          Navigator.pop(context); // قفل اللودينج
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حفظ الفاتورة وخصم المخزون بنجاح!'), backgroundColor: Colors.green),
+          );
 
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // 👈 التعديل هنا: استخدام دالة المشاركة والتصدير الجديدة للـ PDF
+          PdfInvoiceService.shareInvoicePdf(state.invoice);
+
+          // تصفير الشاشة لعمل فاتورة جديدة
+          setState(() {
+            selectedItems.clear();
+            selectedPartnerId = null;
+            selectedPartnerName = null;
+          });
+        } else if (state is InvoiceFailure) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F6F9),
+        appBar: AppBar(
+          title: const Text('إنشاء فاتورة جديدة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          centerTitle: true,
+          backgroundColor: Colors.blue.shade900,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: Column(
+          children: [
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 2. اختيار الطرف (العميل / المورد)
-                  const Text('الطرف (العميل/المورد)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    onTap: _showPartnersBottomSheet,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.person, color: Colors.blue.shade900),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              selectedPartnerName ?? 'اضغط لاختيار العميل أو المورد...',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                color: selectedPartnerName == null ? Colors.grey : Colors.black,
-                                fontWeight: selectedPartnerName == null ? FontWeight.normal : FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // 3. قائمة المنتجات المضافة للفاتورة
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('المنتجات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
-                      TextButton.icon(
-                        onPressed: _showProductsBottomSheet,
-                        icon: const Icon(Icons.add_circle),
-                        label: const Text('إضافة منتج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  if (selectedItems.isEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(Icons.shopping_cart_checkout, size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 8),
-                          Text('لم يتم إضافة أي منتجات للفاتورة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade600)),
-                        ],
-                      ),
-                    )
-                  else
-                    ...selectedItems.map((item) => Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        title: Text(item.productName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                        subtitle: Text('${item.unitPrice} ج.م × ${item.quantity}', style: const TextStyle(fontFamily: 'Cairo')),
-                        trailing: Text(
-                          '${item.totalItemPrice} ج.م',
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.blue.shade900),
-                        ),
-                        leading: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              selectedItems.remove(item);
-                            });
-                          },
-                        ),
-                      ),
-                    )),
+                  _buildTypeChip('فاتورة مبيعات', 'sale', Icons.arrow_upward, Colors.green),
+                  const SizedBox(width: 16),
+                  _buildTypeChip('فاتورة مشتريات', 'purchase', Icons.arrow_downward, Colors.orange),
                 ],
               ),
             ),
-          ),
 
-          // 4. شريط الإجمالي والحفظ (Footer)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('الطرف (العميل/المورد)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: _showPartnersBottomSheet,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.person, color: Colors.blue.shade900),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                selectedPartnerName ?? 'اضغط لاختيار العميل أو المورد...',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  color: selectedPartnerName == null ? Colors.grey : Colors.black,
+                                  fontWeight: selectedPartnerName == null ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('إجمالي الفاتورة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 12)),
-                        Text(
-                          '$invoiceTotal ج.م',
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blue.shade900),
+                        const Text('المنتجات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                        TextButton.icon(
+                          onPressed: _showProductsBottomSheet,
+                          icon: const Icon(Icons.add_circle),
+                          label: const Text('إضافة منتج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                      backgroundColor: Colors.blue.shade900,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: _saveInvoice,
-                    child: const Text('حفظ واعتماد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                ],
+                    if (selectedItems.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.shopping_cart_checkout, size: 48, color: Colors.grey.shade300),
+                            const SizedBox(height: 8),
+                            Text('لم يتم إضافة أي منتجات للفاتورة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      )
+                    else
+                      ...selectedItems.map((item) => Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          title: Text(item.productName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                          subtitle: Text('${item.unitPrice} ج.م × ${item.quantity}', style: const TextStyle(fontFamily: 'Cairo')),
+                          trailing: Text(
+                            '${item.totalItemPrice} ج.م',
+                            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                          ),
+                          leading: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              setState(() {
+                                selectedItems.remove(item);
+                              });
+                            },
+                          ),
+                        ),
+                      )),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('إجمالي الفاتورة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 12)),
+                          Text(
+                            '$invoiceTotal ج.م',
+                            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 20, color: Colors.blue.shade900),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        backgroundColor: Colors.blue.shade900,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _saveInvoice,
+                      child: const Text('حفظ واعتماد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ويدجت مساعدة لاختيار نوع الفاتورة
   Widget _buildTypeChip(String label, String value, IconData icon, Color activeColor) {
     final isSelected = invoiceType == value;
     return ChoiceChip(
@@ -209,7 +236,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // 1️⃣ نافذة اختيار الأطراف (العملاء والموردين) السلسة
   void _showPartnersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -256,7 +282,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // 2️⃣ نافذة اختيار المنتجات وتحديد الكمية السلسة
   void _showProductsBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -297,8 +322,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                               subtitle: Text('السعر: $price ج.م | المخزون: $stock', style: const TextStyle(fontFamily: 'Cairo')),
                               trailing: const Icon(Icons.add_circle, color: Colors.blue),
                               onTap: () {
-                                Navigator.pop(context); // قفل قائمة المنتجات
-                                _showQuantityDialog(products[index].id, data['name'], price); // فتح تحديد الكمية
+                                Navigator.pop(context);
+                                _showQuantityDialog(products[index].id, data['name'], price);
                               },
                             );
                           },
@@ -315,7 +340,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // 3️⃣ تحديد الكمية للمنتج المختار
   void _showQuantityDialog(String productId, String productName, double price) {
     int quantity = 1;
     showDialog(
@@ -350,7 +374,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         selectedItems.add(InvoiceItemModel(
                           productId: productId,
                           productName: productName,
-                          unitPrice: price, // 👈 تجميد السعر وقت الإضافة!
+                          unitPrice: price,
                           quantity: quantity,
                         ));
                       });
@@ -366,7 +390,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // 4️⃣ دالة حفظ الفاتورة (مؤقتة لحين بناء الـ Logic الخاص بخصم المخزون)
   void _saveInvoice() {
     if (selectedPartnerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار العميل/المورد', style: TextStyle(fontFamily: 'Cairo'))));
@@ -377,19 +400,23 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
-    // تجهيز كائن الفاتورة
+    final String generatedInvoiceNumber = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+
     final newInvoice = InvoiceModel(
-      id: '', // هيتولد تلقائي في الـ Repo
+      id: '',
+      invoiceNumber: generatedInvoiceNumber,
+      orderId: 'Manual-POS',
       partnerId: selectedPartnerId!,
       partnerName: selectedPartnerName!,
       type: invoiceType,
-      items: selectedItems,
+      items: List.from(selectedItems),
+      subtotal: invoiceTotal,
+      discountAmount: 0.0,
       totalAmount: invoiceTotal,
       date: DateTime.now(),
-      status: 'paid', // افتراضي مدفوعة (ممكن تتعدل لاحقاً للفواتير الآجلة)
+      status: 'paid',
     );
 
-    // إرسال الفاتورة للـ Cubit لحفظها
     context.read<InvoiceCubit>().saveInvoice(newInvoice);
   }
 }

@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/invoice_model.dart';
+import '../models/invoice_model.dart'; // 👈 تأكد من المسار الصحيح
 
 class InvoiceRepo {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -12,13 +12,17 @@ class InvoiceRepo {
       // 1. إنشاء مسند (Document) جديد للفاتورة
       DocumentReference invoiceRef = _firestore.collection('invoices').doc();
 
-      // تجهيز الفاتورة بالـ ID الجديد
+      // 👈 التعديل هنا: تمرير الحقول الجديدة (رقم الفاتورة، الإجمالي الفرعي، الخصم، الخ)
       InvoiceModel finalInvoice = InvoiceModel(
         id: invoiceRef.id,
+        invoiceNumber: invoice.invoiceNumber,
+        orderId: invoice.orderId,
         partnerId: invoice.partnerId,
         partnerName: invoice.partnerName,
         type: invoice.type,
         items: invoice.items,
+        subtotal: invoice.subtotal,
+        discountAmount: invoice.discountAmount,
         totalAmount: invoice.totalAmount,
         date: invoice.date,
         status: invoice.status,
@@ -37,8 +41,7 @@ class InvoiceRepo {
         // استخدمنا FieldValue.increment عشان لو كذا كاشير بيبيعوا نفس المنتج في نفس اللحظة الداتا ماتضربش
         batch.update(productRef, {
           'stock': FieldValue.increment(quantityChange),
-          // لو بتستخدم 'stockQuantity' في الداتا بيز كاسم للحقل، شيل الكومنت من السطر اللي تحت
-          // 'stockQuantity': FieldValue.increment(quantityChange),
+          // 'stockQuantity': FieldValue.increment(quantityChange), // لو ده اسم الحقل عندك
         });
       }
 
