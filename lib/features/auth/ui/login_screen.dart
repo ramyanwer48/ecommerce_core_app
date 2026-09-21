@@ -24,7 +24,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _loadSavedEmail();
   }
 
-  // 1. استدعاء الإيميل المحفوظ عند فتح الشاشة
   Future<void> _loadSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString('saved_email');
@@ -33,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _isRememberMeChecked = true;
       });
-      // نستخدم microtask لضمان بناء الـ context أولاً قبل تمرير البيانات للـ Cubit
       Future.microtask(() {
         if (mounted) {
           context.read<AuthCubit>().emailController.text = savedEmail;
@@ -44,12 +42,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color primaryNavy = Color(0xFF0D1B2A);
+    final Color brandOrange = Colors.orange.shade600;
+
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: BlocConsumer<AuthCubit, AuthState>(
           listener: (context, state) async {
             if (state is AuthSuccess) {
-              // 2. التحقق من الرسالة الذكية للبصمة بعد نجاح الدخول
               final prefs = await SharedPreferences.getInstance();
               bool hasAskedBiometric = prefs.getBool('has_asked_biometric') ?? false;
 
@@ -57,50 +58,65 @@ class _LoginScreenState extends State<LoginScreen> {
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (dialogContext) => AlertDialog(
-                    backgroundColor: ColorsManager.mainDarkBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: const Text('تفعيل البصمة', style: TextStyle(color: ColorsManager.white, fontWeight: FontWeight.bold)),
-                    content: const Text(
-                      'هل ترغب في استخدام البصمة لتسجيل الدخول السريع والأمن في المرات القادمة؟',
-                      style: TextStyle(color: Colors.grey, height: 1.5),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          prefs.setBool('isBiometricEnabled', false);
-                          prefs.setBool('has_asked_biometric', true);
-                          Navigator.pop(dialogContext); // إغلاق الرسالة
-                          context.go(Routes.home); // التوجيه للمتجر
-                        },
-                        child: const Text('لا، شكراً', style: TextStyle(color: Colors.grey)),
+                  builder: (dialogContext) => Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: AlertDialog(
+                      backgroundColor: Colors.white,
+                      surfaceTintColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      title: Column(
+                        children: [
+                          Icon(Icons.fingerprint, size: 60, color: brandOrange),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'تفعيل البصمة',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold, fontSize: 22, fontFamily: 'Cairo'),
+                          ),
+                        ],
                       ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ColorsManager.neonBlue,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      content: const Text(
+                        'فعل البصمة الآن لدخول أسرع وأكثر أماناً.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black87, height: 1.5, fontSize: 16, fontFamily: 'Cairo'),
+                      ),
+                      actionsAlignment: MainAxisAlignment.spaceEvenly,
+                      actions: [
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: brandOrange,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () {
+                            prefs.setBool('isBiometricEnabled', true);
+                            prefs.setBool('has_asked_biometric', true);
+                            Navigator.pop(dialogContext);
+                            context.go(Routes.home);
+                          },
+                          child: const Text('تفعيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
                         ),
-                        onPressed: () {
-                          prefs.setBool('isBiometricEnabled', true);
-                          prefs.setBool('has_asked_biometric', true);
-                          Navigator.pop(dialogContext); // إغلاق الرسالة
-                          context.go(Routes.home); // التوجيه للمتجر
-                        },
-                        child: const Text('تفعيل', style: TextStyle(color: ColorsManager.white, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                        TextButton(
+                          onPressed: () {
+                            prefs.setBool('isBiometricEnabled', false);
+                            prefs.setBool('has_asked_biometric', true);
+                            Navigator.pop(dialogContext);
+                            context.go(Routes.home);
+                          },
+                          child: const Text('لا، شكراً', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               } else {
-                // إذا سُئل من قبل، يذهب للمتجر مباشرة
                 if (mounted) context.go(Routes.home);
               }
             } else if (state is AuthFailure) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(state.errorMessage),
-                  backgroundColor: ColorsManager.errorRed,
-                ),
+                SnackBar(content: Text(state.errorMessage), backgroundColor: ColorsManager.errorRed),
               );
             }
           },
@@ -108,173 +124,167 @@ class _LoginScreenState extends State<LoginScreen> {
             final cubit = context.read<AuthCubit>();
             return Form(
               key: cubit.formKey,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'RAMY STORE',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.bold,
-                          color: ColorsManager.white,
-                          letterSpacing: 2,
-                        ),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(), // 👈 سلاسة في النزول والطلوع
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, // 👈 إخفاء الكيبورد بالسحب
+                padding: const EdgeInsets.fromLTRB(24.0, 70.0, 24.0, 24.0), // 👈 مسافة ثابتة لا تسبب تقطيع
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Image.asset(
+                      'assets/images/RAMY_STORE_ERP_PRIMARY_2400x900.png',
+                      height: 110,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 30),
+                    const Text(
+                      'مرحباً بك مجدداً',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: primaryNavy,
+                        fontFamily: 'Cairo',
                       ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'مرحباً بك مجدداً',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: ColorsManager.lightBlue,
-                        ),
-                      ),
-                      const SizedBox(height: 50),
+                    ),
+                    const SizedBox(height: 50),
 
-                      TextFormField(
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: TextFormField(
                         controller: cubit.emailController,
-                        style: const TextStyle(color: ColorsManager.white),
+                        style: const TextStyle(color: primaryNavy, fontFamily: 'Cairo'),
                         keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'الرجاء إدخال البريد الإلكتروني';
-                          }
-                          return null;
-                        },
+                        validator: (value) => (value == null || value.isEmpty) ? 'الرجاء إدخال البريد الإلكتروني' : null,
                         decoration: InputDecoration(
                           hintText: 'البريد الإلكتروني',
-                          hintStyle: TextStyles.font14LightGrayRegular,
-                          prefixIcon: const Icon(Icons.email_outlined, color: ColorsManager.lightBlue),
+                          hintStyle: const TextStyle(color: Colors.grey, fontFamily: 'Cairo'),
+                          prefixIcon: Icon(Icons.email_outlined, color: brandOrange),
                           filled: true,
-                          fillColor: ColorsManager.mainDarkBlue,
+                          fillColor: Colors.grey.shade50,
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.darkGray, width: 1),
+                            borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.lightBlue, width: 2),
+                            borderSide: BorderSide(color: brandOrange, width: 2),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.errorRed, width: 1),
+                            borderSide: const BorderSide(color: Colors.red, width: 1),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 24),
 
-                      TextFormField(
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: TextFormField(
                         controller: cubit.passwordController,
                         obscureText: true,
-                        style: const TextStyle(color: ColorsManager.white),
-                        validator: (value) {
-                          if (value == null || value.isEmpty || value.length < 6) {
-                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                          }
-                          return null;
-                        },
+                        style: const TextStyle(color: primaryNavy, fontFamily: 'Cairo'),
+                        validator: (value) => (value == null || value.isEmpty || value.length < 6) ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : null,
                         decoration: InputDecoration(
                           hintText: 'كلمة المرور',
-                          hintStyle: TextStyles.font14LightGrayRegular,
-                          prefixIcon: const Icon(Icons.lock_outline, color: ColorsManager.lightBlue),
+                          hintStyle: const TextStyle(color: Colors.grey, fontFamily: 'Cairo'),
+                          prefixIcon: Icon(Icons.lock_outline, color: brandOrange),
                           filled: true,
-                          fillColor: ColorsManager.mainDarkBlue,
+                          fillColor: Colors.grey.shade50,
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.darkGray, width: 1),
+                            borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.lightBlue, width: 2),
+                            borderSide: BorderSide(color: brandOrange, width: 2),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: ColorsManager.errorRed, width: 1),
+                            borderSide: const BorderSide(color: Colors.red, width: 1),
                           ),
                         ),
                       ),
+                    ),
 
-                      // 3. تصميم خيار "تذكرني"
-                      const SizedBox(height: 10),
-                      Row(
+                    const SizedBox(height: 12),
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Row(
                         children: [
                           Theme(
-                            data: ThemeData(unselectedWidgetColor: ColorsManager.darkGray),
+                            data: ThemeData(unselectedWidgetColor: Colors.grey.shade400),
                             child: Checkbox(
                               value: _isRememberMeChecked,
-                              activeColor: ColorsManager.neonBlue,
-                              checkColor: ColorsManager.white,
+                              activeColor: brandOrange,
+                              checkColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                               onChanged: (value) {
-                                setState(() {
-                                  _isRememberMeChecked = value ?? false;
-                                });
+                                setState(() { _isRememberMeChecked = value ?? false; });
                               },
                             ),
                           ),
-                          const Text('تذكرني', style: TextStyles.font14LightGrayRegular),
+                          const Text('تذكرني', style: TextStyle(color: primaryNavy, fontWeight: FontWeight.w600, fontFamily: 'Cairo', fontSize: 15)),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                    ),
+                    const SizedBox(height: 30),
 
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ColorsManager.neonBlue,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: brandOrange,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        onPressed: () async {
-                          if (cubit.formKey.currentState!.validate()) {
-                            // 4. حفظ أو مسح الإيميل بناءً على اختيار المستخدم
-                            final prefs = await SharedPreferences.getInstance();
-                            if (_isRememberMeChecked) {
-                              await prefs.setString('saved_email', cubit.emailController.text);
-                            } else {
-                              await prefs.remove('saved_email');
-                            }
-
-                            cubit.emitLoginStates();
-                          }
-                        },
-                        child: state is AuthLoading
-                            ? const CircularProgressIndicator(color: ColorsManager.white)
-                            : const Text('تسجيل الدخول', style: TextStyles.font18WhiteMedium),
                       ),
+                      onPressed: () async {
+                        if (cubit.formKey.currentState!.validate()) {
+                          final prefs = await SharedPreferences.getInstance();
+                          if (_isRememberMeChecked) {
+                            await prefs.setString('saved_email', cubit.emailController.text);
+                          } else {
+                            await prefs.remove('saved_email');
+                          }
+                          cubit.emitLoginStates();
+                        }
+                      },
+                      child: state is AuthLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                    ),
 
-                      const SizedBox(height: 20),
+                    const SizedBox(height: 40),
 
-                      Row(
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Text(
                             'ليس لديك حساب؟',
-                            style: TextStyles.font14LightGrayRegular,
+                            style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontSize: 15),
                           ),
                           TextButton(
                             onPressed: () {
                               context.push(Routes.signUp);
                             },
-                            child: const Text(
+                            child: Text(
                               'إنشاء حساب جديد',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: ColorsManager.lightBlue,
+                                color: brandOrange,
+                                fontFamily: 'Cairo',
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );

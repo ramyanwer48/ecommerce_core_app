@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/admin/ui/admin_banner_screen.dart';
 import '../../features/splash/ui/splash_screen.dart'; // 👈 استدعاء السبلاش
 // استدعاءات Auth
 import '../../features/admin/data/repos/admin_categories_repo.dart';
@@ -57,7 +58,7 @@ import '../../features/wishlist/ui/wishlist_screen.dart';
 import '../../features/partners/ui/partners_screen.dart';
 import '../../features/invoices/data/repos/invoice_repo.dart';
 import '../../features/invoices/logic/invoice_cubit.dart';
-
+import '../../features/admin/ui/admin_banner_screen.dart'; // 👈 تأكد إن المسار ده متطابق مع مكان الملف عندك
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -189,6 +190,10 @@ class AppRouter {
           create: (context) => InvoiceCubit(InvoiceRepo()),
           child: const CreateInvoiceScreen(),
         ),
+      ),
+      GoRoute(
+        path: Routes.adminBanner,
+        builder: (context, state) => const AdminBannerScreen(),
       ),
     ],
   );

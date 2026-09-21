@@ -23,4 +23,5 @@ class Routes {
   static const String partners = '/partners';
   static const String createInvoice = '/createInvoice';
   static const String manageCoupons = '/manageCoupons';
+  static const String adminBanner = '/adminBanner'; // 👈 مسار شاشة إدارة الإعلان
 }

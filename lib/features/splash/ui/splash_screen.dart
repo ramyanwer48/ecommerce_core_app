@@ -25,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // 1. قراءة الصورة بأبعادها وفردها على أي شاشة موبايل (Honor, Samsung, iPhone)
+          // 1. قراءة الصورة بأبعادها وفردها على أي شاشة موبايل
           SizedBox(
             width: double.infinity,
             height: double.infinity,
@@ -35,13 +35,13 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
 
-          // 2. خط التحميل النيون البرتقالي (تم ضبط مكانه في الثلث السفلي لتجنب تغطية النصوص)
+          // 2. تم رفع خط التحميل النيون للأعلى ليصبح في الفراغ الأبيض المناسب فوق النصوص
           Align(
-            alignment: const Alignment(0, 0.85), // نزلته شوية عشان يبقى تحت Version 1
+            alignment: const Alignment(0, 0.38), // 👈 رفناه لفوق (من 0.60 إلى 0.38) عشان يبعد عن النصوص تماماً
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 100), // تصغير عرض الخط ليكون أنيقاً
+              padding: const EdgeInsets.symmetric(horizontal: 100),
               child: Container(
-                height: 4, // سمك الخط
+                height: 4,
                 decoration: BoxDecoration(
                   boxShadow: [
                     BoxShadow(

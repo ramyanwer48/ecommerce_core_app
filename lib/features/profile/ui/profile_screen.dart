@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/routing/routes.dart';
@@ -14,18 +13,6 @@ class ProfileScreen extends StatelessWidget {
     await prefs.clear();
     if (context.mounted) {
       context.go(Routes.login);
-    }
-  }
-
-  Future<bool> _checkIfAdmin(String uid) async {
-    try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      if (doc.exists && doc.data()?['role'] == 'admin') {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
     }
   }
 
@@ -80,41 +67,6 @@ class ProfileScreen extends StatelessWidget {
               tileColor: Colors.white,
               onTap: () => context.push('/addresses'),
             ),
-
-            const SizedBox(height: 16),
-
-            // 🛡️ قسم الإدارة الموحد (يظهر للأدمن فقط ويؤدي لوحة التحكم الشاملة)
-            if (user != null)
-              FutureBuilder<bool>(
-                future: _checkIfAdmin(user.uid),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox.shrink();
-                  }
-                  if (snapshot.hasData && snapshot.data == true) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 8.0, right: 8.0),
-                          child: Text('صلاحيات الإدارة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontFamily: 'Cairo')),
-                        ),
-                        // 👈 الزر البوابي الوحيد الذي يجمع كل أقسام الإدارة والـ ERP (المنتجات، التصنيفات، الطلبات، الأطراف)
-                        ListTile(
-                          leading: const Icon(Icons.admin_panel_settings, color: Colors.blueAccent, size: 28),
-                          title: const Text('لوحة تحكم الإدارة (ERP Hub)', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                          subtitle: const Text('المنتجات، الطلبات، الأطراف، والموردين', style: TextStyle(fontSize: 12, fontFamily: 'Cairo')),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          tileColor: Colors.white,
-                          onTap: () => context.push(Routes.adminDashboard),
-                        ),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
 
             const SizedBox(height: 32),
 
