@@ -117,18 +117,16 @@ exports.sendOrderUpdateNotification = onDocumentUpdated("orders/{orderId}", asyn
 });
 
 // =======================================================
-// 3. دالة الدفع الآمن عبر Paymob (مع الضرب في 100 في الخلفية)
+// 3. دالة الدفع الآمن عبر Paymob
 // =======================================================
 exports.createSecurePaymobOrder = onCall(
   { secrets: ["PAYMOB_API_KEY"] },
   async (request) => {
     const data = request.data;
 
-    // التحويل لقروش بأمان تام على السيرفر
     const totalAmount = data.totalAmount || 0;
     const amountCents = Math.round(totalAmount * 100).toString();
 
-    // جلب المفتاح الآمن من سحابة فايربيز
     const apiKey = process.env.PAYMOB_API_KEY ? process.env.PAYMOB_API_KEY.trim() : '';
     const integrationId = data.isLive ? "LIVE_INTEGRATION_ID" : "5911923";
 
@@ -137,20 +135,17 @@ exports.createSecurePaymobOrder = onCall(
     }
 
     try {
-      // 1. طلب الـ Auth Token من بيموب
       const authRes = await axios.post("https://accept.paymob.com/api/auth/tokens", { api_key: apiKey });
       const token = authRes.data.token;
 
-      // 2. تسجيل الطلب (Order Registration) بالمبلغ المحول لقروش
       const orderRes = await axios.post("https://accept.paymob.com/api/ecommerce/orders", {
               auth_token: token,
               delivery_needed: "false",
               amount_cents: amountCents,
               currency: "EGP",
-              items: [] // 👈 مصفوفة فارغة إجبارية
+              items: []
             });
 
-      // 3. طلب مفتاح الدفع (Payment Key)
       const paymentKeyRes = await axios.post("https://accept.paymob.com/api/acceptance/payment_keys", {
         auth_token: token,
         amount_cents: amountCents,
@@ -165,6 +160,82 @@ exports.createSecurePaymobOrder = onCall(
     } catch (error) {
       console.error("Paymob Error:", error.response?.data || error.message);
       throw new HttpsError("internal", "فشل إعداد الدفع عبر بوابة بيموب");
+    }
+  }
+);
+
+// =======================================================
+// 4. دالة تحليل الفواتير بالذكاء الاصطناعي (AI Invoice Parser) - معدلة بالصيغة الصحيحة REST API
+// =======================================================
+exports.analyzeInvoice = onCall(
+  { secrets: ["GEMINI_API_KEY"] },
+  async (request) => {
+    const base64Image = request.data?.imageBase64;
+    if (!base64Image) {
+      throw new HttpsError("invalid-argument", "برجاء إرسال صورة الفاتورة");
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
+    if (!apiKey) {
+      throw new HttpsError("failed-precondition", "مفتاح الذكاء الاصطناعي غير متوفر على السيرفر");
+    }
+
+    try {
+      const systemInstruction = `
+      You are an expert ERP invoice parser. Analyze this invoice image accurately (Arabic or English, handwritten or typed).
+      Extract the supplier name, invoice number, and list of items.
+      CRITICAL RULE: Translate and standardize all item names strictly into ENGLISH to match our inventory database.
+      Return the response ONLY as a valid JSON object with this exact structure, with no extra text or markdown outside the JSON:
+      {
+        "supplier": "Supplier Name in English",
+        "invoice_no": "Invoice Number",
+        "items": [
+          {"name": "Standardized English Name", "qty": 1, "price": 100.0, "category": "Accessories"}
+        ]
+      }
+      `;
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+      const res = await axios.post(
+        url,
+        {
+          system_instruction: {
+            parts: [{ text: systemInstruction }]
+          },
+          contents: [
+            {
+              parts: [
+                { text: "Extract invoice details from this image accurately and return only JSON." },
+                {
+                  inline_data: { // 👈 التصحيح الهندسي: استخدام inline_data بدل inlineData للـ REST API
+                    mime_type: "image/jpeg", // 👈 التصحيح الهندسي: استخدام mime_type بدل mimeType للـ REST API
+                    data: base64Image
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+
+      const responseText = res.data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!responseText) {
+        throw new HttpsError("internal", "لم يتم استلام رد صالح من نموذج الذكاء الاصطناعي");
+      }
+
+      let cleanedJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsedData = JSON.parse(cleanedJson);
+
+      return parsedData;
+
+    } catch (e) {
+      const errorMsg = e.response?.data?.error?.message || e.message;
+      console.error("AI Invoice Error:", errorMsg);
+      throw new HttpsError("internal", errorMsg);
     }
   }
 );

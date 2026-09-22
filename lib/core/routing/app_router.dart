@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/admin/ui/admin_banner_screen.dart';
+import '../../features/purchases/ui/ai_purchase_screen.dart';
 import '../../features/splash/ui/splash_screen.dart'; // 👈 استدعاء السبلاش
 // استدعاءات Auth
 import '../../features/admin/data/repos/admin_categories_repo.dart';
@@ -59,6 +60,9 @@ import '../../features/partners/ui/partners_screen.dart';
 import '../../features/invoices/data/repos/invoice_repo.dart';
 import '../../features/invoices/logic/invoice_cubit.dart';
 import '../../features/admin/ui/admin_banner_screen.dart'; // 👈 تأكد إن المسار ده متطابق مع مكان الملف عندك
+import '../../features/purchases/ui/ai_purchase_screen.dart';
+import '../../features/purchases/ui/invoice_review_screen.dart';
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -194,6 +198,17 @@ class AppRouter {
       GoRoute(
         path: Routes.adminBanner,
         builder: (context, state) => const AdminBannerScreen(),
+      ),
+      GoRoute(
+        path: Routes.aiPurchase,
+        builder: (context, state) => const AiPurchaseScreen(),
+      ),
+      GoRoute(
+        path: Routes.invoiceReview,
+        builder: (context, state) {
+          final invoiceData = state.extra as Map<String, dynamic>?;
+          return InvoiceReviewScreen(invoiceData: invoiceData);
+        },
       ),
     ],
   );
