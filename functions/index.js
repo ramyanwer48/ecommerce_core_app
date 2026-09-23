@@ -35,12 +35,13 @@ exports.askNaaseh = onCall(
       3. كن دقيقاً، مختصرًا، وتحدث باللغة العربية الفصحى فقط.
       `;
 
+      // 👈 تم إعادة الموديل الصحيح والأحدث الذي كنت تستخدمه بنجاح
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
       const res = await axios.post(
         url,
         {
-          system_instruction: { parts: [{ text: systemInstruction }] },
+          systemInstruction: { parts: [{ text: systemInstruction }] },
           contents: [{ parts: [{ text: userPrompt }] }]
         },
         {
@@ -165,7 +166,7 @@ exports.createSecurePaymobOrder = onCall(
 );
 
 // =======================================================
-// 4. دالة تحليل الفواتير بالذكاء الاصطناعي (AI Invoice Parser) - معدلة بالصيغة الصحيحة REST API
+// 4. دالة تحليل الفواتير بالذكاء الاصطناعي (AI Invoice Parser)
 // =======================================================
 exports.analyzeInvoice = onCall(
   { secrets: ["GEMINI_API_KEY"] },
@@ -182,25 +183,50 @@ exports.analyzeInvoice = onCall(
 
     try {
       const systemInstruction = `
-      You are an expert ERP invoice parser. Analyze this invoice image accurately (Arabic or English, handwritten or typed).
-      Extract the supplier name, invoice number, and list of items.
-      CRITICAL RULE: Translate and standardize all item names strictly into ENGLISH to match our inventory database.
-      Return the response ONLY as a valid JSON object with this exact structure, with no extra text or markdown outside the JSON:
-      {
-        "supplier": "Supplier Name in English",
-        "invoice_no": "Invoice Number",
-        "items": [
-          {"name": "Standardized English Name", "qty": 1, "price": 100.0, "category": "Accessories"}
-        ]
-      }
-      `;
+            You are an expert ERP invoice parser. Analyze this invoice image accurately (Arabic or English, handwritten or typed).
+            Extract the supplier name, invoice number, totals, and list of items.
+            CRITICAL RULE 1: Translate and standardize all item names strictly into ENGLISH.
+            CRITICAL RULE 2: Assign each item a 'mainCategory' and 'subCategory' based ONLY on this exact taxonomy:
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            Main Categories -> [Sub Categories]:
+            Computers & Systems -> [Desktops, Laptops, Servers & Workstations]
+            PC Components -> [Processors / CPUs, Motherboards, Memory / RAM, Storage / HDD / SSD / NVMe, Graphics Cards / GPUs, Power Supplies / PSU, Computer Cases, Cooling Systems]
+            Displays & Monitors -> [Standard Monitors, Gaming Monitors]
+            Peripherals & Accessories -> [Keyboards, Mice & Pointers, Headsets & Audio, Webcams, Mousepads & Stands]
+            Cables & Adapters -> [Video Cables, Data Cables, Power Cables, Adapters & Hubs]
+            Laptop Specific Parts -> [Laptop Chargers, Laptop Batteries, Laptop Screens]
+            Mobile Accessories -> [Mobile Chargers, Screen Protectors, Mobile Cases, Power Banks]
+            Networking -> [Routers & Switches, Network Cables]
+            Micro-Components & Maintenance -> [Sockets & Connectors, ICs & Chips, Jumpers & Screws, Thermal Paste & Cleaning]
+
+            If you are absolutely unsure, use "Uncategorized" for both.
+
+            Return ONLY a JSON object:
+            {
+              "partnerName": "Supplier Name in English",
+              "invoiceNumber": "Invoice Number",
+              "subtotal": 1000.0,
+              "discountAmount": 0.0,
+              "totalAmount": 1000.0,
+              "date": "2026-09-23",
+              "items": [
+                {
+                  "productName": "Standardized English Name",
+                  "quantity": 1,
+                  "unitPrice": 100.0,
+                  "mainCategory": "Computers & Systems", // Must be from the main categories list
+                  "subCategory": "Laptops" // Must be from the corresponding sub categories list
+                }
+              ]
+            }
+            `;
+      // 👈 تم الترقية للموديل الشغال 3.6 لإنهاء مشكلة الـ Null
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
       const res = await axios.post(
         url,
         {
-          system_instruction: {
+          systemInstruction: {
             parts: [{ text: systemInstruction }]
           },
           contents: [
@@ -208,8 +234,8 @@ exports.analyzeInvoice = onCall(
               parts: [
                 { text: "Extract invoice details from this image accurately and return only JSON." },
                 {
-                  inline_data: { // 👈 التصحيح الهندسي: استخدام inline_data بدل inlineData للـ REST API
-                    mime_type: "image/jpeg", // 👈 التصحيح الهندسي: استخدام mime_type بدل mimeType للـ REST API
+                  inlineData: {
+                    mimeType: "image/jpeg",
                     data: base64Image
                   }
                 }
@@ -227,7 +253,7 @@ exports.analyzeInvoice = onCall(
         throw new HttpsError("internal", "لم يتم استلام رد صالح من نموذج الذكاء الاصطناعي");
       }
 
-      let cleanedJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+      let cleanedJson = responseText.replace(/```(?:json)?/g, "").replace(/```/g, "").trim();
       const parsedData = JSON.parse(cleanedJson);
 
       return parsedData;
