@@ -27,6 +27,7 @@ class AdminRepo {
     required double price,
     required double costPrice, // سعر التكلفة للدفعة الأولى
     required String category,
+    required String subCategory, // 👈 استقبال التصنيف الفرعي
     required String description,
     required String imageUrl,
     required List<String> images,
@@ -47,6 +48,7 @@ class AdminRepo {
       'name': name,
       'price': price, // سعر البيع الثابت للعميل في الواجهة
       'category': category,
+      'subCategory': subCategory, // 👈 حفظ التصنيف الفرعي في فايربيز
       'description': description,
       'imageUrl': imageUrl,
       'images': images,
@@ -55,6 +57,7 @@ class AdminRepo {
       'isActive': true,
       'stockQuantity': stockQuantity, // إجمالي المخزون
       'batches': [initialBatch], // حقن الدفعة الأولى
+      'createdAt': Timestamp.now(), // 👈 ضروري لترتيب المنتجات الأحدث في لوحة التحكم
     });
   }
 

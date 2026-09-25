@@ -27,7 +27,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  // 👈 تعريف الـ Stream هنا
   late Stream<DocumentSnapshot> _bannerStream;
 
   final Color primaryNavy = const Color(0xFF0D1B2A);
@@ -37,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // 👈 إعطاء القيمة للـ Stream هنا يحل مشكلة الـ LateInitializationError تماماً
     _bannerStream = FirebaseFirestore.instance.collection('settings').doc('banner').snapshots();
   }
 
@@ -396,7 +394,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // 👈 استخدام الـ Stream المجهز مسبقاً لحل خطأ LateInitializationError
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: StreamBuilder<DocumentSnapshot>(
@@ -582,7 +579,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       return GridView.builder(
                         padding: const EdgeInsets.all(16),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2, childAspectRatio: 0.68, crossAxisSpacing: 16, mainAxisSpacing: 16,
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75, // 👈 النسبة الذهبية للكارت (احترافي أكثر)
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
                         ),
                         itemCount: 6,
                         itemBuilder: (context, index) => const ProductShimmer(),
@@ -623,7 +623,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, childAspectRatio: 0.68, crossAxisSpacing: 16, mainAxisSpacing: 16,
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.75, // 👈 النسبة الذهبية للكارت (احترافي أكثر)
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
                           ),
                           itemCount: products.length,
                           itemBuilder: (context, index) {
@@ -643,35 +646,41 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Stack(
                                   children: [
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.stretch, // 👈 التمدد بكامل العرض
                                       children: [
+                                        // 🖼️ مساحة الصورة (تأخذ 65% من الكارت)
                                         Expanded(
+                                          flex: 65,
                                           child: ClipRRect(
                                             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                                             child: product.imageUrl.isNotEmpty
-                                                ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
-                                                : Container(color: Colors.grey[200], child: const Icon(Icons.image, size: 50)),
+                                                ? Image.network(product.imageUrl, fit: BoxFit.cover)
+                                                : Container(color: Colors.grey.shade200, child: const Icon(Icons.image, size: 40, color: Colors.grey)),
                                           ),
                                         ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(10.0),
-                                          child: Directionality(
-                                            textDirection: TextDirection.rtl,
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                    product.name,
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: TextStyle(fontWeight: FontWeight.bold, color: primaryNavy, fontFamily: 'Cairo', fontSize: 15)
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                    '${product.price} ج.م',
-                                                    style: TextStyle(color: brandOrange, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)
-                                                ),
-                                              ],
+                                        // 📝 مساحة النص والسعر (تأخذ 35% من الكارت)
+                                        Expanded(
+                                          flex: 35,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                                            child: Directionality(
+                                              textDirection: TextDirection.rtl,
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                      product.name,
+                                                      maxLines: 2, // 👈 سطرين للاسم حتى لا يأخذ مساحة كبيرة
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(fontWeight: FontWeight.bold, color: primaryNavy, fontFamily: 'Cairo', fontSize: 12, height: 1.2)
+                                                  ),
+                                                  Text(
+                                                      '${product.price} ج.م',
+                                                      style: TextStyle(color: brandOrange, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -686,10 +695,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                           return CircleAvatar(
                                             backgroundColor: Colors.white.withAlpha(240),
-                                            radius: 16,
+                                            radius: 14,
                                             child: IconButton(
                                               padding: EdgeInsets.zero,
-                                              icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? Colors.red : Colors.grey),
+                                              icon: Icon(isFavorite ? Icons.favorite : Icons.favorite_border, color: isFavorite ? Colors.red : Colors.grey, size: 18),
                                               onPressed: () {
                                                 HapticFeedback.vibrate();
                                                 context.read<FavoritesCubit>().toggleFavorite(product);

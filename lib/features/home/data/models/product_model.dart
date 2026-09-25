@@ -1,9 +1,76 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// 🌳 شجرة التصنيفات المعتمدة للمتجر (Master Taxonomy)
+class MasterCatalogCategories {
+  static const Map<String, List<String>> taxonomy = {
+    'Computers & Systems': [
+      'Desktops',
+      'Laptops',
+      'Servers & Workstations'
+    ],
+    'PC Components': [
+      'Processors / CPUs',
+      'Motherboards',
+      'Memory / RAM',
+      'Storage / HDD / SSD / NVMe',
+      'Graphics Cards / GPUs',
+      'Power Supplies / PSU',
+      'Computer Cases',
+      'Cooling Systems'
+    ],
+    'Displays & Monitors': [
+      'Standard Monitors',
+      'Gaming Monitors'
+    ],
+    'Peripherals & Accessories': [
+      'Keyboards',
+      'Mice & Pointers',
+      'Headsets & Audio',
+      'Webcams',
+      'Mousepads & Stands'
+    ],
+    'Cables & Adapters': [
+      'Video Cables',
+      'Data Cables',
+      'Power Cables',
+      'Adapters & Hubs'
+    ],
+    'Laptop Specific Parts': [
+      'Laptop Chargers',
+      'Laptop Batteries',
+      'Laptop Screens'
+    ],
+    'Mobile Accessories': [
+      'Mobile Chargers',
+      'Screen Protectors',
+      'Mobile Cases',
+      'Power Banks'
+    ],
+    'Networking': [
+      'Routers & Switches',
+      'Network Cables'
+    ],
+    'Micro-Components & Maintenance': [
+      'Sockets & Connectors',
+      'ICs & Chips',
+      'Jumpers & Screws',
+      'Thermal Paste & Cleaning'
+    ],
+  };
+
+  // قائمة مساعدة لجلب كل التصنيفات الرئيسية
+  static List<String> get mainCategories => taxonomy.keys.toList();
+
+  // دالة لجلب التصنيفات الفرعية بناءً على التصنيف الرئيسي
+  static List<String> getSubCategories(String mainCategory) {
+    return taxonomy[mainCategory] ?? [];
+  }
+}
+
 class ProductBatch {
   final String batchId;
   final int quantity;
-  final double costPrice; // سعر التكلفة (الشراء) عليك أنت كتاجر
+  final double costPrice; // سعر التكلفة (الشراء)
   final DateTime dateAdded;
 
   ProductBatch({
@@ -34,16 +101,23 @@ class ProductBatch {
 
 class ProductModel {
   final String id;
-  final String name;
+  final String name; // الاسم القياسي بالإنجليزية
   final String description;
-  final double price; // 👈 سعر البيع الموحد الثابت للعميل في الواجهة
+  final double price; // سعر البيع للعميل
   final String imageUrl;
   final List<String> images;
   final List<String> variations;
-  final String category;
+
+  // 🏷️ الحقول الجديدة للمخازن والذكاء الاصطناعي
+  final String category; // التصنيف الرئيسي
+  final String subCategory; // التصنيف الفرعي (جديد)
+  final List<String> barcodes; // لدعم باركودات متعددة للموردين (جديد)
+  final String unitOfMeasure; // معامل القياس مثلاً: Piece, Box (جديد)
+  final String storageLocation; // مكان الرف للبحث في الجرد (جديد)
+
   final bool inStock;
   final bool isActive;
-  final List<ProductBatch> batches;
+  final List<ProductBatch> batches; // نظام الـ FIFO
 
   int get stockQuantity {
     if (batches.isEmpty) return 0;
@@ -54,11 +128,15 @@ class ProductModel {
     required this.id,
     required this.name,
     required this.description,
-    required this.price, // 👈 أصبح مطلوباً بوضوح لضمان عدم ظهور السعر بصفر
+    required this.price,
     required this.imageUrl,
     required this.images,
     required this.variations,
     required this.category,
+    this.subCategory = 'Uncategorized', // قيمة افتراضية لتفادي أخطاء المنتجات القديمة
+    this.barcodes = const [],
+    this.unitOfMeasure = 'Piece',
+    this.storageLocation = 'Main Storage',
     this.inStock = true,
     this.isActive = true,
     required this.batches,
@@ -77,6 +155,12 @@ class ProductModel {
       parsedVariations = List<String>.from(json['variations']);
     }
 
+    // 🏷️ استخراج الحقول الجديدة (الباركود) بأمان
+    List<String> parsedBarcodes = [];
+    if (json['barcodes'] != null) {
+      parsedBarcodes = List<String>.from(json['barcodes']);
+    }
+
     List<ProductBatch> parsedBatches = [];
     if (json['batches'] != null) {
       parsedBatches = (json['batches'] as List)
@@ -91,31 +175,35 @@ class ProductModel {
         parsedBatches.add(ProductBatch(
           batchId: 'legacy_batch_$documentId',
           quantity: oldStock,
-          costPrice: oldPrice * 0.7, // تكلفة تقديرية للدفعة القديمة
+          costPrice: oldPrice * 0.7,
           dateAdded: DateTime.now().subtract(const Duration(days: 30)),
         ));
       }
     }
 
-    // 🧠 قراءة سعر البيع بأمان تام من أي حقل محتمل في فايربيز
     double resolvedPrice = 0.0;
     if (json['price'] != null) {
       resolvedPrice = (json['price'] as num).toDouble();
     } else if (json['currentSalePrice'] != null) {
       resolvedPrice = (json['currentSalePrice'] as num).toDouble();
     } else if (parsedBatches.isNotEmpty) {
-      resolvedPrice = parsedBatches.first.costPrice * 1.3; // مرجع احتياطي لو السعر مش موجود
+      resolvedPrice = parsedBatches.first.costPrice * 1.3;
     }
 
     return ProductModel(
       id: documentId,
       name: json['name'] ?? json['title'] ?? '',
       description: json['description'] ?? '',
-      price: resolvedPrice, // 👈 تعيين السعر الموحد الحقيقي
+      price: resolvedPrice,
       imageUrl: json['imageUrl'] ?? '',
       images: parsedImages,
       variations: parsedVariations,
       category: json['category'] ?? 'General',
+      // 🏷️ قراءة الحقول الجديدة إن وجدت، أو وضع قيم افتراضية
+      subCategory: json['subCategory'] ?? 'Uncategorized',
+      barcodes: parsedBarcodes,
+      unitOfMeasure: json['unitOfMeasure'] ?? 'Piece',
+      storageLocation: json['storageLocation'] ?? 'Main Storage',
       inStock: json['inStock'] ?? true,
       isActive: json['isActive'] ?? true,
       batches: parsedBatches,
@@ -126,11 +214,16 @@ class ProductModel {
     return {
       'name': name,
       'description': description,
-      'price': price, // 👈 حفظ سعر البيع الموحد في قاعدة البيانات
+      'price': price,
       'imageUrl': imageUrl,
       'images': images,
       'variations': variations,
       'category': category,
+      // 🏷️ حفظ الحقول الجديدة في فايربيز
+      'subCategory': subCategory,
+      'barcodes': barcodes,
+      'unitOfMeasure': unitOfMeasure,
+      'storageLocation': storageLocation,
       'inStock': stockQuantity > 0,
       'isActive': isActive,
       'stockQuantity': stockQuantity,

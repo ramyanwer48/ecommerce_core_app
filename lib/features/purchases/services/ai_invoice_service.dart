@@ -39,8 +39,11 @@ class AiInvoiceService {
           (result.data as Map).map((key, value) => MapEntry(key.toString(), value)),
         );
       } else if (result.data is String) {
-        // لو السيرفر رجعها كـ JSON String عن طريق الخطأ
-        final decoded = jsonDecode(result.data);
+        // تنظيف النص من علامات Markdown التي يضيفها الذكاء الاصطناعي (مثل ```json و ```)
+        String rawString = result.data as String;
+        String cleanedString = rawString.replaceAll(RegExp(r'```(?:json)?'), '').trim();
+
+        final decoded = jsonDecode(cleanedString);
         if (decoded is Map) {
           return Map<String, dynamic>.from(
             decoded.map((key, value) => MapEntry(key.toString(), value)),

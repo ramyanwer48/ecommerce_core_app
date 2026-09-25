@@ -1,5 +1,33 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// --- دوال مساعدة (Helpers) للتحويل الآمن للبيانات ---
+// هذه الدوال تمنع انهيار التطبيق إذا أرسل الذكاء الاصطناعي البيانات بصيغة مختلفة (نص بدلاً من رقم، أو نص بدلاً من Timestamp)
+
+double _parseDouble(dynamic value) {
+  if (value == null) return 0.0;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0.0;
+  return 0.0;
+}
+
+int _parseInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
+DateTime _parseDate(dynamic value) {
+  if (value == null) return DateTime.now();
+  if (value is Timestamp) return value.toDate(); // في حالة القراءة من Firestore
+  if (value is String) return DateTime.tryParse(value) ?? DateTime.now(); // في حالة القراءة من الذكاء الاصطناعي
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  return DateTime.now();
+}
+// --------------------------------------------------
+
 // 1. نموذج صنف الفاتورة (المنتج داخل الفاتورة)
 class InvoiceItemModel {
   final String productId;
@@ -28,10 +56,10 @@ class InvoiceItemModel {
 
   factory InvoiceItemModel.fromMap(Map<String, dynamic> map) {
     return InvoiceItemModel(
-      productId: map['productId'] ?? '',
-      productName: map['productName'] ?? '',
-      unitPrice: (map['unitPrice'] ?? 0.0).toDouble(),
-      quantity: map['quantity'] ?? 0,
+      productId: map['productId']?.toString() ?? '',
+      productName: map['productName']?.toString() ?? '',
+      unitPrice: _parseDouble(map['unitPrice']),
+      quantity: _parseInt(map['quantity']),
     );
   }
 }
@@ -39,14 +67,14 @@ class InvoiceItemModel {
 // 2. نموذج الفاتورة الرئيسية (رأس الفاتورة)
 class InvoiceModel {
   final String id;
-  final String invoiceNumber; // 👈 إضافة: التسلسل الضريبي (مثال: INV-2026-1000)
-  final String orderId;       // 👈 إضافة: رقم الطلب المرتبط بالفاتورة
+  final String invoiceNumber; // التسلسل الضريبي (مثال: INV-2026-1000)
+  final String orderId;       // رقم الطلب المرتبط بالفاتورة
   final String partnerId;     // معرف العميل أو المورد
   final String partnerName;
   final String type;          // 'sale' أو 'purchase'
   final List<InvoiceItemModel> items;
-  final double subtotal;      // 👈 إضافة: الإجمالي قبل الخصم
-  final double discountAmount;// 👈 إضافة: قيمة الكوبون
+  final double subtotal;      // الإجمالي قبل الخصم
+  final double discountAmount;// قيمة الكوبون أو الخصم
   final double totalAmount;   // الصافي النهائي
   final DateTime date;
   final String status;        // 'paid' أو 'unpaid'
@@ -90,18 +118,18 @@ class InvoiceModel {
 
     return InvoiceModel(
       id: docId,
-      invoiceNumber: map['invoiceNumber'] ?? '',
-      orderId: map['orderId'] ?? '',
-      partnerId: map['partnerId'] ?? '',
-      partnerName: map['partnerName'] ?? '',
-      type: map['type'] ?? 'sale',
+      invoiceNumber: map['invoiceNumber']?.toString() ?? '',
+      orderId: map['orderId']?.toString() ?? '',
+      partnerId: map['partnerId']?.toString() ?? '',
+      partnerName: map['partnerName']?.toString() ?? '',
+      type: map['type']?.toString() ?? 'sale',
       items: parsedItems,
-      // 👈 تم تأمين قراءة الحقول الجديدة مع التوافق مع البيانات القديمة لو وجدت
-      subtotal: (map['subtotal'] ?? map['totalAmount'] ?? 0.0).toDouble(),
-      discountAmount: (map['discountAmount'] ?? 0.0).toDouble(),
-      totalAmount: (map['totalAmount'] ?? 0.0).toDouble(),
-      date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      status: map['status'] ?? 'paid',
+      // استخدام دوال التحويل الآمنة لضمان عدم حدوث Crash
+      subtotal: _parseDouble(map['subtotal'] ?? map['totalAmount']),
+      discountAmount: _parseDouble(map['discountAmount']),
+      totalAmount: _parseDouble(map['totalAmount']),
+      date: _parseDate(map['date']),
+      status: map['status']?.toString() ?? 'paid',
     );
   }
 }
