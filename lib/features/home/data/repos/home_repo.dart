@@ -5,15 +5,15 @@ class HomeRepo {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   // 👈 الدالة الجديدة لجلب الأقسام من Firestore
   Future<List<CategoryModel>> getCategories() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('categories')
-        .where('isActive', isEqualTo: true) // نجلب الأقسام الفعالة فقط
-        .orderBy('orderIndex') // الترتيب حسب ما يحدده الأدمن
-        .get();
+    // جلب كل المستندات بدون شروط لأن حقول isActive و orderIndex غير موجودة حالياً
+    final snapshot = await _firestore.collection('categories').get();
 
-    return snapshot.docs
-        .map((doc) => CategoryModel.fromJson(doc.data(), doc.id))
-        .toList();
+    return snapshot.docs.map((doc) {
+      Map<String, dynamic> data = doc.data();
+      // حماية للكود: إذا لم يجد حقل اسم، يأخذ اسم المستند كاسم للقسم
+      data['name'] = data['name'] ?? doc.id;
+      return CategoryModel.fromJson(data, doc.id);
+    }).toList();
   }
 
   Future<List<ProductModel>> getProducts() async {

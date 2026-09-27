@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/admin/ui/admin_banner_screen.dart';
+import '../../features/home/logic/favorites/favorites_cubit.dart';
 import '../../features/purchases/ui/ai_purchase_screen.dart';
 import '../../features/splash/ui/splash_screen.dart'; // 👈 استدعاء السبلاش
 // استدعاءات Auth
@@ -37,6 +38,7 @@ import '../../features/profile/ui/orders_screen.dart';
 import '../../features/profile/ui/profile_screen.dart';
 
 // استدعاءات الأساسيات (Core)
+import '../../shared/ui/main_layout_screen.dart';
 import '../di/dependency_injection.dart';
 import 'routes.dart';
 
@@ -209,6 +211,24 @@ class AppRouter {
           final invoiceData = state.extra as Map<String, dynamic>?;
           return InvoiceReviewScreen(invoiceData: invoiceData);
         },
+      ),
+      GoRoute(
+        path: Routes.mainLayout,
+        builder: (context, state) => MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              // دالة fetchProducts هنا بتقوم بالواجبين مع بعض حسب برمجتك الممتازة
+              create: (context) => getIt<HomeCubit>()..fetchProducts(),
+            ),
+            BlocProvider(
+              create: (context) => getIt<FavoritesCubit>(),
+            ),
+            BlocProvider(
+              create: (context) => getIt<CartCubit>(),
+            ),
+          ],
+          child: const MainLayoutScreen(),
+        ),
       ),
     ],
   );

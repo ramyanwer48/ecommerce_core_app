@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefs.setBool('isBiometricEnabled', true);
                             prefs.setBool('has_asked_biometric', true);
                             Navigator.pop(dialogContext);
-                            context.go(Routes.home);
+                            context.go(Routes.mainLayout); // 👈 التوجيه الجديد هنا
                           },
                           child: const Text('تفعيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
                         ),
@@ -103,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefs.setBool('isBiometricEnabled', false);
                             prefs.setBool('has_asked_biometric', true);
                             Navigator.pop(dialogContext);
-                            context.go(Routes.home);
+                            context.go(Routes.mainLayout); // 👈 والتوجيه الجديد هنا
                           },
                           child: const Text('لا، شكراً', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
                         ),
@@ -112,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 );
               } else {
-                if (mounted) context.go(Routes.home);
+                if (mounted) context.go(Routes.mainLayout); // 👈 وهنا أيضاً
               }
             } else if (state is AuthFailure) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -125,9 +125,9 @@ class _LoginScreenState extends State<LoginScreen> {
             return Form(
               key: cubit.formKey,
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(), // 👈 سلاسة في النزول والطلوع
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, // 👈 إخفاء الكيبورد بالسحب
-                padding: const EdgeInsets.fromLTRB(24.0, 70.0, 24.0, 24.0), // 👈 مسافة ثابتة لا تسبب تقطيع
+                physics: const BouncingScrollPhysics(),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(24.0, 70.0, 24.0, 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

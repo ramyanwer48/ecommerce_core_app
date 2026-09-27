@@ -26,4 +26,5 @@ class Routes {
   static const String adminBanner = '/adminBanner';// 👈 مسار شاشة إدارة الإعلان
   static const String aiPurchase = '/ai-purchase';
   static const String invoiceReview = '/invoice-review';
+  static const String mainLayout = '/mainLayout';
 }

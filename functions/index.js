@@ -35,7 +35,6 @@ exports.askNaaseh = onCall(
       3. كن دقيقاً، مختصرًا، وتحدث باللغة العربية الفصحى فقط.
       `;
 
-      // 👈 تم إعادة الموديل الصحيح والأحدث الذي كنت تستخدمه بنجاح
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
       const res = await axios.post(
@@ -220,7 +219,7 @@ exports.analyzeInvoice = onCall(
               ]
             }
             `;
-      // 👈 تم الترقية للموديل الشغال 3.6 لإنهاء مشكلة الـ Null
+
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
       const res = await axios.post(
@@ -265,3 +264,50 @@ exports.analyzeInvoice = onCall(
     }
   }
 );
+
+// =======================================================
+// 5. دالة جلب صور المنتجات الرسمية من محرك بحث جوجل (عبر Serper)
+// =======================================================
+exports.searchGoogleImages = onCall({
+    secrets: ["SERPER_API_KEY"]
+}, async (request) => {
+    try {
+        // سحب الكلمة سواء تم إرسالها باسم query أو productName أو كنص مباشر
+        const query = request.data.query || request.data.productName || request.data;
+
+        if (!query || typeof query !== 'string') {
+            throw new Error("Missing query parameter");
+        }
+
+        const apiKey = process.env.SERPER_API_KEY;
+
+        const response = await axios.post(
+            'https://google.serper.dev/images',
+            {
+                q: query,
+                gl: "eg",
+                hl: "ar"
+            },
+            {
+                headers: {
+                    'X-API-KEY': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        if (response.data && response.data.images && response.data.images.length > 0) {
+            const images = response.data.images.slice(0, 5).map(img => ({
+                link: img.imageUrl,
+                title: img.title
+            }));
+            return { images };
+        } else {
+            return { images: [] };
+        }
+
+    } catch (error) {
+        console.error("Image Search API Error:", error.message);
+        throw new Error("فشل في جلب الصور من الخادم البديل");
+    }
+});

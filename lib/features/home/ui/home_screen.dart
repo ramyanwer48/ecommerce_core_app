@@ -580,7 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(16),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
-                          childAspectRatio: 0.75, // 👈 النسبة الذهبية للكارت (احترافي أكثر)
+                          childAspectRatio: 0.75,
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
@@ -624,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: const EdgeInsets.all(16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.75, // 👈 النسبة الذهبية للكارت (احترافي أكثر)
+                            childAspectRatio: 0.75,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -632,6 +632,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           itemBuilder: (context, index) {
                             final product = products.length > index ? products[index] : null;
                             if (product == null) return const SizedBox.shrink();
+
+                            // 👇 التعديل: استخراج الصورة الأولى من المصفوفة، أو استخدام القديمة
+                            String displayImage = '';
+                            if (product.images.isNotEmpty) {
+                              displayImage = product.images.first;
+                            } else if (product.imageUrl.isNotEmpty) {
+                              displayImage = product.imageUrl;
+                            }
 
                             return GestureDetector(
                               onTap: () {
@@ -646,19 +654,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Stack(
                                   children: [
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch, // 👈 التمدد بكامل العرض
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
                                       children: [
-                                        // 🖼️ مساحة الصورة (تأخذ 65% من الكارت)
+                                        // 🖼️ مساحة الصورة
                                         Expanded(
                                           flex: 65,
                                           child: ClipRRect(
                                             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                            child: product.imageUrl.isNotEmpty
-                                                ? Image.network(product.imageUrl, fit: BoxFit.cover)
+                                            child: displayImage.isNotEmpty
+                                                ? Image.network(
+                                              displayImage,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 40, color: Colors.grey)),
+                                            )
                                                 : Container(color: Colors.grey.shade200, child: const Icon(Icons.image, size: 40, color: Colors.grey)),
                                           ),
                                         ),
-                                        // 📝 مساحة النص والسعر (تأخذ 35% من الكارت)
+                                        // 📝 مساحة النص والسعر
                                         Expanded(
                                           flex: 35,
                                           child: Padding(
@@ -671,7 +683,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 children: [
                                                   Text(
                                                       product.name,
-                                                      maxLines: 2, // 👈 سطرين للاسم حتى لا يأخذ مساحة كبيرة
+                                                      maxLines: 2,
                                                       overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(fontWeight: FontWeight.bold, color: primaryNavy, fontFamily: 'Cairo', fontSize: 12, height: 1.2)
                                                   ),
