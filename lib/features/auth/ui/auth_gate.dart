@@ -62,23 +62,23 @@ class _AuthGateState extends State<AuthGate> {
           final data = doc.data();
           final String role = data?['role'] ?? 'customer';
 
-          // 👈 التعديل المعماري: الأدمين بيتم توجيهه للمتجر الرئيسي زي العميل العادي
+          // 👈 التعديل تم هنا: توجيه الجميع لـ mainLayout بدلاً من home
           if (role == 'admin') {
-            context.go(Routes.home);
+            context.go(Routes.mainLayout);
           } else if (role == 'accountant') {
             context.go(Routes.adminOrders);
           } else if (role == 'warehouse') {
-            context.go(Routes.home);
+            context.go(Routes.mainLayout);
           } else {
-            context.go(Routes.home);
+            context.go(Routes.mainLayout); // 👈 للعميل العادي أيضاً
           }
         } else {
-          context.go(Routes.home);
+          context.go(Routes.mainLayout); // 👈 في حالة عدم وجود دور محدد
         }
       }
     } catch (e) {
       debugPrint("Firestore Error: $e");
-      if (mounted) context.go(Routes.home);
+      if (mounted) context.go(Routes.mainLayout); // 👈 توجيه احتياطي عند حدوث خطأ
     }
   }
 
