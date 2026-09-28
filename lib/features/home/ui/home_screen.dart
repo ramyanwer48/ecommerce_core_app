@@ -330,14 +330,28 @@ class _HomeScreenState extends State<HomeScreen> {
           child: const Icon(Icons.support_agent, color: Colors.white, size: 28),
         ),
 
-        body: BlocListener<FavoritesCubit, FavoritesState>(
-          listener: (context, state) {
-            if (state is FavoritesError) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.error), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
-              );
-            }
-          },
+        // 👈 ترقية الـ Listener ليصبح MultiBlocListener ليلتقط أخطاء السلة والمفضلة معاً
+        body: MultiBlocListener(
+          listeners: [
+            BlocListener<FavoritesCubit, FavoritesState>(
+              listener: (context, state) {
+                if (state is FavoritesError) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.error, style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
+                  );
+                }
+              },
+            ),
+            BlocListener<CartCubit, CartState>(
+              listener: (context, state) {
+                if (state is CartError) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.error, style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
+                  );
+                }
+              },
+            ),
+          ],
           child: Column(
             children: [
               Padding(
@@ -633,7 +647,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             final product = products.length > index ? products[index] : null;
                             if (product == null) return const SizedBox.shrink();
 
-                            // 👇 التعديل: استخراج الصورة الأولى من المصفوفة، أو استخدام القديمة
                             String displayImage = '';
                             if (product.images.isNotEmpty) {
                               displayImage = product.images.first;
@@ -656,7 +669,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.stretch,
                                       children: [
-                                        // 🖼️ مساحة الصورة
                                         Expanded(
                                           flex: 65,
                                           child: ClipRRect(
@@ -670,7 +682,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 : Container(color: Colors.grey.shade200, child: const Icon(Icons.image, size: 40, color: Colors.grey)),
                                           ),
                                         ),
-                                        // 📝 مساحة النص والسعر
                                         Expanded(
                                           flex: 35,
                                           child: Padding(
@@ -714,6 +725,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                               onPressed: () {
                                                 HapticFeedback.vibrate();
                                                 context.read<FavoritesCubit>().toggleFavorite(product);
+
+                                                // 👈 التنبيه المفقود تمت إضافته هنا لتفاعل فوري مع المستخدم
+                                                ScaffoldMessenger.of(context).clearSnackBars();
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                        isFavorite ? 'تم الحذف من المفضلة 💔' : 'تمت الإضافة للمفضلة ❤️',
+                                                        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)
+                                                    ),
+                                                    backgroundColor: isFavorite ? Colors.red.shade400 : Colors.green.shade600,
+                                                    duration: const Duration(seconds: 1),
+                                                    behavior: SnackBarBehavior.floating,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  ),
+                                                );
                                               },
                                             ),
                                           );

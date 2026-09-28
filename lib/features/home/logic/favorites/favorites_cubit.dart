@@ -95,7 +95,9 @@ class FavoritesCubit extends Cubit<FavoritesState> {
       if (docSnapshot.exists) {
         await docRef.delete();
       } else {
-        final imageUrl = product.images.isNotEmpty ? product.images.first : product.imageUrl;
+        final imageUrl = (product.images != null && product.images!.isNotEmpty)
+            ? product.images!.first
+            : product.imageUrl;
         final favoriteItem = FavoriteModel(
           productId: product.id,
           name: product.name,
