@@ -42,7 +42,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       }
       if (mounted) {
         Navigator.pop(context); // إغلاق التحميل
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم الحذف بنجاح!', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحذف بنجاح!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
@@ -52,7 +52,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     }
   }
 
-  // 🖼️ شاشة العرض الكاملة وإدارة الصور (Gallery & Delete)
+  // 🖼 شاشة العرض الكاملة وإدارة الصور (Gallery & Delete)
   void _openFullGalleryAndManage(BuildContext context, String docId, String productName, List<String> currentImages) {
     Set<String> selectedForDeletion = {};
 
@@ -87,7 +87,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   final img = currentImages[index];
                   final isSelected = selectedForDeletion.contains(img);
                   return GestureDetector(
-                    // 👉 اختيار/إلغاء اختيار بضغطة عادية أو مطولة
                     onTap: () {
                       if (selectedForDeletion.isNotEmpty) {
                         setStateSB(() { isSelected ? selectedForDeletion.remove(img) : selectedForDeletion.add(img); });
@@ -176,7 +175,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     showDialog(context: context, barrierDismissible: false, builder: (context) => AlertDialog(content: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(color: appSecondaryColor), const SizedBox(height: 16), Text(msg, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))])));
   }
 
-  // القائمة السفلية للإضافة
+  // القائمة السفلية للصور
   void _showImageUpdateOptions(BuildContext context, String docId, String productName) {
     showModalBottomSheet(
       context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -191,6 +190,155 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             ListTile(leading: const Icon(Icons.photo_library, color: Colors.blue, size: 30), title: const Text('اختيار من المعرض 🖼️', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), onTap: () { Navigator.pop(ctx); _pickAndUploadImages(ImageSource.gallery, docId); }),
             ListTile(leading: const Icon(Icons.camera_alt, color: Colors.teal, size: 30), title: const Text('التقاط كاميرا 📸', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), onTap: () { Navigator.pop(ctx); _pickAndUploadImages(ImageSource.camera, docId); }),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ✏️ الانتقال لشاشة التعديل وإرسال البيانات
+  void _navigateToEditProduct(BuildContext context, String docId, Map<String, dynamic> productData) {
+    // نرسل الـ ID والداتا لـ Routing لتقوم شاشة AddProduct بفرشها لاحقاً
+    Map<String, dynamic> extraData = {'id': docId, ...productData};
+    context.push(Routes.addProduct, extra: extraData);
+  }
+
+  // ➕ نافذة إضافة دفعة جديدة (تصميم انسيابي حديث بدون Dropdowns)
+  // ➕ نافذة إضافة دفعة جديدة (تصميم انسيابي حديث بدون Dropdowns)
+  void _showAddBatchModal(BuildContext context, String docId, String productName) {
+    final TextEditingController quantityController = TextEditingController();
+    final TextEditingController costPriceController = TextEditingController();
+    final TextEditingController supplierController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        // 👈 هذا هو السطر السحري الذي يمنع خطأ الكيبورد (SingleChildScrollView)
+        child: SingleChildScrollView(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // مؤشر السحب (Drag Handle)
+                Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+                const SizedBox(height: 20),
+
+                Text('إضافة دفعة: $productName', style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: appPrimaryColor)),
+                const SizedBox(height: 24),
+
+                // حقل الكمية
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    labelText: 'الكمية المضافة',
+                    labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    prefixIcon: const Icon(Icons.add_shopping_cart, color: Colors.teal),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // حقل السعر
+                TextField(
+                  controller: costPriceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    labelText: 'سعر الشراء (للقطعة)',
+                    labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    prefixIcon: const Icon(Icons.attach_money, color: Colors.orange),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // حقل المورد (إدخال نصي حر لتجنب القوائم المنسدلة المزعجة)
+                TextField(
+                  controller: supplierController,
+                  keyboardType: TextInputType.text,
+                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    labelText: 'اسم المورد (اختياري)',
+                    labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    prefixIcon: const Icon(Icons.local_shipping_outlined, color: Colors.blueAccent),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // زر الحفظ الأنيق
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  onPressed: () async {
+                    final int? addedQty = int.tryParse(quantityController.text.trim());
+                    final double? costPrice = double.tryParse(costPriceController.text.trim());
+                    final String supplierName = supplierController.text.trim();
+
+                    if (addedQty != null && addedQty > 0 && costPrice != null && costPrice >= 0) {
+                      Navigator.pop(ctx);
+                      _showLoadingDialog('جاري تسجيل الدفعة...');
+
+                      try {
+                        final newBatch = {
+                          'batchId': 'batch_manual_${DateTime.now().millisecondsSinceEpoch}',
+                          'costPrice': costPrice,
+                          'quantity': addedQty,
+                          'supplier': supplierName.isNotEmpty ? supplierName : 'غير محدد',
+                          'dateAdded': Timestamp.now(),
+                        };
+
+                        await _firestore.collection('products').doc(docId).update({
+                          'stockQuantity': FieldValue.increment(addedQty),
+                          'batches': FieldValue.arrayUnion([newBatch])
+                        });
+
+                        if (mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تم تسجيل الدفعة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.teal)
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('حدث خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red)
+                          );
+                        }
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('يرجى إدخال الكمية والسعر بشكل صحيح', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.redAccent)
+                      );
+                    }
+                  },
+                  child: const Text('حفظ الدفعة', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -272,7 +420,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                       final price = data['price'] ?? 0.0;
                       final int stock = data['stockQuantity'] ?? 0;
 
-                      // تجميع كل الصور
                       List<String> productImages = [];
                       if (data['imageUrl'] != null && data['imageUrl'].toString().isNotEmpty) productImages.add(data['imageUrl'].toString());
                       if (data['imageUrls'] != null) {
@@ -287,7 +434,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 🖼️ كارت الصورة الأنيق
                               GestureDetector(
                                 onTap: () => _openFullGalleryAndManage(context, doc.id, name, productImages),
                                 child: Stack(
@@ -331,9 +477,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                                           Text('رصيد: $stock', style: TextStyle(color: stock > 0 ? Colors.green.shade700 : Colors.red, fontWeight: FontWeight.bold, fontSize: 11, fontFamily: 'Cairo')),
                                           const SizedBox(width: 8),
 
-                                          _buildCompactActionBtn(Icons.add_box, Colors.teal, 'دفعة', isActive ? () => _showAddBatchModal(context, doc.id, name) : null),
+                                          _buildCompactActionBtn(Icons.add_box, Colors.teal, 'إضافة دفعة', isActive ? () => _showAddBatchModal(context, doc.id, name) : null),
                                           const SizedBox(width: 4),
-                                          _buildCompactActionBtn(Icons.edit_note, Colors.blue, 'السعر', isActive ? () => _showEditPriceDialog(context, doc.id, price.toString()) : null),
+                                          _buildCompactActionBtn(Icons.edit, Colors.blue, 'تعديل', isActive ? () => _navigateToEditProduct(context, doc.id, data) : null),
                                           const SizedBox(width: 4),
                                           _buildCompactActionBtn(isActive ? Icons.visibility_off : Icons.visibility, isActive ? Colors.red : Colors.green, isActive ? 'إخفاء' : 'نشر', () { _firestore.collection('products').doc(doc.id).update({'isActive': !isActive}); }),
                                         ],
@@ -369,12 +515,4 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
   }
 
   Widget _buildEmptyState() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search_off_rounded, size: 60, color: Colors.grey.shade400), const SizedBox(height: 16), const Text('لا توجد منتجات مطابقة', style: TextStyle(fontSize: 15, color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold))]));
-
-  void _showAddBatchModal(BuildContext context, String docId, String productName) {
-    // [كود الدفعة كما هو عندك]
-  }
-
-  void _showEditPriceDialog(BuildContext context, String docId, String currentPrice) {
-    // [كود تعديل السعر كما هو عندك]
-  }
 }

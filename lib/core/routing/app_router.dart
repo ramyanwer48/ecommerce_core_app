@@ -133,10 +133,17 @@ class AppRouter {
 
       GoRoute(
         path: Routes.addProduct,
-        builder: (context, state) => BlocProvider(
-          create: (context) => AddProductCubit(AdminRepo()),
-          child: const AddProductScreen(),
-        ),
+        builder: (context, state) {
+          // 1. استقبال البيانات المبعوثة من زر التعديل
+          final productData = state.extra as Map<String, dynamic>?;
+
+          return BlocProvider(
+            // 2. 👈 ضع هنا الاستدعاء القديم الخاص بك كما كان بالضبط
+            create: (context) => AddProductCubit(AdminRepo()),
+            // 3. تمرير البيانات للشاشة المزدوجة
+            child: AddProductScreen(productData: productData),
+          );
+        },
       ),
       GoRoute(
         path: Routes.adminOrders,

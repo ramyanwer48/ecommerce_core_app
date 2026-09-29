@@ -5,12 +5,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../logic/add_product_cubit.dart';
 import '../logic/add_product_state.dart';
 import 'widgets/google_image_picker_dialog.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  // 👈 استقبال بيانات المنتج في حالة التعديل
+  final Map<String, dynamic>? productData;
+
+  const AddProductScreen({super.key, this.productData});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -34,17 +39,51 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   bool _inStock = true;
   bool _isDownloadingGoogleImage = false;
+  bool _isUpdating = false; // 👈 حالة التحميل أثناء التعديل المباشر
 
   File? _selectedImage;
   List<File> _extraImages = [];
 
+  // 👈 متغيرات لحفظ روابط الصور القديمة القادمة من الفايربيز
+  String? _existingMainImageUrl;
+  List<String> _existingExtraImageUrls = [];
+
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    // 👈 إذا تم تمرير داتا (وضع التعديل)، قم بتعبئة الخانات
+    if (widget.productData != null) {
+      final data = widget.productData!;
+      _nameController.text = data['name'] ?? '';
+      _priceController.text = (data['price'] ?? 0).toString();
+      _costPriceController.text = (data['costPrice'] ?? 0).toString();
+      _stockController.text = (data['stockQuantity'] ?? 0).toString();
+      _descController.text = data['description'] ?? '';
+      _variationsController.text = (data['variations'] as List<dynamic>?)?.join(', ') ?? '';
+
+      _inStock = data['isActive'] ?? data['inStock'] ?? true;
+      _selectedMainCategory = data['category'];
+      _selectedSubCategory = data['subCategory'];
+
+      _existingMainImageUrl = data['imageUrl'];
+      if (data['imageUrls'] != null) {
+        _existingExtraImageUrls = List<String>.from(data['imageUrls']);
+        // إزالة الصورة الرئيسية من قائمة الصور الإضافية لمنع التكرار
+        if (_existingMainImageUrl != null) {
+          _existingExtraImageUrls.remove(_existingMainImageUrl);
+        }
+      }
+    }
+  }
 
   Future<void> _pickMainImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       setState(() {
         _selectedImage = File(image.path);
+        _existingMainImageUrl = null; // إزالة الصورة القديمة إذا اختار جديدة
       });
     }
   }
@@ -60,7 +99,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // 🌐 دالة جلب الصور المتعددة من جوجل وتحويلها لملفات
+  // 🌐 دالة جلب الصور المتعددة من جوجل
   void _onSearchImagePressed() async {
     String productName = _nameController.text.trim();
 
@@ -71,7 +110,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    // 👈 تعديل الاستقبال ليكون قائمة من الروابط
     final selectedImageUrls = await showDialog<List<String>>(
       context: context,
       barrierDismissible: false,
@@ -90,11 +128,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
           await file.writeAsBytes(response.bodyBytes);
 
           setState(() {
-            if (i == 0 && _selectedImage == null) {
-              // اجعل أول صورة هي الرئيسية إذا لم تكن هناك صورة رئيسية
+            if (i == 0 && _selectedImage == null && _existingMainImageUrl == null) {
               _selectedImage = file;
             } else {
-              // أضف الباقي لمعرض الصور الإضافية
               _extraImages.add(file);
             }
           });
@@ -118,6 +154,76 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
+  // ✏️ دالة تحديث المنتج المباشرة للفايربيز
+  Future<void> _updateProductDirectly() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedImage == null && (_existingMainImageUrl == null || _existingMainImageUrl!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      return;
+    }
+    if (_selectedMainCategory == null || _selectedSubCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إكمال اختيار التصنيفات بالكامل', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      return;
+    }
+
+    setState(() => _isUpdating = true);
+
+    try {
+      String? finalMainImageUrl = _existingMainImageUrl;
+      List<String> finalExtraUrls = List.from(_existingExtraImageUrls);
+
+      // رفع الصورة الرئيسية الجديدة إن وجدت
+      if (_selectedImage != null) {
+        final ref = FirebaseStorage.instance.ref().child('products_images/${DateTime.now().millisecondsSinceEpoch}_main.jpg');
+        await ref.putFile(_selectedImage!);
+        finalMainImageUrl = await ref.getDownloadURL();
+      }
+
+      // رفع الصور الإضافية الجديدة
+      for (var file in _extraImages) {
+        final ref = FirebaseStorage.instance.ref().child('products_images/${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}');
+        await ref.putFile(file);
+        final url = await ref.getDownloadURL();
+        finalExtraUrls.add(url);
+      }
+
+      List<String> variationsList = _variationsController.text.isNotEmpty
+          ? _variationsController.text.split(',').map((e) => e.trim()).toList()
+          : [];
+
+      List<String> allImages = [];
+      if (finalMainImageUrl != null) allImages.add(finalMainImageUrl);
+      allImages.addAll(finalExtraUrls);
+
+      // تحديث المستند في الفايربيز
+      await FirebaseFirestore.instance.collection('products').doc(widget.productData!['id']).update({
+        'name': _nameController.text.trim(),
+        'price': double.tryParse(_priceController.text) ?? 0,
+        'costPrice': double.tryParse(_costPriceController.text) ?? 0,
+        'stockQuantity': int.tryParse(_stockController.text) ?? 0,
+        'category': _selectedMainCategory,
+        'subCategory': _selectedSubCategory,
+        'description': _descController.text.trim(),
+        'variations': variationsList,
+        'isActive': _inStock,
+        'inStock': _inStock,
+        'imageUrl': finalMainImageUrl,
+        'imageUrls': allImages,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح! ✅', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+        context.pop(); // العودة لشاشة إدارة المنتجات
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء التحديث: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -131,19 +237,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // تحديد هل نحن في وضع التعديل أم الإضافة
+    final bool isEditMode = widget.productData != null;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('إضافة منتج جديد', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18)),
+          title: Text(isEditMode ? 'تعديل بيانات المنتج' : 'إضافة منتج جديد', style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18)),
           backgroundColor: appPrimaryColor,
           foregroundColor: Colors.white,
           centerTitle: true,
         ),
         body: BlocConsumer<AddProductCubit, AddProductState>(
           listener: (context, state) {
-            if (state is AddProductSuccess) {
+            if (state is AddProductSuccess && !isEditMode) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('تم رفع الصور ونشر المنتج بنجاح! 🚀', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
               );
@@ -193,7 +302,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ],
                     )
                         : _selectedImage != null
-                        ? Stack(
+                        ? Stack( // 👈 عرض الصورة المحلية الجديدة
                       fit: StackFit.expand,
                       children: [
                         ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_selectedImage!, fit: BoxFit.cover)),
@@ -202,6 +311,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           child: CircleAvatar(
                             backgroundColor: Colors.white.withAlpha(200),
                             child: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _selectedImage = null)),
+                          ),
+                        ),
+                      ],
+                    )
+                        : (_existingMainImageUrl != null && _existingMainImageUrl!.isNotEmpty)
+                        ? Stack( // 👈 عرض الصورة القديمة من السيرفر
+                      fit: StackFit.expand,
+                      children: [
+                        ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(_existingMainImageUrl!, fit: BoxFit.cover)),
+                        Positioned(
+                          top: 8, left: 8,
+                          child: CircleAvatar(
+                            backgroundColor: Colors.white.withAlpha(200),
+                            child: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _existingMainImageUrl = null)),
                           ),
                         ),
                       ],
@@ -250,36 +373,55 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       TextButton.icon(
                         onPressed: _pickExtraImages,
                         icon: Icon(Icons.add_photo_alternate, color: appPrimaryColor),
-                        label: Text('اختر (${_extraImages.length}) صور', style: TextStyle(color: appPrimaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        label: Text('اختر صور إضافية', style: TextStyle(color: appPrimaryColor, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  if (_extraImages.isNotEmpty)
+                  if (_existingExtraImageUrls.isNotEmpty || _extraImages.isNotEmpty)
                     SizedBox(
                       height: 90,
-                      child: ListView.builder(
+                      child: ListView(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _extraImages.length,
-                        itemBuilder: (context, index) {
-                          return Container(
+                        children: [
+                          // 👈 صور السيرفر القديمة
+                          ..._existingExtraImageUrls.map((url) => Container(
                             margin: const EdgeInsets.only(left: 8),
                             width: 90,
                             decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(_extraImages[index], fit: BoxFit.cover)),
+                                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(url, fit: BoxFit.cover)),
                                 Positioned(
                                   top: 4, left: 4,
                                   child: GestureDetector(
-                                    onTap: () { setState(() { _extraImages.removeAt(index); }); },
+                                    onTap: () => setState(() => _existingExtraImageUrls.remove(url)),
                                     child: const CircleAvatar(radius: 12, backgroundColor: Colors.white, child: Icon(Icons.close, size: 16, color: Colors.red)),
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        },
+                          )),
+                          // 👈 الصور المحلية الجديدة
+                          ..._extraImages.map((file) => Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            width: 90,
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(file, fit: BoxFit.cover)),
+                                Positioned(
+                                  top: 4, left: 4,
+                                  child: GestureDetector(
+                                    onTap: () => setState(() => _extraImages.remove(file)),
+                                    child: const CircleAvatar(radius: 12, backgroundColor: Colors.white, child: Icon(Icons.close, size: 16, color: Colors.red)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                        ],
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -327,7 +469,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         final docs = snapshot.data!.docs;
                         List<String> mainCategories = docs.map((doc) => doc.id).toList();
 
-                        if (_selectedMainCategory != null && !mainCategories.contains(_selectedMainCategory)) {
+                        // 👈 معالجة ذكية لتعبئة القسم الفرعي تلقائياً في وضع التعديل
+                        if (_selectedMainCategory != null && mainCategories.contains(_selectedMainCategory) && _currentSubCategories.isEmpty) {
+                          final docData = docs.firstWhere((d) => d.id == _selectedMainCategory).data() as Map<String, dynamic>;
+                          _currentSubCategories = List<String>.from(docData['subCategories'] ?? ['General']);
+                        } else if (_selectedMainCategory != null && !mainCategories.contains(_selectedMainCategory)) {
                           _selectedMainCategory = null;
                           _selectedSubCategory = null;
                         }
@@ -379,45 +525,50 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
-                    title: const Text('متوفر في المخزن', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    title: const Text('متوفر في المخزن / مرئي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                     value: _inStock,
                     activeColor: appSecondaryColor,
                     onChanged: (val) => setState(() => _inStock = val),
                   ),
                   const SizedBox(height: 24),
 
-                  state is AddProductLoading
+                  // 👈 زر مزدوج: إذا كنا في التعديل يقوم بالتحديث، وإلا يضيف منتج جديد
+                  (state is AddProductLoading || _isUpdating)
                       ? Center(child: CircularProgressIndicator(color: appSecondaryColor))
                       : ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: appPrimaryColor, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     onPressed: () {
-                      if (_selectedImage == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
-                        return;
-                      }
-                      if (_selectedMainCategory == null || _selectedSubCategory == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إكمال اختيار التصنيفات بالكامل', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
-                        return;
-                      }
-                      if (_formKey.currentState!.validate()) {
-                        List<String> variationsList = _variationsController.text.isNotEmpty ? _variationsController.text.split(',').map((e) => e.trim()).toList() : [];
+                      if (isEditMode) {
+                        _updateProductDirectly(); // التحديث المباشر للمنتج الحالي
+                      } else {
+                        if (_selectedImage == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                          return;
+                        }
+                        if (_selectedMainCategory == null || _selectedSubCategory == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إكمال اختيار التصنيفات بالكامل', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                          return;
+                        }
+                        if (_formKey.currentState!.validate()) {
+                          List<String> variationsList = _variationsController.text.isNotEmpty ? _variationsController.text.split(',').map((e) => e.trim()).toList() : [];
 
-                        context.read<AddProductCubit>().addProductToFirestore(
-                          name: _nameController.text,
-                          price: double.parse(_priceController.text),
-                          costPrice: double.parse(_costPriceController.text),
-                          category: _selectedMainCategory!,
-                          subCategory: _selectedSubCategory!,
-                          description: _descController.text,
-                          mainImageFile: _selectedImage!,
-                          extraImageFiles: _extraImages,
-                          variations: variationsList,
-                          inStock: _inStock,
-                          stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
-                        );
+                          context.read<AddProductCubit>().addProductToFirestore(
+                            name: _nameController.text,
+                            price: double.parse(_priceController.text),
+                            costPrice: double.parse(_costPriceController.text),
+                            category: _selectedMainCategory!,
+                            subCategory: _selectedSubCategory!,
+                            description: _descController.text,
+                            mainImageFile: _selectedImage!,
+                            extraImageFiles: _extraImages,
+                            variations: variationsList,
+                            inStock: _inStock,
+                            stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
+                          );
+                        }
                       }
                     },
-                    child: const Text('نشر المنتج', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                    child: Text(isEditMode ? 'حفظ التعديلات' : 'نشر المنتج', style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                   ),
                 ],
               ),
