@@ -325,6 +325,9 @@ class AdminOrdersScreen extends StatelessWidget {
   void _showStatusModal(BuildContext context, OrderModel order, String currentStatus) {
     final List<String> statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
+    // 👈 الحل: أخذ مرجع للـ Cubit قبل فتح النافذة المنبثقة
+    final adminOrdersCubit = context.read<AdminOrdersCubit>();
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -360,9 +363,10 @@ class AdminOrdersScreen extends StatelessWidget {
                       style: TextStyle(color: config['color'], fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
                     ),
                     onTap: () {
-                      Navigator.pop(bottomSheetContext);
+                      Navigator.pop(bottomSheetContext); // إغلاق النافذة
                       if (!isSelected) {
-                        context.read<AdminOrdersCubit>().updateStatus(order.id, order.userId, status);
+                        // 👈 استخدام المرجع المحفوظ للـ Cubit بدلاً من البحث عنه في الـ Context
+                        adminOrdersCubit.updateStatus(order, status);
                       }
                     },
                   );

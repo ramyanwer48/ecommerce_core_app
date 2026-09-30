@@ -64,7 +64,7 @@ class AdminDashboardScreen extends StatelessWidget {
         ),
 
         // -------------------------------------------------------------
-        // الـ AppBar (تم إضافة زرار الـ Drawer الافتراضي)
+        // الـ AppBar
         // -------------------------------------------------------------
         appBar: AppBar(
           title: const Text(
@@ -93,7 +93,7 @@ class AdminDashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ==========================================
-              // 1. شريط الأوردرات الحي (بدون سكرول - Fit to screen)
+              // 1. شريط الأوردرات الحي (Live Pipeline)
               // ==========================================
               const Text(
                 'متابعة التشغيل الحي (Live Pipeline)',
@@ -145,7 +145,7 @@ class AdminDashboardScreen extends StatelessWidget {
                           title: 'إدخال فاتورة المشتريات بالذكاء الاصطناعي',
                           icon: Icons.auto_awesome,
                           color: Colors.deepPurple,
-                          onTap: () => context.push(Routes.aiPurchase), // 👈 تم الربط هنا
+                          onTap: () => context.push(Routes.aiPurchase),
                         ),
                         _SubMenuItem(
                           title: 'إدخال فاتورة المشتريات (يدوي)',
@@ -197,6 +197,7 @@ class AdminDashboardScreen extends StatelessWidget {
                       HapticFeedback.lightImpact();
                       _showSubMenu(context, title: 'المبيعات والطلبات', items: [
                         _SubMenuItem(title: 'طلبات الأونلاين (العملاء)', icon: Icons.shopping_bag, color: Colors.green, onTap: () => context.push(Routes.adminOrders)),
+                        // يمكنك لاحقاً حذف هذا إذا لم تعد بحاجة للإصدار اليدوي
                         _SubMenuItem(title: 'إصدار فاتورة بيع مباشر', icon: Icons.receipt_long, color: Colors.teal, onTap: () => context.push(Routes.createInvoice)),
                       ]);
                     },
@@ -211,6 +212,9 @@ class AdminDashboardScreen extends StatelessWidget {
                       context.push(Routes.partners);
                     },
                   ),
+                  // ==========================================
+                  // 👈 كارت الخزينة والماليات (بالـ GoRouter)
+                  // ==========================================
                   _buildMacroCard(
                     context,
                     title: 'الخزينة والماليات',
@@ -218,6 +222,23 @@ class AdminDashboardScreen extends StatelessWidget {
                     color: Colors.amber.shade700,
                     onTap: () {
                       HapticFeedback.lightImpact();
+                      _showSubMenu(context, title: 'الخزينة والماليات', items: [
+                        _SubMenuItem(
+                          title: 'سجل الفواتير (مبيعات / مشتريات)',
+                          icon: Icons.receipt,
+                          color: Colors.indigo,
+                          onTap: () {
+                            // 👈 التعديل هنا: استخدام GoRouter بشكل مباشر
+                            context.push(Routes.adminInvoices);
+                          },
+                        ),
+                        _SubMenuItem(
+                          title: 'ملخص الخزينة (قريباً)',
+                          icon: Icons.monetization_on,
+                          color: Colors.amber,
+                          onTap: () {},
+                        ),
+                      ]);
                     },
                   ),
                 ],
@@ -307,7 +328,7 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   // -----------------------------------------------------------------
-  // دالة القائمة المنبثقة (تم تعديل الخطوط لتلائم سطر واحد)
+  // دالة القائمة المنبثقة
   // -----------------------------------------------------------------
   void _showSubMenu(BuildContext context, {required String title, required List<_SubMenuItem> items}) {
     showModalBottomSheet(
@@ -330,14 +351,13 @@ class AdminDashboardScreen extends StatelessWidget {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                   leading: CircleAvatar(
                     backgroundColor: item.color.withOpacity(0.1),
-                    child: Icon(item.icon, color: item.color, size: 20), // 👈 تصغير الأيقونة قليلاً
+                    child: Icon(item.icon, color: item.color, size: 20),
                   ),
-                  // 👈 تصغير الخط هنا ليصبح 13 لضمان بقائه في سطر واحد
                   title: Text(item.title, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                   onTap: () {
-                    context.pop();
-                    item.onTap();
+                    context.pop(); // اغلق الـ BottomSheet أولاً
+                    item.onTap(); // ثم نفذ أمر الانتقال
                   },
                 )),
                 const SizedBox(height: 16),

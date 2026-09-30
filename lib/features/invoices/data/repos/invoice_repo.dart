@@ -52,4 +52,20 @@ class InvoiceRepo {
       throw Exception('فشل في حفظ الفاتورة وتحديث المخزون: $e');
     }
   }
+
+  // ==========================================
+  // 👈 الإضافة الجديدة: دالة جلب جميع الفواتير
+  // ==========================================
+  Future<List<InvoiceModel>> getAllInvoices() async {
+    try {
+      final snapshot = await _firestore
+          .collection('invoices')
+          .orderBy('date', descending: true) // من الأحدث للأقدم
+          .get();
+
+      return snapshot.docs.map((doc) => InvoiceModel.fromMap(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw Exception('فشل في جلب الفواتير: $e');
+    }
+  }
 }

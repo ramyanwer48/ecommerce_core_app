@@ -10,10 +10,14 @@ import '../../features/cart/logic/cart_cubit.dart';
 import '../../features/home/logic/reviews/reviews_cubit.dart';
 import '../../features/home/logic/favorites/favorites_cubit.dart';
 
-// 👈 استيراد ملفات الأدمن وإدارة الطلبات من مسارها الصحيح والوحيد
+// استيراد ملفات الأدمن وإدارة الطلبات
 import '../../features/admin/data/repos/admin_repo.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
+
+// 👈 استيراد ملفات الفواتير
+import '../../features/invoices/data/repos/invoice_repo.dart';
+import '../../features/invoices/logic/invoice_cubit.dart'; // 👈 تمت إضافة استيراد الكيوبيت هنا
 
 final GetIt getIt = GetIt.instance;
 
@@ -40,8 +44,17 @@ Future<void> setupGetIt() async {
   getIt.registerLazySingleton<AdminRepo>(() => AdminRepo());
   getIt.registerLazySingleton<AdminOrdersRepo>(() => AdminOrdersRepo());
 
-  // 👈 حقن الاثنين معاً بالترتيب الصحيح للـ AdminOrdersCubit
+  // --- 🧾 قسم الفواتير ---
+  getIt.registerLazySingleton<InvoiceRepo>(() => InvoiceRepo());
+  // 👈 الإضافة الجديدة هنا: تسجيل InvoiceCubit ليتمكن التطبيق من إيجاده
+  getIt.registerFactory<InvoiceCubit>(() => InvoiceCubit(getIt<InvoiceRepo>()));
+
+  // حقن AdminOrdersCubit
   getIt.registerFactory<AdminOrdersCubit>(
-        () => AdminOrdersCubit(getIt<AdminOrdersRepo>(), getIt<AdminRepo>()),
+        () => AdminOrdersCubit(
+      getIt<AdminOrdersRepo>(),
+      getIt<AdminRepo>(),
+      getIt<InvoiceRepo>(),
+    ),
   );
 }

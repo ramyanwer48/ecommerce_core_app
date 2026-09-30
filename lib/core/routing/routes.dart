@@ -27,4 +27,5 @@ class Routes {
   static const String aiPurchase = '/ai-purchase';
   static const String invoiceReview = '/invoice-review';
   static const String mainLayout = '/mainLayout';
+  static const String adminInvoices = '/adminInvoices';
 }

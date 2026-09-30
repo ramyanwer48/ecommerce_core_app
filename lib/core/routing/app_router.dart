@@ -64,7 +64,8 @@ import '../../features/invoices/logic/invoice_cubit.dart';
 import '../../features/admin/ui/admin_banner_screen.dart'; // 👈 تأكد إن المسار ده متطابق مع مكان الملف عندك
 import '../../features/purchases/ui/ai_purchase_screen.dart';
 import '../../features/purchases/ui/invoice_review_screen.dart';
-
+import '../../features/admin/ui/admin_invoices_screen.dart';
+import '../../features/invoices/logic/invoice_cubit.dart';
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -235,6 +236,13 @@ class AppRouter {
             ),
           ],
           child: const MainLayoutScreen(),
+        ),
+      ),
+      GoRoute(
+        path: Routes.adminInvoices,
+        builder: (context, state) => BlocProvider(
+          create: (context) => getIt<InvoiceCubit>(), // 👈 حقن الكيوبيت هنا
+          child: const AdminInvoicesScreen(),
         ),
       ),
     ],
