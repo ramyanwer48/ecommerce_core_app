@@ -39,6 +39,11 @@ class ProductModel {
   final String name;
   final String description;
   final double price;
+
+  // 👈 الحقول الجديدة المطلوبة للتحكم الفعلي
+  final double oldPrice;
+  final int salesCount;
+
   final String imageUrl;
   final List<String> images;
   final List<String> variations;
@@ -58,14 +63,14 @@ class ProductModel {
   }
 
   ProductModel({
-    required this.id, required this.name, required this.description, required this.price, required this.imageUrl, required this.images, required this.variations, required this.category,
+    required this.id, required this.name, required this.description, required this.price,
+    this.oldPrice = 0.0, this.salesCount = 0, // 👈 تهيئة القيم الافتراضية
+    required this.imageUrl, required this.images, required this.variations, required this.category,
     this.subCategory = 'Uncategorized', this.barcodes = const [], this.unitOfMeasure = 'Piece', this.storageLocation = 'Main Storage', this.inStock = true, this.isActive = true, required this.batches,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json, String documentId) {
     List<String> parsedImages = [];
-
-    // 👇 التعديل الجذري: إفهام الموديل أن المصفوفة في فايرستور اسمها imageUrls
     if (json['imageUrls'] != null) {
       parsedImages = List<String>.from(json['imageUrls']);
     } else if (json['images'] != null) {
@@ -84,33 +89,40 @@ class ProductModel {
     if (json['batches'] != null) {
       parsedBatches = (json['batches'] as List).map((b) => ProductBatch.fromJson(b as Map<String, dynamic>)).toList();
       parsedBatches.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
-    } else {
-      final int oldStock = json['stockQuantity'] != null ? (json['stockQuantity'] as num).toInt() : 0;
-      final double oldPrice = (json['price'] ?? json['currentSalePrice'] ?? 0.0).toDouble();
-      if (oldStock > 0 || oldPrice > 0) {
-        parsedBatches.add(ProductBatch(batchId: 'legacy_batch_$documentId', quantity: oldStock, costPrice: oldPrice * 0.7, dateAdded: DateTime.now().subtract(const Duration(days: 30))));
-      }
     }
 
-    double resolvedPrice = 0.0;
-    if (json['price'] != null) {
-      resolvedPrice = (json['price'] as num).toDouble();
-    } else if (json['currentSalePrice'] != null) {
-      resolvedPrice = (json['currentSalePrice'] as num).toDouble();
-    } else if (parsedBatches.isNotEmpty) {
-      resolvedPrice = parsedBatches.first.costPrice * 1.3;
-    }
+    double resolvedPrice = (json['price'] as num?)?.toDouble() ?? 0.0;
+
+    // 👈 استخراج السعر القديم والمبيعات من قاعدة البيانات
+    double resolvedOldPrice = (json['oldPrice'] as num?)?.toDouble() ?? 0.0;
+    int resolvedSalesCount = (json['salesCount'] as num?)?.toInt() ?? 0;
 
     return ProductModel(
-      id: documentId, name: json['name'] ?? json['title'] ?? '', description: json['description'] ?? '', price: resolvedPrice, imageUrl: json['imageUrl'] ?? '', images: parsedImages, variations: parsedVariations, category: json['category'] ?? 'General', subCategory: json['subCategory'] ?? 'Uncategorized', barcodes: parsedBarcodes, unitOfMeasure: json['unitOfMeasure'] ?? 'Piece', storageLocation: json['storageLocation'] ?? 'Main Storage', inStock: json['inStock'] ?? true, isActive: json['isActive'] ?? true, batches: parsedBatches,
+      id: documentId,
+      name: json['name'] ?? json['title'] ?? '',
+      description: json['description'] ?? '',
+      price: resolvedPrice,
+      oldPrice: resolvedOldPrice, // 👈
+      salesCount: resolvedSalesCount, // 👈
+      imageUrl: json['imageUrl'] ?? '',
+      images: parsedImages,
+      variations: parsedVariations,
+      category: json['category'] ?? 'General',
+      subCategory: json['subCategory'] ?? 'Uncategorized',
+      barcodes: parsedBarcodes,
+      unitOfMeasure: json['unitOfMeasure'] ?? 'Piece',
+      storageLocation: json['storageLocation'] ?? 'Main Storage',
+      inStock: json['inStock'] ?? true,
+      isActive: json['isActive'] ?? true,
+      batches: parsedBatches,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'name': name, 'description': description, 'price': price, 'imageUrl': imageUrl,
-      'imageUrls': images, // 👈 التعديل الثاني: توحيد اسم الحفظ في الداتا بيز
-      'images': images, 'variations': variations, 'category': category, 'subCategory': subCategory, 'barcodes': barcodes, 'unitOfMeasure': unitOfMeasure, 'storageLocation': storageLocation, 'inStock': stockQuantity > 0, 'isActive': isActive, 'stockQuantity': stockQuantity, 'batches': batches.map((b) => b.toJson()).toList(),
+      'name': name, 'description': description, 'price': price,
+      'oldPrice': oldPrice, 'salesCount': salesCount, // 👈 حفظهم في قاعدة البيانات
+      'imageUrl': imageUrl, 'imageUrls': images, 'images': images, 'variations': variations, 'category': category, 'subCategory': subCategory, 'barcodes': barcodes, 'unitOfMeasure': unitOfMeasure, 'storageLocation': storageLocation, 'inStock': stockQuantity > 0, 'isActive': isActive, 'stockQuantity': stockQuantity, 'batches': batches.map((b) => b.toJson()).toList(),
     };
   }
 }

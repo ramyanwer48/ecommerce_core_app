@@ -54,8 +54,8 @@ class AdminDashboardScreen extends StatelessWidget {
                 title: const Text('خروج من لوحة التحكم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.red)),
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  context.pop(); // يغلق القائمة
-                  context.pop(); // يرجع للصفحة الرئيسية
+                  context.pop();
+                  context.pop();
                 },
               ),
               const SizedBox(height: 20),
@@ -118,7 +118,7 @@ class AdminDashboardScreen extends StatelessWidget {
               const SizedBox(height: 30),
 
               // ==========================================
-              // 2. كروت دورة المتجر الأساسية (الـ 6 كروت)
+              // 2. كروت دورة المتجر الأساسية
               // ==========================================
               const Text(
                 'دورة عمل المتجر (الأنظمة المركزية)',
@@ -183,7 +183,8 @@ class AdminDashboardScreen extends StatelessWidget {
                     onTap: () {
                       HapticFeedback.lightImpact();
                       _showSubMenu(context, title: 'واجهة المتجر والعروض', items: [
-                        _SubMenuItem(title: 'إعلان المتجر (البانر)', icon: Icons.campaign, color: Colors.orange, onTap: () => context.push(Routes.adminBanner)),
+                        // 👈 هنا تم تعديل اسم الزر ليكون أوضح للإعلانات المتعددة
+                        _SubMenuItem(title: 'إدارة الإعلانات (5 بانرات)', icon: Icons.view_carousel_rounded, color: Colors.orange, onTap: () => context.push(Routes.adminBanner)),
                         _SubMenuItem(title: 'كوبونات الخصم', icon: Icons.local_offer, color: Colors.pink, onTap: () => context.push(Routes.manageCoupons)),
                       ]);
                     },
@@ -197,7 +198,6 @@ class AdminDashboardScreen extends StatelessWidget {
                       HapticFeedback.lightImpact();
                       _showSubMenu(context, title: 'المبيعات والطلبات', items: [
                         _SubMenuItem(title: 'طلبات الأونلاين (العملاء)', icon: Icons.shopping_bag, color: Colors.green, onTap: () => context.push(Routes.adminOrders)),
-                        // يمكنك لاحقاً حذف هذا إذا لم تعد بحاجة للإصدار اليدوي
                         _SubMenuItem(title: 'إصدار فاتورة بيع مباشر', icon: Icons.receipt_long, color: Colors.teal, onTap: () => context.push(Routes.createInvoice)),
                       ]);
                     },
@@ -212,9 +212,6 @@ class AdminDashboardScreen extends StatelessWidget {
                       context.push(Routes.partners);
                     },
                   ),
-                  // ==========================================
-                  // 👈 كارت الخزينة والماليات (بالـ GoRouter)
-                  // ==========================================
                   _buildMacroCard(
                     context,
                     title: 'الخزينة والماليات',
@@ -227,10 +224,7 @@ class AdminDashboardScreen extends StatelessWidget {
                           title: 'سجل الفواتير (مبيعات / مشتريات)',
                           icon: Icons.receipt,
                           color: Colors.indigo,
-                          onTap: () {
-                            // 👈 التعديل هنا: استخدام GoRouter بشكل مباشر
-                            context.push(Routes.adminInvoices);
-                          },
+                          onTap: () => context.push(Routes.adminInvoices),
                         ),
                         _SubMenuItem(
                           title: 'ملخص الخزينة (قريباً)',
@@ -250,10 +244,6 @@ class AdminDashboardScreen extends StatelessWidget {
       ),
     );
   }
-
-  // -----------------------------------------------------------------
-  // دوال بناء واجهة المستخدم
-  // -----------------------------------------------------------------
 
   Widget _buildPipelineStep(BuildContext context, {required String title, required IconData icon, required Color color, required String count}) {
     return Container(
@@ -327,9 +317,6 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  // -----------------------------------------------------------------
-  // دالة القائمة المنبثقة
-  // -----------------------------------------------------------------
   void _showSubMenu(BuildContext context, {required String title, required List<_SubMenuItem> items}) {
     showModalBottomSheet(
       context: context,
@@ -356,8 +343,8 @@ class AdminDashboardScreen extends StatelessWidget {
                   title: Text(item.title, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                   onTap: () {
-                    context.pop(); // اغلق الـ BottomSheet أولاً
-                    item.onTap(); // ثم نفذ أمر الانتقال
+                    context.pop();
+                    item.onTap();
                   },
                 )),
                 const SizedBox(height: 16),
