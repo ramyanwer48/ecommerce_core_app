@@ -7,11 +7,15 @@ class PurchaseService {
   Future<void> processApprovedInvoice({
     required String supplierName,
     required String invoiceNumber,
+    required DateTime invoiceDate, // 👈 استقبال تاريخ الفاتورة الفعلي
     required List<Map<String, dynamic>> items,
   }) async {
     WriteBatch batch = _firestore.batch();
     double totalInvoiceAmount = 0.0;
     List<Map<String, dynamic>> archivedItems = [];
+
+    // تحويل التاريخ لصيغة فايربيز لاستخدامه في كل الحركات
+    Timestamp firestoreInvoiceDate = Timestamp.fromDate(invoiceDate);
 
     for (var item in items) {
       String name = item['mappedName'] ?? item['rawAiName'] ?? 'Unknown Product';
@@ -42,7 +46,7 @@ class PurchaseService {
         'batchId': batchId,
         'quantity': totalPieces,
         'costPrice': costPerPiece,
-        'dateAdded': Timestamp.now(),
+        'dateAdded': firestoreInvoiceDate, // استخدام تاريخ الفاتورة للدفعة
       };
 
       // تجميع بيانات الصنف لأرشفة الفاتورة للطباعة
@@ -62,6 +66,12 @@ class PurchaseService {
       bool isNewProduct = item['isNewProduct'] ?? true;
       String? mappedId = item['mappedId'];
 
+      // 👈 قراءة مصفوفة الصور اللي جاية من شاشة مراجعة الذكاء الاصطناعي (بحث جوجل)
+      List<String> imageUrls = [];
+      if (item['imageUrls'] != null && item['imageUrls'] is List) {
+        imageUrls = List<String>.from(item['imageUrls']);
+      }
+
       if (!isNewProduct && mappedId != null && mappedId.isNotEmpty) {
         // 🔗 صنف مسجل سابقاً: إضافة دفعة جديدة (FIFO) وزيادة رصيد المخزن الإجمالي
         DocumentReference productRef = _firestore.collection('products').doc(mappedId);
@@ -77,15 +87,19 @@ class PurchaseService {
         Map<String, dynamic> newProductData = {
           'name': name,
           'description': 'Added via purchase invoice #$invoiceNumber from supplier: $supplierName',
-          'price': sellingPrice, // ✅ سعر البيع المحدد بيدك من الشاشة للجمهور
+          'price': sellingPrice,
           'costPrice': costPerPiece,
           'category': mainCategory,
           'subCategory': subCategory,
-          'imageUrl': '',
-          'images': [],
+
+          // 👈 حفظ الصور: الصورة الأولى كواجهة، والمصفوفة بالكامل لدعم أكثر من صورة
+          'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : '',
+          'imageUrls': imageUrls,
+          'images': [], // موجودة للاحتياط لو في أكواد قديمة بتعتمد عليها
+
           'variations': [],
           'inStock': totalPieces > 0,
-          'isActive': false, // ✅ مسودة غير مفعلة في المتجر حتى اعتماد الصورة
+          'isActive': false,
           'stockQuantity': totalPieces,
           'batches': [newBatchData],
         };
@@ -100,7 +114,7 @@ class PurchaseService {
     int numericInvoiceNo = int.tryParse(invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1000;
 
     Map<String, dynamic> ledgerEntryData = {
-      'date': Timestamp.now(),
+      'date': firestoreInvoiceDate, // تسجيل القيد بتاريخ الفاتورة
       'orderId': invoiceNumber,
       'orderNumber': numericInvoiceNo,
       'totalDebit': totalInvoiceAmount,
@@ -126,7 +140,7 @@ class PurchaseService {
       'invoiceId': purchaseInvoiceRef.id,
       'invoiceNumber': invoiceNumber,
       'supplierName': supplierName,
-      'date': Timestamp.now(),
+      'date': firestoreInvoiceDate, // أرشفة الفاتورة بتاريخها الفعلي
       'totalAmount': totalInvoiceAmount,
       'itemCount': items.length,
       'items': archivedItems,

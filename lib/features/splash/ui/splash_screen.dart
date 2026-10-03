@@ -35,27 +35,19 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
 
-          // 2. تم رفع خط التحميل النيون للأعلى ليصبح في الفراغ الأبيض المناسب فوق النصوص
+          // 2. خط التحميل البرتقالي الصافي
           Align(
-            alignment: const Alignment(0, 0.38), // 👈 رفناه لفوق (من 0.60 إلى 0.38) عشان يبعد عن النصوص تماماً
+            alignment: const Alignment(0, 0.38), // مرفوع للأعلى ليبعد عن النصوص
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 100),
               child: Container(
                 height: 4,
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.orange.shade600.withOpacity(0.6),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
+                // 👈 تم إزالة الـ BoxDecoration والـ BoxShadow اللي كان عامل الوهج البرتقالي تماماً
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+                  child: const LinearProgressIndicator(
+                    backgroundColor: Colors.transparent, // 👈 خلفية شفافة
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
                   ),
                 ),
               ),

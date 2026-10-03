@@ -1,81 +1,81 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../features/admin/ui/admin_banner_screen.dart';
-import '../../features/home/logic/favorites/favorites_cubit.dart';
-import '../../features/purchases/ui/ai_purchase_screen.dart';
-import '../../features/splash/ui/splash_screen.dart'; // 👈 استدعاء السبلاش
-// استدعاءات Auth
-import '../../features/admin/data/repos/admin_categories_repo.dart';
-import '../../features/admin/data/repos/admin_coupons_repo.dart';
-import '../../features/admin/logic/admin_categories_cubit.dart';
-import '../../features/admin/ui/manage_categories_screen.dart';
-import '../../features/admin/ui/manage_products_screen.dart';
+import '../../features/admin/ui/purchases_history_screen.dart';
+import '../di/dependency_injection.dart';
+import 'routes.dart';
+
+// --- استدعاءات الأساسيات (Core) والسبلاش ---
+import '../../features/splash/ui/splash_screen.dart';
+import '../../shared/ui/main_layout_screen.dart';
+
+// --- استدعاءات Auth ---
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/ui/auth_gate.dart';
 import '../../features/auth/ui/login_screen.dart';
 import '../../features/auth/ui/signup_screen.dart';
 
-// استدعاءات Home & Checkout & Addresses
-import '../../features/checkout/data/repos/checkout_repo.dart';
-import '../../features/checkout/logic/checkout_cubit.dart';
-import '../../features/checkout/ui/addresses_screen.dart';
-import '../../features/checkout/ui/checkout_screen.dart';
+// --- استدعاءات Home & Cart ---
 import '../../features/home/logic/home_cubit.dart';
 import '../../features/home/ui/home_screen.dart';
 import '../../features/home/ui/product_details_screen.dart';
 import '../../features/home/data/models/product_model.dart';
-
-// استدعاءات Cart
 import '../../features/cart/ui/cart_screen.dart';
 import '../../features/cart/logic/cart_cubit.dart';
+import '../../features/home/logic/favorites/favorites_cubit.dart';
 
-// استدعاءات Profile
-import '../../features/invoices/ui/create_invoice_screen.dart' show CreateInvoiceScreen;
+// --- استدعاءات Checkout & Addresses ---
+import '../../features/checkout/data/repos/checkout_repo.dart';
+import '../../features/checkout/logic/checkout_cubit.dart';
+import '../../features/checkout/ui/addresses_screen.dart';
+import '../../features/checkout/ui/checkout_screen.dart';
+
+// --- استدعاءات Profile ---
 import '../../features/profile/data/repos/order_repo.dart';
 import '../../features/profile/logic/order_cubit.dart';
 import '../../features/profile/ui/orders_screen.dart';
 import '../../features/profile/ui/profile_screen.dart';
 
-// استدعاءات الأساسيات (Core)
-import '../../shared/ui/main_layout_screen.dart';
-import '../di/dependency_injection.dart';
-import 'routes.dart';
-
-// استدعاءات قسم الإدارة (Admin & ERP Hub)
+// --- استدعاءات قسم الإدارة (Admin & ERP Hub) ---
+import '../../features/admin/ui/admin_dashboard_screen.dart';
+import '../../features/admin/data/repos/admin_repo.dart';
 import '../../features/admin/ui/add_product_screen.dart';
 import '../../features/admin/logic/add_product_cubit.dart';
-import '../../features/admin/data/repos/admin_repo.dart';
-import '../../features/admin/ui/admin_orders_screen.dart';
-import '../../features/admin/logic/admin_orders_cubit.dart';
+import '../../features/admin/ui/manage_products_screen.dart';
+import '../../features/admin/data/repos/admin_categories_repo.dart';
+import '../../features/admin/logic/admin_categories_cubit.dart';
+import '../../features/admin/ui/manage_categories_screen.dart';
 import '../../features/admin/data/repos/admin_orders_repo.dart';
-import '../../features/admin/ui/admin_dashboard_screen.dart';
-
-// 👈 استدعاءات إدارة الكوبونات للأدمن
+import '../../features/admin/logic/admin_orders_cubit.dart';
+import '../../features/admin/ui/admin_orders_screen.dart';
+import '../../features/admin/data/repos/admin_coupons_repo.dart';
 import '../../features/admin/logic/admin_coupons_cubit.dart';
 import '../../features/admin/ui/admin_coupons_screen.dart';
+import '../../features/admin/ui/admin_banner_screen.dart';
 
-import '../../features/wishlist/ui/wishlist_screen.dart';
-
-// استدعاء شاشة إدارة الأطراف (العملاء والموردين)
-import '../../features/partners/ui/partners_screen.dart';
-import '../../features/invoices/data/repos/invoice_repo.dart';
-import '../../features/invoices/logic/invoice_cubit.dart';
-import '../../features/admin/ui/admin_banner_screen.dart'; // 👈 تأكد إن المسار ده متطابق مع مكان الملف عندك
+// --- استدعاءات المشتريات (Purchases) ---
 import '../../features/purchases/ui/ai_purchase_screen.dart';
 import '../../features/purchases/ui/invoice_review_screen.dart';
-import '../../features/admin/ui/admin_invoices_screen.dart';
+import '../../features/admin/ui/manual_purchase_screen.dart';
+
+// --- استدعاءات الفواتير (Invoices) ---
+import '../../features/invoices/data/repos/invoice_repo.dart';
 import '../../features/invoices/logic/invoice_cubit.dart';
+import '../../features/admin/ui/sales_invoices_screen.dart';
+import '../../features/admin/ui/purchase_invoices_screen.dart';
+
+// --- استدعاءات متنوعة ---
+import '../../features/wishlist/ui/wishlist_screen.dart';
+import '../../features/partners/ui/partners_screen.dart';
+import '../../features/partners/ui/customers_screen.dart';
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
     routes: [
-      // 👈 التعديل الأول: خلينا نقطة البداية تفتح الـ SplashScreen فعلياً
       GoRoute(
         path: Routes.splash,
         builder: (context, state) => const SplashScreen(),
       ),
-      // 👈 التعديل الثاني: عملنا مسار لـ AuthGate عشان السبلاش تحول عليه لما تخلص
       GoRoute(
         path: '/auth-gate',
         builder: (context, state) => const AuthGate(),
@@ -125,23 +125,16 @@ class AppRouter {
           child: const OrdersScreen(),
         ),
       ),
-
-      // مسار لوحة تحكم الأدمن المركزية
       GoRoute(
         path: Routes.adminDashboard,
         builder: (context, state) => const AdminDashboardScreen(),
       ),
-
       GoRoute(
         path: Routes.addProduct,
         builder: (context, state) {
-          // 1. استقبال البيانات المبعوثة من زر التعديل
           final productData = state.extra as Map<String, dynamic>?;
-
           return BlocProvider(
-            // 2. 👈 ضع هنا الاستدعاء القديم الخاص بك كما كان بالضبط
             create: (context) => AddProductCubit(AdminRepo()),
-            // 3. تمرير البيانات للشاشة المزدوجة
             child: AddProductScreen(productData: productData),
           );
         },
@@ -153,8 +146,6 @@ class AppRouter {
           child: const AdminOrdersScreen(),
         ),
       ),
-
-      // 👈 مسار شاشة إدارة الكوبونات الجديد
       GoRoute(
         path: Routes.manageCoupons,
         builder: (context, state) => BlocProvider(
@@ -162,10 +153,9 @@ class AppRouter {
           child: const AdminCouponsScreen(),
         ),
       ),
-
       GoRoute(
         path: Routes.manageProducts,
-        builder: (context, state) => ManageProductsScreen(),
+        builder: (context, state) => const ManageProductsScreen(),
       ),
       GoRoute(
         path: Routes.wishlist,
@@ -199,13 +189,6 @@ class AppRouter {
         builder: (context, state) => const PartnersScreen(),
       ),
       GoRoute(
-        path: Routes.createInvoice,
-        builder: (context, state) => BlocProvider(
-          create: (context) => InvoiceCubit(InvoiceRepo()),
-          child: const CreateInvoiceScreen(),
-        ),
-      ),
-      GoRoute(
         path: Routes.adminBanner,
         builder: (context, state) => const AdminBannerScreen(),
       ),
@@ -224,26 +207,42 @@ class AppRouter {
         path: Routes.mainLayout,
         builder: (context, state) => MultiBlocProvider(
           providers: [
-            BlocProvider(
-              // دالة fetchProducts هنا بتقوم بالواجبين مع بعض حسب برمجتك الممتازة
-              create: (context) => getIt<HomeCubit>()..fetchProducts(),
-            ),
-            BlocProvider(
-              create: (context) => getIt<FavoritesCubit>(),
-            ),
-            BlocProvider(
-              create: (context) => getIt<CartCubit>(),
-            ),
+            BlocProvider(create: (context) => getIt<HomeCubit>()..fetchProducts()),
+            BlocProvider(create: (context) => getIt<FavoritesCubit>()),
+            BlocProvider(create: (context) => getIt<CartCubit>()),
           ],
           child: const MainLayoutScreen(),
         ),
       ),
+
+      // --- مسارات المشتريات الجديدة ---
       GoRoute(
-        path: Routes.adminInvoices,
+        path: Routes.manualPurchase,
+        builder: (context, state) => const ManualPurchaseScreen(),
+      ),
+
+      // --- مسارات الفواتير الجديدة (Invoices) ---
+      GoRoute(
+        path: Routes.salesInvoices,
         builder: (context, state) => BlocProvider(
-          create: (context) => getIt<InvoiceCubit>(), // 👈 حقن الكيوبيت هنا
-          child: const AdminInvoicesScreen(),
+          create: (context) => InvoiceCubit(InvoiceRepo()),
+          child: const SalesInvoicesScreen(),
         ),
+      ),
+      GoRoute(
+        path: Routes.purchaseInvoices,
+        builder: (context, state) => BlocProvider(
+          create: (context) => InvoiceCubit(InvoiceRepo()),
+          child: const PurchaseInvoicesScreen(),
+        ),
+      ),
+      GoRoute(
+        path: Routes.purchasesHistory,
+        builder: (context, state) => const PurchasesHistoryScreen(),
+      ),
+      GoRoute(
+        path: Routes.customers,
+        builder: (context, state) => const CustomersScreen(),
       ),
     ],
   );

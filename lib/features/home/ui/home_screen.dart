@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../core/routing/routes.dart';
@@ -50,6 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentPage = 0;
   int _totalBanners = 1;
   Timer? _timer;
+
+  bool _isFilterActive = false;
 
   @override
   void initState() {
@@ -154,7 +155,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: RefreshIndicator(
           color: brandOrange,
-          onRefresh: () async => await context.read<HomeCubit>().fetchProducts(),
+          onRefresh: () async {
+            setState(() => _isFilterActive = false);
+            await context.read<HomeCubit>().fetchProducts();
+          },
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -164,22 +168,84 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 12),
                   child: Directionality(
                     textDirection: TextDirection.rtl,
-                    child: SizedBox(
-                      height: 44,
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (value) => context.read<HomeCubit>().searchProducts(value),
-                        decoration: InputDecoration(
-                          hintText: 'ابحث عن منتج...',
-                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 13, fontFamily: 'Cairo'),
-                          prefixIcon: Icon(Icons.search, color: brandOrange, size: 22),
-                          filled: true,
-                          fillColor: const Color(0xFFF5F7FA),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: Colors.transparent)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide(color: brandOrange, width: 1.5)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 44,
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) => context.read<HomeCubit>().searchProducts(value),
+                              decoration: InputDecoration(
+                                hintText: 'ابحث عن منتج...',
+                                hintStyle: const TextStyle(color: Colors.grey, fontSize: 13, fontFamily: 'Cairo'),
+                                prefixIcon: Icon(Icons.search, color: brandOrange, size: 22),
+                                filled: true,
+                                fillColor: const Color(0xFFF5F7FA),
+                                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: const BorderSide(color: Colors.transparent)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide(color: brandOrange, width: 1.5)),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () async {
+                            HapticFeedback.selectionClick();
+                            final homeCubit = context.read<HomeCubit>();
+
+                            final isActive = await showModalBottomSheet<bool>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (sheetContext) => BlocProvider.value(
+                                value: homeCubit,
+                                child: const AdvancedFilterSheet(),
+                              ),
+                            );
+
+                            if (isActive != null) {
+                              setState(() => _isFilterActive = isActive);
+                            }
+                          },
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                height: 44,
+                                width: 44,
+                                decoration: BoxDecoration(
+                                    color: brandOrange,
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: brandOrange.withOpacity(0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      )
+                                    ]
+                                ),
+                                child: const Icon(Icons.tune_rounded, color: Colors.white, size: 24),
+                              ),
+                              if (_isFilterActive)
+                                Positioned(
+                                  top: -2,
+                                  right: -2,
+                                  child: Container(
+                                    width: 14,
+                                    height: 14,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -333,12 +399,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 itemCount: categories.length,
                                 itemBuilder: (context, index) {
                                   final cat = categories[index];
-                                  final isSelected = context.read<HomeCubit>().currentCategory == cat.name;
+
+                                  // 👈 التعديل السحري هنا لضبط إضاءة زرار "الكل" وأي قسم تاني
+                                  final currentCat = context.read<HomeCubit>().currentCategory;
+                                  final isSelected = (cat.name == 'الكل' && (currentCat == null || currentCat == 'الكل')) || currentCat == cat.name;
+
                                   return GestureDetector(
                                     onTap: () {
                                       HapticFeedback.selectionClick();
                                       context.read<HomeCubit>().applyAdvancedFilters(category: cat.name);
-                                      setState(() {});
+                                      setState(() {
+                                        _isFilterActive = cat.name != 'الكل'; // تفعيل النقطة الحمراء لو اختار قسم
+                                      });
                                     },
                                     child: Container(
                                       margin: const EdgeInsets.only(left: 8),
@@ -435,6 +507,19 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
     bool hasDiscount = oldPrice > widget.product.price;
     int discountPerc = hasDiscount ? (((oldPrice - widget.product.price) / oldPrice) * 100).toInt() : 0;
 
+    // جلب التقييم الفعلي وعدد المراجعات من الداتا بيز
+    double actualRating = 0.0;
+    int actualReviewsCount = 0;
+    try {
+      actualRating = double.tryParse((widget.product as dynamic).rating.toString()) ?? 0.0;
+    } catch(e) {}
+    try {
+      actualReviewsCount = int.tryParse((widget.product as dynamic).reviewsCount.toString()) ?? 0;
+    } catch(e) {}
+
+    // 👈 تحديد هل المنتج لديه تقييمات أم لا (بناءً على الـ UX Best Practices)
+    bool hasReviews = actualRating > 0 && actualReviewsCount > 0;
+
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
@@ -485,14 +570,25 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                           style: TextStyle(fontWeight: FontWeight.bold, color: primaryNavy, fontFamily: 'Cairo', fontSize: 12, height: 1.2),
                         ),
                         const SizedBox(height: 4),
-                        Row(
+
+                        // 👈 اللمسة الاحترافية للتقييم
+                        hasReviews
+                            ? Row(
                           children: [
                             Icon(Icons.star, color: Colors.amber.shade600, size: 12),
                             const SizedBox(width: 4),
-                            Text(toArabicNumbers('4.5'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                            Text(toArabicNumbers(' (120)'), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                            Text(toArabicNumbers(actualRating.toStringAsFixed(1)), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            Text(toArabicNumbers(' ($actualReviewsCount)'), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                          ],
+                        )
+                            : Row(
+                          children: [
+                            Icon(Icons.new_releases, color: Colors.teal.shade400, size: 12),
+                            const SizedBox(width: 4),
+                            Text('منتج جديد', style: TextStyle(color: Colors.teal.shade600, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                           ],
                         ),
+
                         const SizedBox(height: 6),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -517,7 +613,7 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                                       ],
                                     )
                                   else
-                                    const SizedBox(height: 14),
+                                    const SizedBox(height: 14), // للحفاظ على ارتفاع الكارت
                                 ],
                               ),
                             ),
@@ -642,6 +738,260 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AdvancedFilterSheet extends StatefulWidget {
+  const AdvancedFilterSheet({super.key});
+
+  @override
+  State<AdvancedFilterSheet> createState() => _AdvancedFilterSheetState();
+}
+
+class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
+  String? _selectedCategory;
+  RangeValues _priceRange = const RangeValues(0, 100000);
+  String _selectedSort = 'الأحدث';
+  bool _discountOnly = false;
+  int _selectedRating = 0;
+
+  final List<String> _sortOptions = ['الأحدث', 'الأقل سعراً', 'الأعلى سعراً', 'الأكثر مبيعاً'];
+
+  @override
+  void initState() {
+    super.initState();
+    final cubit = context.read<HomeCubit>();
+    _selectedCategory = cubit.currentCategory;
+    _priceRange = RangeValues(cubit.currentMinPrice, cubit.currentMaxPrice);
+    _selectedSort = cubit.currentSortBy;
+    _discountOnly = cubit.currentDiscountOnly;
+    _selectedRating = cubit.currentRating;
+  }
+
+  bool get _isFilterActive {
+    bool catActive = _selectedCategory != null && _selectedCategory != 'الكل';
+    bool priceActive = _priceRange.start > 0 || _priceRange.end < 100000;
+    bool sortActive = _selectedSort != 'الأحدث';
+    bool ratingActive = _selectedRating > 0;
+    return catActive || priceActive || sortActive || _discountOnly || ratingActive;
+  }
+
+  Widget _buildRatingChip(String label, int value, Color primaryNavy, Color brandOrange) {
+    final isSelected = _selectedRating == value;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isSelected ? Colors.white : primaryNavy)),
+      selected: isSelected,
+      selectedColor: brandOrange,
+      backgroundColor: Colors.grey.shade100,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? brandOrange : Colors.grey.shade300)),
+      onSelected: (selected) {
+        if (selected) setState(() => _selectedRating = value);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color brandOrange = Colors.orange.shade600;
+    final Color primaryNavy = const Color(0xFF0D1B2A);
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        padding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 16),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Row(
+              children: [
+                Icon(Icons.tune_rounded, color: primaryNavy, size: 28),
+                const SizedBox(width: 12),
+                Text('تصفية متقدمة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: primaryNavy)),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('القسم', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.grey.shade800)),
+                    const SizedBox(height: 12),
+                    BlocBuilder<HomeCubit, HomeState>(
+                      builder: (context, state) {
+                        if (state is HomeLoaded && state.categories.isNotEmpty) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: state.categories.map((cat) {
+                                final isSelected = _selectedCategory == cat.name || (_selectedCategory == null && cat.name == 'الكل');
+                                return Padding(
+                                  padding: const EdgeInsets.only(left: 8.0),
+                                  child: ChoiceChip(
+                                    label: Text(cat.name, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isSelected ? Colors.white : primaryNavy)),
+                                    selected: isSelected,
+                                    selectedColor: brandOrange,
+                                    backgroundColor: Colors.grey.shade100,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? brandOrange : Colors.grey.shade300)),
+                                    onSelected: (selected) {
+                                      setState(() => _selectedCategory = selected ? cat.name : null);
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        }
+                        return const Text('جاري تحميل الأقسام...', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey));
+                      },
+                    ),
+                    const Divider(height: 32, thickness: 1),
+
+                    Text('الترتيب حسب', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.grey.shade800)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _sortOptions.map((option) {
+                        final isSelected = _selectedSort == option;
+                        return ChoiceChip(
+                          label: Text(option, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: isSelected ? Colors.white : primaryNavy)),
+                          selected: isSelected,
+                          selectedColor: primaryNavy,
+                          backgroundColor: Colors.grey.shade100,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? primaryNavy : Colors.grey.shade300)),
+                          onSelected: (selected) {
+                            if (selected) setState(() => _selectedSort = option);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const Divider(height: 32, thickness: 1),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('نطاق السعر', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.grey.shade800)),
+                        Text(
+                          '${toArabicNumbers(_priceRange.start.round().toString())} - ${toArabicNumbers(_priceRange.end.round().toString())} ج.م',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: brandOrange),
+                        ),
+                      ],
+                    ),
+                    RangeSlider(
+                      values: _priceRange,
+                      min: 0,
+                      max: 100000,
+                      divisions: 100,
+                      activeColor: brandOrange,
+                      inactiveColor: Colors.grey.shade300,
+                      onChanged: (RangeValues values) {
+                        setState(() => _priceRange = values);
+                      },
+                    ),
+                    const Divider(height: 24, thickness: 1),
+
+                    Text('التقييم', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.grey.shade800)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildRatingChip('الكل', 0, primaryNavy, brandOrange),
+                        _buildRatingChip('4 نجوم فأكثر ⭐', 4, primaryNavy, brandOrange),
+                        _buildRatingChip('3 نجوم فأكثر ⭐', 3, primaryNavy, brandOrange),
+                      ],
+                    ),
+                    const Divider(height: 32, thickness: 1),
+
+                    SwitchListTile(
+                      title: Text('عرض التخفيضات فقط', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.grey.shade800)),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: brandOrange,
+                      value: _discountOnly,
+                      onChanged: (value) => setState(() => _discountOnly = value),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      HapticFeedback.heavyImpact();
+
+                      context.read<HomeCubit>().applyAdvancedFilters(
+                        category: _selectedCategory,
+                        minPrice: _priceRange.start,
+                        maxPrice: _priceRange.end,
+                        sortBy: _selectedSort,
+                        discountOnly: _discountOnly,
+                        rating: _selectedRating,
+                      );
+
+                      Navigator.pop(context, _isFilterActive);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: brandOrange,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    child: const Text('إظهار النتائج', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      setState(() {
+                        _selectedCategory = null;
+                        _priceRange = const RangeValues(0, 100000);
+                        _selectedSort = 'الأحدث';
+                        _discountOnly = false;
+                        _selectedRating = 0;
+                      });
+
+                      context.read<HomeCubit>().applyAdvancedFilters(
+                          category: null, minPrice: 0, maxPrice: 100000, sortBy: 'الأحدث', discountOnly: false, rating: 0
+                      );
+
+                      Navigator.pop(context, false);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: Colors.grey.shade300, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text('إعادة ضبط', style: TextStyle(color: Colors.grey.shade700, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

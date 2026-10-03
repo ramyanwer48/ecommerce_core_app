@@ -36,17 +36,7 @@ class InvoiceCubit extends Cubit<InvoiceState> {
   InvoiceCubit(this._invoiceRepo) : super(InvoiceInitial());
 
   // الدالة الخاصة بك (تم الاحتفاظ بها كما هي)
-  Future<void> saveInvoice(InvoiceModel invoice) async {
-    emit(InvoiceLoading());
-    try {
-      await _invoiceRepo.createInvoiceAndSyncStock(invoice);
-      emit(InvoiceSuccess(invoice));
-    } catch (e) {
-      emit(InvoiceFailure(e.toString()));
-    }
-  }
 
-  // 👈 الدالة الجديدة: لجلب جميع الفواتير من فايربيز وتقسيمها
   Future<void> fetchAllInvoices() async {
     emit(InvoiceListLoading());
     try {

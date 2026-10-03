@@ -21,11 +21,18 @@ class Routes {
 
   // مسار شاشة الأطراف (العملاء والموردين)
   static const String partners = '/partners';
-  static const String createInvoice = '/createInvoice';
   static const String manageCoupons = '/manageCoupons';
   static const String adminBanner = '/adminBanner';// 👈 مسار شاشة إدارة الإعلان
   static const String aiPurchase = '/ai-purchase';
   static const String invoiceReview = '/invoice-review';
   static const String mainLayout = '/mainLayout';
-  static const String adminInvoices = '/adminInvoices';
+
+  // 🛒 مسارات المشتريات الجديدة
+  static const String manualPurchase = '/manualPurchase';
+  static const String purchaseInvoices = '/purchaseInvoices';
+
+  // 🟢 مسارات المبيعات الجديدة
+  static const String salesInvoices = '/salesInvoices';
+  static const String purchasesHistory = '/purchasesHistory';
+  static const String customers = '/customers';
 }

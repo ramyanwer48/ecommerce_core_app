@@ -12,7 +12,6 @@ import '../logic/add_product_state.dart';
 import 'widgets/google_image_picker_dialog.dart';
 
 class AddProductScreen extends StatefulWidget {
-  // 👈 استقبال بيانات المنتج في حالة التعديل
   final Map<String, dynamic>? productData;
 
   const AddProductScreen({super.key, this.productData});
@@ -39,12 +38,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   bool _inStock = true;
   bool _isDownloadingGoogleImage = false;
-  bool _isUpdating = false; // 👈 حالة التحميل أثناء التعديل المباشر
+  bool _isUpdating = false;
 
   File? _selectedImage;
   List<File> _extraImages = [];
 
-  // 👈 متغيرات لحفظ روابط الصور القديمة القادمة من الفايربيز
   String? _existingMainImageUrl;
   List<String> _existingExtraImageUrls = [];
 
@@ -53,7 +51,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void initState() {
     super.initState();
-    // 👈 إذا تم تمرير داتا (وضع التعديل)، قم بتعبئة الخانات
     if (widget.productData != null) {
       final data = widget.productData!;
       _nameController.text = data['name'] ?? '';
@@ -68,9 +65,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _selectedSubCategory = data['subCategory'];
 
       _existingMainImageUrl = data['imageUrl'];
-      if (data['imageUrls'] != null) {
-        _existingExtraImageUrls = List<String>.from(data['imageUrls']);
-        // إزالة الصورة الرئيسية من قائمة الصور الإضافية لمنع التكرار
+
+      List<dynamic>? dbImages = data['imageUrls'] ?? data['images'];
+
+      if (dbImages != null && dbImages.isNotEmpty) {
+        if (_existingMainImageUrl == null || _existingMainImageUrl!.isEmpty) {
+          _existingMainImageUrl = dbImages.first.toString();
+        }
+
+        _existingExtraImageUrls = dbImages.map((e) => e.toString()).toList();
         if (_existingMainImageUrl != null) {
           _existingExtraImageUrls.remove(_existingMainImageUrl);
         }
@@ -83,7 +86,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     if (image != null) {
       setState(() {
         _selectedImage = File(image.path);
-        _existingMainImageUrl = null; // إزالة الصورة القديمة إذا اختار جديدة
+        _existingMainImageUrl = null;
       });
     }
   }
@@ -99,7 +102,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // 🌐 دالة جلب الصور المتعددة من جوجل
   void _onSearchImagePressed() async {
     String productName = _nameController.text.trim();
 
@@ -154,15 +156,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // ✏️ دالة تحديث المنتج المباشرة للفايربيز
   Future<void> _updateProductDirectly() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedImage == null && (_existingMainImageUrl == null || _existingMainImageUrl!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إكمال جميع الحقول الإلزامية المطلوبة باللون الأحمر', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
       return;
     }
+
+    bool hasAnyImage = _selectedImage != null ||
+        (_existingMainImageUrl != null && _existingMainImageUrl!.isNotEmpty) ||
+        _extraImages.isNotEmpty ||
+        _existingExtraImageUrls.isNotEmpty;
+
+    if (!hasAnyImage) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الصورة الرئيسية إلزامية: الرجاء اختيار صورة للمنتج', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      return;
+    }
+
     if (_selectedMainCategory == null || _selectedSubCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إكمال اختيار التصنيفات بالكامل', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التصنيفات إلزامية: الرجاء اختيار التصنيف الأساسي والفرعي', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
       return;
     }
 
@@ -172,14 +183,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       String? finalMainImageUrl = _existingMainImageUrl;
       List<String> finalExtraUrls = List.from(_existingExtraImageUrls);
 
-      // رفع الصورة الرئيسية الجديدة إن وجدت
       if (_selectedImage != null) {
         final ref = FirebaseStorage.instance.ref().child('products_images/${DateTime.now().millisecondsSinceEpoch}_main.jpg');
         await ref.putFile(_selectedImage!);
         finalMainImageUrl = await ref.getDownloadURL();
       }
 
-      // رفع الصور الإضافية الجديدة
       for (var file in _extraImages) {
         final ref = FirebaseStorage.instance.ref().child('products_images/${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}');
         await ref.putFile(file);
@@ -192,10 +201,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
           : [];
 
       List<String> allImages = [];
-      if (finalMainImageUrl != null) allImages.add(finalMainImageUrl);
+      if (finalMainImageUrl != null && finalMainImageUrl.isNotEmpty) {
+        allImages.add(finalMainImageUrl);
+      } else if (finalExtraUrls.isNotEmpty) {
+        finalMainImageUrl = finalExtraUrls.first;
+        allImages.add(finalMainImageUrl);
+        finalExtraUrls.removeAt(0);
+      }
       allImages.addAll(finalExtraUrls);
 
-      // تحديث المستند في الفايربيز
       await FirebaseFirestore.instance.collection('products').doc(widget.productData!['id']).update({
         'name': _nameController.text.trim(),
         'price': double.tryParse(_priceController.text) ?? 0,
@@ -209,11 +223,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'inStock': _inStock,
         'imageUrl': finalMainImageUrl,
         'imageUrls': allImages,
+        'images': allImages,
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح! ✅', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
-        context.pop(); // العودة لشاشة إدارة المنتجات
+        context.pop();
       }
     } catch (e) {
       if (mounted) {
@@ -237,7 +252,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // تحديد هل نحن في وضع التعديل أم الإضافة
     final bool isEditMode = widget.productData != null;
 
     return Directionality(
@@ -281,7 +295,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Text('الصورة الرئيسية للمنتج:', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: appPrimaryColor)),
+                  Text('الصورة الرئيسية للمنتج (إلزامي):', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: appPrimaryColor)),
                   const SizedBox(height: 8),
 
                   Container(
@@ -302,7 +316,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ],
                     )
                         : _selectedImage != null
-                        ? Stack( // 👈 عرض الصورة المحلية الجديدة
+                        ? Stack(
                       fit: StackFit.expand,
                       children: [
                         ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_selectedImage!, fit: BoxFit.cover)),
@@ -316,7 +330,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ],
                     )
                         : (_existingMainImageUrl != null && _existingMainImageUrl!.isNotEmpty)
-                        ? Stack( // 👈 عرض الصورة القديمة من السيرفر
+                        ? Stack(
                       fit: StackFit.expand,
                       children: [
                         ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(_existingMainImageUrl!, fit: BoxFit.cover)),
@@ -369,7 +383,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('معرض الصور الإضافية:', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: appPrimaryColor)),
+                      Text('معرض الصور الإضافية (اختياري):', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: appPrimaryColor)),
                       TextButton.icon(
                         onPressed: _pickExtraImages,
                         icon: Icon(Icons.add_photo_alternate, color: appPrimaryColor),
@@ -383,7 +397,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
-                          // 👈 صور السيرفر القديمة
                           ..._existingExtraImageUrls.map((url) => Container(
                             margin: const EdgeInsets.only(left: 8),
                             width: 90,
@@ -402,7 +415,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               ],
                             ),
                           )),
-                          // 👈 الصور المحلية الجديدة
                           ..._extraImages.map((file) => Container(
                             margin: const EdgeInsets.only(left: 8),
                             width: 90,
@@ -428,32 +440,50 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                   TextFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'اسم المنتج', border: OutlineInputBorder()),
-                    validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                    decoration: const InputDecoration(labelText: 'اسم المنتج (إلزامي)', border: OutlineInputBorder()),
+                    validator: (value) => value == null || value.trim().isEmpty ? 'برجاء إدخال اسم المنتج' : null,
                   ),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _priceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'سعر البيع للعميل (السعر الثابت)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.sell_outlined, color: Colors.green)),
-                    validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                    decoration: const InputDecoration(labelText: 'سعر البيع للعميل (إلزامي)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.sell_outlined, color: Colors.green)),
+                    // 💡 فحص رياضي للتأكد أن السعر أكبر من صفر
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return 'سعر البيع مطلوب';
+                      final numValue = double.tryParse(value);
+                      if (numValue == null || numValue <= 0) return 'يجب أن يكون السعر أكبر من صفر';
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _costPriceController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'سعر التكلفة للقطعة (عليك كتاجر)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: Colors.orange)),
-                    validator: (value) => value!.isEmpty ? 'مطلوب لحساب الأرباح لاحقاً' : null,
+                    decoration: const InputDecoration(labelText: 'سعر التكلفة (إلزامي)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: Colors.orange)),
+                    // 💡 فحص رياضي للتأكد أن سعر التكلفة أكبر من صفر
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return 'سعر التكلفة مطلوب';
+                      final numValue = double.tryParse(value);
+                      if (numValue == null || numValue <= 0) return 'يجب أن يكون سعر التكلفة أكبر من صفر';
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _stockController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'الكمية الافتتاحية في المخزن', border: OutlineInputBorder(), prefixIcon: Icon(Icons.inventory_2_outlined)),
-                    validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                    decoration: const InputDecoration(labelText: 'الكمية الافتتاحية في المخزن (إلزامي)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.inventory_2_outlined)),
+                    // الكمية تقبل الصفر عادي
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return 'الكمية مطلوبة';
+                      final numValue = int.tryParse(value);
+                      if (numValue == null || numValue < 0) return 'يجب إدخال رقم صحيح (0 أو أكثر)';
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
 
@@ -469,21 +499,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         final docs = snapshot.data!.docs;
                         List<String> mainCategories = docs.map((doc) => doc.id).toList();
 
-                        // 👈 معالجة ذكية لتعبئة القسم الفرعي تلقائياً في وضع التعديل
-                        if (_selectedMainCategory != null && mainCategories.contains(_selectedMainCategory) && _currentSubCategories.isEmpty) {
+                        if (_selectedMainCategory != null && !mainCategories.contains(_selectedMainCategory)) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _selectedMainCategory = null;
+                                _selectedSubCategory = null;
+                                _currentSubCategories.clear();
+                              });
+                            }
+                          });
+                        } else if (_selectedMainCategory != null && mainCategories.contains(_selectedMainCategory)) {
                           final docData = docs.firstWhere((d) => d.id == _selectedMainCategory).data() as Map<String, dynamic>;
                           _currentSubCategories = List<String>.from(docData['subCategories'] ?? ['General']);
-                        } else if (_selectedMainCategory != null && !mainCategories.contains(_selectedMainCategory)) {
-                          _selectedMainCategory = null;
-                          _selectedSubCategory = null;
+
+                          if (_selectedSubCategory != null && !_currentSubCategories.contains(_selectedSubCategory)) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                setState(() {
+                                  _selectedSubCategory = null;
+                                });
+                              }
+                            });
+                          }
                         }
 
                         return Column(
                           children: [
                             DropdownButtonFormField<String>(
-                              value: _selectedMainCategory,
+                              value: (mainCategories.contains(_selectedMainCategory)) ? _selectedMainCategory : null,
                               isExpanded: true,
-                              decoration: const InputDecoration(labelText: 'التصنيف الأساسي', border: OutlineInputBorder()),
+                              decoration: const InputDecoration(labelText: 'التصنيف الأساسي (إلزامي)', border: OutlineInputBorder()),
                               items: mainCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis))).toList(),
                               onChanged: (val) {
                                 setState(() {
@@ -493,17 +539,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   _currentSubCategories = List<String>.from(docData['subCategories'] ?? ['General']);
                                 });
                               },
-                              validator: (value) => value == null ? 'مطلوب اختيار تصنيف أساسي' : null,
+                              validator: (value) => value == null ? 'برجاء اختيار تصنيف أساسي للمنتج' : null,
                             ),
                             const SizedBox(height: 12),
-                            if (_selectedMainCategory != null)
+                            if (_selectedMainCategory != null && _currentSubCategories.isNotEmpty)
                               DropdownButtonFormField<String>(
-                                value: _selectedSubCategory,
+                                value: (_currentSubCategories.contains(_selectedSubCategory)) ? _selectedSubCategory : null,
                                 isExpanded: true,
-                                decoration: const InputDecoration(labelText: 'التصنيف الفرعي', border: OutlineInputBorder()),
+                                decoration: const InputDecoration(labelText: 'التصنيف الفرعي (إلزامي)', border: OutlineInputBorder()),
                                 items: _currentSubCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis))).toList(),
                                 onChanged: (val) => setState(() => _selectedSubCategory = val),
-                                validator: (value) => value == null ? 'مطلوب اختيار تصنيف فرعي' : null,
+                                validator: (value) => value == null ? 'برجاء اختيار تصنيف فرعي للمنتج' : null,
                               ),
                           ],
                         );
@@ -514,14 +560,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _variationsController,
-                    decoration: const InputDecoration(labelText: 'خيارات الهاردوير (مثال: 16GB, 32GB - افصل بفاصلة ,)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'خيارات الهاردوير (اختياري)', hintText: 'مثال: 16GB, 32GB - افصل بفاصلة ,', border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _descController,
                     maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'الوصف', border: OutlineInputBorder()),
-                    validator: (value) => value!.isEmpty ? 'مطلوب' : null,
+                    decoration: const InputDecoration(labelText: 'الوصف (إلزامي)', border: OutlineInputBorder()),
+                    validator: (value) => value == null || value.trim().isEmpty ? 'برجاء كتابة وصف للمنتج (حتى لو سطر واحد)' : null,
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -532,40 +578,42 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 👈 زر مزدوج: إذا كنا في التعديل يقوم بالتحديث، وإلا يضيف منتج جديد
                   (state is AddProductLoading || _isUpdating)
                       ? Center(child: CircularProgressIndicator(color: appSecondaryColor))
                       : ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: appPrimaryColor, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     onPressed: () {
                       if (isEditMode) {
-                        _updateProductDirectly(); // التحديث المباشر للمنتج الحالي
+                        _updateProductDirectly();
                       } else {
+                        if (!_formKey.currentState!.validate()) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إكمال جميع الحقول الإلزامية المطلوبة باللون الأحمر', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                          return;
+                        }
                         if (_selectedImage == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار الصورة الرئيسية للمنتج أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الصورة الرئيسية إلزامية: الرجاء اختيار صورة للمنتج', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                           return;
                         }
                         if (_selectedMainCategory == null || _selectedSubCategory == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إكمال اختيار التصنيفات بالكامل', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التصنيفات إلزامية: الرجاء اختيار التصنيف الأساسي والفرعي', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                           return;
                         }
-                        if (_formKey.currentState!.validate()) {
-                          List<String> variationsList = _variationsController.text.isNotEmpty ? _variationsController.text.split(',').map((e) => e.trim()).toList() : [];
 
-                          context.read<AddProductCubit>().addProductToFirestore(
-                            name: _nameController.text,
-                            price: double.parse(_priceController.text),
-                            costPrice: double.parse(_costPriceController.text),
-                            category: _selectedMainCategory!,
-                            subCategory: _selectedSubCategory!,
-                            description: _descController.text,
-                            mainImageFile: _selectedImage!,
-                            extraImageFiles: _extraImages,
-                            variations: variationsList,
-                            inStock: _inStock,
-                            stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
-                          );
-                        }
+                        List<String> variationsList = _variationsController.text.isNotEmpty ? _variationsController.text.split(',').map((e) => e.trim()).toList() : [];
+
+                        context.read<AddProductCubit>().addProductToFirestore(
+                          name: _nameController.text,
+                          price: double.parse(_priceController.text),
+                          costPrice: double.parse(_costPriceController.text),
+                          category: _selectedMainCategory!,
+                          subCategory: _selectedSubCategory!,
+                          description: _descController.text,
+                          mainImageFile: _selectedImage!,
+                          extraImageFiles: _extraImages,
+                          variations: variationsList,
+                          inStock: _inStock,
+                          stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
+                        );
                       }
                     },
                     child: Text(isEditMode ? 'حفظ التعديلات' : 'نشر المنتج', style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
