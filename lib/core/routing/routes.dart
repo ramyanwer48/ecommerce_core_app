@@ -35,4 +35,8 @@ class Routes {
   static const String salesInvoices = '/salesInvoices';
   static const String purchasesHistory = '/purchasesHistory';
   static const String customers = '/customers';
+  static const String pos = '/pos';
+  static const String inventoryAudit = '/inventoryAudit';
+  static const String treasury = '/treasury';
+  static const String shippingCompanies = '/shippingCompanies';
 }

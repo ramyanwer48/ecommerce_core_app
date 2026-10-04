@@ -45,16 +45,15 @@ class OrderModel {
   final int orderNumber;
   final String userId;
   final List<OrderItemModel> items;
-  final double subtotal;         // 👈 الإجمالي قبل الخصم
-  final double discountAmount;   // 👈 قيمة الخصم (الكوبون)
-  final double totalPrice;       // 👈 الصافي النهائي المدفوع
+  final double subtotal;
+  final double discountAmount;
+  final double totalPrice;
   final String phone;
   final String address;
   final String paymentMethod;
   final DateTime orderDate;
   final String status;
 
-  // 👈 ممر سحري عشان لو أي شاشة بتنادي على .date تشتغل معاك عادي
   DateTime get date => orderDate;
 
   OrderModel({
@@ -88,7 +87,6 @@ class OrderModel {
       resolvedTotal = (json['totalAmount'] as num).toDouble();
     }
 
-    // 👈 جلب الإجمالي قبل الخصم والخصم بسلامة ودون أخطاء
     double resolvedSubtotal = (json['subtotal'] as num?)?.toDouble() ?? resolvedTotal;
     double resolvedDiscount = (json['discountAmount'] as num?)?.toDouble() ?? 0.0;
 
@@ -110,9 +108,21 @@ class OrderModel {
       resolvedDate = DateTime.tryParse(json['orderDate']) ?? DateTime.now();
     }
 
+    // 🚀 الفلتر الذكي: حل مشكلة الـ NoSuchMethodError (الدمج بين الأونلاين والكاشير)
+    int resolvedOrderNumber = 0;
+    if (json['orderNumber'] != null) {
+      if (json['orderNumber'] is num) {
+        resolvedOrderNumber = (json['orderNumber'] as num).toInt();
+      } else if (json['orderNumber'] is String) {
+        // استخراج الأرقام فقط من الفواتير النصية (مثل POS-912781)
+        String numericPart = json['orderNumber'].toString().replaceAll(RegExp(r'[^0-9]'), '');
+        resolvedOrderNumber = int.tryParse(numericPart) ?? 0;
+      }
+    }
+
     return OrderModel(
       id: documentId,
-      orderNumber: (json['orderNumber'] ?? 0).toInt(),
+      orderNumber: resolvedOrderNumber, // 👈 تم التعديل هنا لاستخدام الرقم المفلتر
       userId: json['userId'] ?? '',
       items: parsedItems,
       subtotal: resolvedSubtotal,

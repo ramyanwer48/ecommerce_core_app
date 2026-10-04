@@ -258,7 +258,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               GridView.count(
                 crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                 children: [
-                  _buildActionCard(title: 'فاتورة بيع (POS)', subtitle: 'مبيعات مباشرة/كاشير', icon: Icons.point_of_sale_rounded, color: Colors.green.shade600, onTap: () => _showComingSoon(context, 'شاشة فاتورة البيع (تحت التطوير)')),
+                  // 👈 التعديل تم هنا: ربط الزر بمسار الـ POS مباشرة
+                  _buildActionCard(title: 'فاتورة بيع (POS)', subtitle: 'مبيعات مباشرة/كاشير', icon: Icons.point_of_sale_rounded, color: Colors.green.shade600, onTap: () => context.push(Routes.pos)),
                   _buildActionCard(title: 'طلبات أونلاين', subtitle: 'أوردرات المتجر', icon: Icons.shopping_bag_rounded, color: Colors.orange.shade700, onTap: () => context.push(Routes.adminOrders)),
                   _buildActionCard(title: 'سجل المبيعات', subtitle: 'فواتير العملاء السابقة', icon: Icons.receipt_long_rounded, color: Colors.teal.shade600, onTap: () => context.push(Routes.salesInvoices)),
                   _buildActionCard(title: 'حسابات العملاء', subtitle: 'المدينون (العملاء)', icon: Icons.groups_rounded, color: Colors.blueGrey, onTap: () => context.push(Routes.customers)),
@@ -271,7 +272,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
                   _buildActionCard(title: 'إدارة المنتجات', subtitle: 'إضافة وتسعير', icon: Icons.format_list_bulleted_rounded, color: Colors.amber.shade700, onTap: () => context.push(Routes.manageProducts)),
                   _buildActionCard(title: 'التصنيفات والأقسام', subtitle: 'إدارة الهيكلة', icon: Icons.category_rounded, color: Colors.purple.shade600, onTap: () => context.push(Routes.manageCategories)),
-                  _buildActionCard(title: 'جرد المخزن', subtitle: 'تقارير وتوالف', icon: Icons.fact_check_rounded, color: Colors.grey.shade700, onTap: () => _showComingSoon(context, 'شاشة الجرد')),
+                  _buildActionCard(title: 'جرد المخزن', subtitle: 'تقارير وتوالف', icon: Icons.fact_check_rounded, color: Colors.grey.shade700, onTap: () => context.push(Routes.inventoryAudit)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -279,7 +280,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               GridView.count(
                 crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                 children: [
-                  _buildActionCard(title: 'شركات الشحن', subtitle: 'حسابات ومستحقات', icon: Icons.directions_car_rounded, color: Colors.lightBlue.shade700, onTap: () => _showComingSoon(context, 'إدارة شركات الشحن')),
+                  _buildActionCard(title: 'شركات الشحن', subtitle: 'حسابات ومستحقات', icon: Icons.directions_car_rounded, color: Colors.lightBlue.shade700, onTap: () => context.push(Routes.shippingCompanies)),
                   _buildActionCard(title: 'بوالص الشحن', subtitle: 'تتبع وحالات الطرود', icon: Icons.assignment_return_rounded, color: Colors.cyan.shade700, onTap: () => _showComingSoon(context, 'تتبع البوالص')),
                 ],
               ),
@@ -288,7 +289,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               GridView.count(
                 crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                 children: [
-                  _buildActionCard(title: 'حركة الخزينة', subtitle: 'الدرج والبنك', icon: Icons.account_balance_wallet_rounded, color: Colors.green.shade800, onTap: () => _showComingSoon(context, 'حركة الخزينة')),
+                  _buildActionCard(title: 'حركة الخزينة', subtitle: 'الدرج والبنك', icon: Icons.account_balance_wallet_rounded, color: Colors.green.shade800, onTap: () => context.push(Routes.treasury)),
                   _buildActionCard(title: 'الأرباح والخسائر', subtitle: 'تقارير مالية', icon: Icons.trending_up_rounded, color: Colors.deepOrange.shade600, onTap: () => _showComingSoon(context, 'تقارير الأرباح')),
                 ],
               ),

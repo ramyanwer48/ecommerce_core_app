@@ -124,13 +124,12 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
 
                     try {
                       WriteBatch batch = _firestore.batch();
-                      // الاعتماد على كوليكشن العملاء الجديد
                       DocumentReference customerRef = _firestore.collection('customers').doc(widget.customerId);
 
                       if (isEditing) {
                         double oldAmount = 0.0;
                         if (data != null && data.containsKey('amount')) {
-                          oldAmount = (data['amount'] ?? 0.0).toDouble();
+                          oldAmount = double.tryParse(data['amount'].toString()) ?? 0.0; // حماية
                         }
 
                         double difference = newAmount - oldAmount;
@@ -143,7 +142,6 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                         });
 
                         if (difference != 0) {
-                          // التحديث في كوليكشن customers
                           batch.update(customerRef, {
                             'balance': FieldValue.increment(-difference),
                           });
@@ -207,7 +205,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null) return;
 
-    double amount = (data['amount'] ?? 0.0).toDouble();
+    double amount = double.tryParse((data['amount'] ?? 0).toString()) ?? 0.0; // حماية
 
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -235,7 +233,6 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
         WriteBatch batch = _firestore.batch();
         batch.delete(doc.reference);
 
-        // التحديث في كوليكشن customers الجديد
         DocumentReference customerRef = _firestore.collection('customers').doc(widget.customerId);
         batch.update(customerRef, {
           'balance': FieldValue.increment(amount),
@@ -286,7 +283,6 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
         ),
         body: Column(
           children: [
-            // الاستعلام من كوليكشن customers الجديد
             StreamBuilder<DocumentSnapshot>(
               stream: _firestore.collection('customers').doc(widget.customerId).snapshots(),
               builder: (context, snapshot) {
@@ -295,7 +291,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
 
                 if (snapshot.hasData && snapshot.data!.exists) {
                   var data = snapshot.data!.data() as Map<String, dynamic>;
-                  liveBalance = (data['balance'] ?? 0).toDouble();
+                  liveBalance = double.tryParse((data['balance'] ?? 0).toString()) ?? 0.0;
                   phone = data['phone'] ?? '';
                 }
 
@@ -382,13 +378,16 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
 
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
+                // 1. إزالة orderBy هنا
                 stream: _firestore.collection('ledger_entries')
                     .where('partnerId', isEqualTo: widget.customerId)
-                    .orderBy('date', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return Center(child: CircularProgressIndicator(color: brandOrange));
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text('خطأ في جلب السجل: ${snapshot.error}', style: const TextStyle(fontFamily: 'Cairo', color: Colors.red)));
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const Center(
@@ -399,7 +398,18 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                     );
                   }
 
-                  var docs = snapshot.data!.docs;
+                  // 2. الترتيب محلياً لتفادي خطأ الـ Index
+                  var docs = snapshot.data!.docs.toList();
+                  docs.sort((a, b) {
+                    var dataA = a.data() as Map<String, dynamic>;
+                    var dataB = b.data() as Map<String, dynamic>;
+                    Timestamp? timeA = dataA['date'] as Timestamp? ?? dataA['createdAt'] as Timestamp? ?? dataA['updatedAt'] as Timestamp?;
+                    Timestamp? timeB = dataB['date'] as Timestamp? ?? dataB['createdAt'] as Timestamp? ?? dataB['updatedAt'] as Timestamp?;
+                    if (timeA == null && timeB == null) return 0;
+                    if (timeA == null) return 1;
+                    if (timeB == null) return -1;
+                    return timeB.compareTo(timeA);
+                  });
 
                   return ListView.builder(
                     itemCount: docs.length,
@@ -409,9 +419,9 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                       var data = doc.data() as Map<String, dynamic>;
 
                       String type = data['type'] ?? 'unknown';
-                      double amount = (data['amount'] ?? 0).toDouble();
+                      double amount = double.tryParse((data['amount'] ?? 0).toString()) ?? 0.0; // حماية
                       String note = data['note'] ?? '';
-                      Timestamp? date = data['date'] as Timestamp?;
+                      Timestamp? date = data['date'] as Timestamp? ?? data['createdAt'] as Timestamp? ?? data['updatedAt'] as Timestamp?;
 
                       bool isReceipt = type == 'receipt';
                       bool isSale = type == 'sale' || type == 'invoice';

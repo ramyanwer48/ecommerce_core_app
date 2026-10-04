@@ -68,6 +68,12 @@ import '../../features/admin/ui/purchase_invoices_screen.dart';
 import '../../features/wishlist/ui/wishlist_screen.dart';
 import '../../features/partners/ui/partners_screen.dart';
 import '../../features/partners/ui/customers_screen.dart';
+import '../../features/admin/ui/pos_screen.dart';
+import '../../features/admin/ui/inventory_audit_screen.dart';
+import '../../features/admin/ui/treasury_screen.dart';
+import '../../features/admin/ui/shipping_companies_screen.dart';
+
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: Routes.splash,
@@ -243,6 +249,22 @@ class AppRouter {
       GoRoute(
         path: Routes.customers,
         builder: (context, state) => const CustomersScreen(),
+      ),
+      GoRoute(
+        path: Routes.pos,
+        builder: (context, state) => const PosScreen(),
+      ),
+      GoRoute(
+        path: Routes.inventoryAudit,
+        builder: (context, state) => const InventoryAuditScreen(),
+      ),
+      GoRoute(
+        path: Routes.treasury,
+        builder: (context, state) => const TreasuryScreen(),
+      ),
+      GoRoute(
+        path: Routes.shippingCompanies,
+        builder: (context, state) => const ShippingCompaniesScreen(),
       ),
     ],
   );
