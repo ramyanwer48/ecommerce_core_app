@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 👈 استدعاء المصادقة
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ShippingCompaniesScreen extends StatefulWidget {
   const ShippingCompaniesScreen({super.key});
@@ -11,13 +11,13 @@ class ShippingCompaniesScreen extends StatefulWidget {
 
 class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance; // 👈 تهيئة المصادقة
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = Colors.orange.shade600;
 
   String _searchQuery = '';
 
-  // الشاشة السفلية لإضافة جهة الشحن
+  // الشاشة السفلية لإضافة جهة الشحن (BottomSheet)
   void _showAddCourierSheet() {
     TextEditingController nameCtrl = TextEditingController();
     TextEditingController phoneCtrl = TextEditingController();
@@ -27,14 +27,14 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Directionality(
+      builder: (sheetCtx) => Directionality(
         textDirection: TextDirection.rtl,
         child: Container(
           padding: EdgeInsets.only(
             top: 20,
             left: 20,
             right: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -103,7 +103,7 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
                   children: [
                     Expanded(
                       child: TextButton(
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: () => Navigator.pop(sheetCtx),
                         style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                         child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
@@ -123,30 +123,37 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
                           double defaultFee = double.tryParse(feeCtrl.text) ?? 0.0;
                           String currentUserId = _auth.currentUser?.uid ?? '';
 
-                          // 1. التحقق من إدخال الاسم
                           if (name.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إدخال اسم الشركة أو المندوب أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                             return;
                           }
 
-                          // 2. محاولة الحفظ مع إظهار الأخطاء إن وُجدت
+                          // إظهار اللودينج
+                          showDialog(context: context, barrierDismissible: false, builder: (loadingCtx) => const Center(child: CircularProgressIndicator()));
+
                           try {
                             await _firestore.collection('couriers').add({
                               'name': name,
                               'phone': phone,
                               'defaultFee': defaultFee,
                               'isActive': true,
-                              'userId': currentUserId, // 👈 لحل مشكلة قواعد الأمان
+                              'userId': currentUserId,
                               'createdAt': FieldValue.serverTimestamp(),
                             });
 
                             if (mounted) {
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المندوب بنجاح', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+                              Navigator.pop(context); // إغلاق اللودينج
+                              Navigator.pop(sheetCtx); // إغلاق الشاشة السفلية
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة جهة الشحن بنجاح 🚀', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
                             }
                           } catch (e) {
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء الحفظ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                              Navigator.pop(context); // إغلاق اللودينج فقط، وترك الشاشة السفلية مفتوحة
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text('تم الرفض من قواعد أمان الفايربيز (Rules)! برجاء السماح لجدول couriers', style: const TextStyle(fontFamily: 'Cairo')),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 5)
+                              ));
                             }
                           }
                         },
@@ -205,6 +212,9 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
                 stream: _firestore.collection('couriers').orderBy('createdAt', descending: true).snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
+                  if (snapshot.hasError) {
+                    return const Center(child: Text('غير مسموح بقراءة البيانات، تأكد من الـ Rules', style: TextStyle(fontFamily: 'Cairo', color: Colors.red)));
+                  }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return Center(
                       child: Column(
