@@ -9,9 +9,16 @@ class AdminOrdersRepo {
     try {
       final snapshot = await _firestore.collection('orders').get();
 
-      List<OrderModel> orders = snapshot.docs
-          .map((doc) => OrderModel.fromJson(doc.data(), doc.id))
-          .toList();
+      List<OrderModel> orders = [];
+      for (var doc in snapshot.docs) {
+        var data = doc.data();
+
+        // 🚀 الفلتر السحري: استبعاد أي طلب قادم من الكاشير (المحل)
+        // وبكده الشاشة هتعرض (الأونلاين) و(الطلبات القديمة) فقط لحماية أرشيفك.
+        if (data['orderType'] == 'pos') continue;
+
+        orders.add(OrderModel.fromJson(data, doc.id));
+      }
 
       // ترتيب الطلبات محلياً من الأحدث للأقدم لضمان عدم حدوث أي مشاكل في فايربيز
       orders.sort((a, b) => b.id.compareTo(a.id));

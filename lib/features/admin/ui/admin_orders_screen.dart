@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../profile/data/models/order_model.dart';
 import '../logic/admin_orders_cubit.dart';
 import '../logic/admin_orders_state.dart';
-import '../../../core/utils/printer_bottom_sheet.dart';
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -21,13 +20,11 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     context.read<AdminOrdersCubit>().fetchAllOrders();
   }
 
-  // 🚀 دالة الأتمتة السحرية: بتسجل الفاتورة والتحصيل أوتوماتيك أول ما الأوردر يتسلم!
   Future<void> _automateLedgerEntry(OrderModel order) async {
     try {
       final firestore = FirebaseFirestore.instance;
       WriteBatch batch = firestore.batch();
 
-      // بنجيب الداتا الأصلية للأوردر عشان نطلع منها اسم العميل الصح
       DocumentSnapshot orderDoc = await firestore.collection('orders').doc(order.id).get();
       if (!orderDoc.exists) return;
       var data = orderDoc.data() as Map<String, dynamic>;
@@ -45,7 +42,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       double price = order.totalPrice;
       if (price <= 0) return;
 
-      // البحث عن العميل في كوليكشن customers (المنفصل)
       QuerySnapshot customerSnap = await firestore.collection('customers').where('name', isEqualTo: customerName).get();
       DocumentReference customerRef;
       String customerId;
@@ -56,7 +52,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         batch.set(customerRef, {
           'name': customerName,
           'phone': phone,
-          'balance': 0.0, // لأنها اتدفعت أوتوماتيك
+          'balance': 0.0,
           'createdAt': FieldValue.serverTimestamp(),
         });
       } else {
@@ -64,7 +60,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         customerId = customerSnap.docs.first.id;
       }
 
-      // 1️⃣ إضافة فاتورة المبيعات
       DocumentReference saleRef = firestore.collection('ledger_entries').doc('order_${order.id}');
       batch.set(saleRef, {
         'partnerId': customerId,
@@ -72,10 +67,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         'type': 'sale',
         'amount': price,
         'date': FieldValue.serverTimestamp(),
-        'note': 'أوردر المتجر رقم: ${order.id.substring(0, 5)}',
+        'note': 'أوردر أونلاين رقم: ${order.id.substring(0, 5)}',
       }, SetOptions(merge: true));
 
-      // 2️⃣ إضافة سند التحصيل الأوتوماتيكي (لأنه تم التسليم / كاش)
       DocumentReference receiptRef = firestore.collection('ledger_entries').doc('auto_receipt_${order.id}');
       batch.set(receiptRef, {
         'partnerId': customerId,
@@ -83,7 +77,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         'type': 'receipt',
         'amount': price,
         'date': FieldValue.serverTimestamp(),
-        'note': 'تحصيل أوتوماتيكي (كاش/تم التسليم)',
+        'note': 'تحصيل أوتوماتيكي (أونلاين/تم التسليم)',
       }, SetOptions(merge: true));
 
       await batch.commit();
@@ -100,7 +94,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('إدارة طلبات العملاء', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+          // 🚀 التعديل: المسمى الاحترافي الجديد
+          title: const Text('إدارة طلبات الأونلاين', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
           centerTitle: true,
           backgroundColor: const Color(0xFF000826),
           iconTheme: const IconThemeData(color: Colors.white),
@@ -126,7 +121,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
               final orders = state.orders;
               if (orders.isEmpty) {
                 return const Center(
-                  child: Text('لا توجد طلبات حتى الآن 📭', style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  child: Text('لا توجد طلبات أونلاين حتى الآن 📭', style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 );
               }
 
@@ -136,22 +131,30 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 itemBuilder: (context, index) {
                   final order = orders[index];
 
-                  // 👈 إضافة 'Waybill' لقائمة الحالات الصحيحة
                   final List<String> validStatuses = ['Pending', 'Processing', 'Waybill', 'Shipped', 'Delivered', 'Cancelled'];
                   final currentStatus = validStatuses.contains(order.status) ? order.status : 'Pending';
 
-                  final String datePrefix = '${order.date.year.toString().substring(2)}${order.date.month.toString().padLeft(2, '0')}${order.date.day.toString().padLeft(2, '0')}';
+                  final String datePrefix = '${order.date.year.toString().substring(2)}-${order.date.month.toString().padLeft(2, '0')}-${order.date.day.toString().padLeft(2, '0')}';
+
                   final String displayOrderNumber = order.orderNumber > 0
-                      ? 'ORD-$datePrefix-${order.orderNumber}'
+                      ? 'ORD-[$datePrefix]-${order.orderNumber}'
                       : 'ORD-${order.id.substring(0, order.id.length > 6 ? 6 : order.id.length).toUpperCase()}';
 
                   final String formattedDate = '${order.date.day}/${order.date.month}/${order.date.year}';
                   final currentStatusConfig = _getStatusConfig(currentStatus);
 
+                  String displayPaymentMethod = order.paymentMethod;
+                  if (displayPaymentMethod.toLowerCase() == 'cash' || displayPaymentMethod == 'كاش') {
+                    displayPaymentMethod = 'الدفع عند الاستلام';
+                  }
+
                   return Card(
-                    elevation: 3,
+                    elevation: 2,
                     margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.orange.shade600.withValues(alpha: 0.5), width: 1.5),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -161,13 +164,20 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Flexible(
-                                child: Text(displayOrderNumber, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF000826))),
+                                child: Directionality(
+                                  textDirection: TextDirection.ltr,
+                                  child: Text(
+                                      displayOrderNumber,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF000826))
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                                child: Text(order.paymentMethod, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                                child: Text(displayPaymentMethod, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent, fontFamily: 'Cairo')),
                               ),
                             ],
                           ),
@@ -188,6 +198,35 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                               Expanded(child: Text(order.address, style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.3, fontFamily: 'Cairo'))),
                             ],
                           ),
+
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('المنتجات المطلوبة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
+                                const SizedBox(height: 8),
+                                ...order.items.map((item) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 6.0),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${item.quantity}x ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                                      Expanded(child: Text('${item.name}', style: const TextStyle(fontSize: 13, fontFamily: 'Cairo'))),
+                                      Text('${item.unitPrice} ج', style: const TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                )),
+                              ],
+                            ),
+                          ),
+
                           const SizedBox(height: 12),
                           FittedBox(
                             fit: BoxFit.scaleDown,
@@ -228,39 +267,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 42,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                showPrinterBottomSheet(
-                                  context: context,
-                                  orderNumber: displayOrderNumber,
-                                  customerName: 'عميل المتجر',
-                                  phone: order.phone,
-                                  address: order.address,
-                                  subtotal: order.subtotal,
-                                  discountAmount: order.discountAmount,
-                                  totalAmount: order.totalPrice,
-                                  paymentMethod: order.paymentMethod,
-                                  products: order.items.map((item) => {
-                                    'name': item.name,
-                                    'quantity': item.quantity,
-                                    'unitPrice': item.unitPrice,
-                                  }).toList(),
-                                );
-                              },
-                              icon: const Icon(Icons.receipt_long, size: 18),
-                              label: const Text('بوليصة الشحن الحرارية', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Cairo')),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF000826),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                elevation: 0,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -279,7 +285,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     switch (status) {
       case 'Pending': return {'text': 'قيد الانتظار ⏳', 'color': Colors.orange};
       case 'Processing': return {'text': 'جاري التجهيز 📦', 'color': Colors.blue};
-      case 'Waybill': return {'text': 'بوليصة 🖨️', 'color': Colors.cyan}; // 👈 تمت إضافة حالة البوليصة
+      case 'Waybill': return {'text': 'بوليصة 🖨', 'color': Colors.cyan};
       case 'Shipped': return {'text': 'تم الشحن 🚚', 'color': Colors.deepPurple};
       case 'Delivered': return {'text': 'تم التوصيل ✅', 'color': Colors.green};
       case 'Cancelled': return {'text': 'ملغي ❌', 'color': Colors.red};
@@ -288,13 +294,12 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   }
 
   void _showStatusModal(BuildContext context, OrderModel order, String currentStatus) {
-    // 👈 ترتيب الحالات الجديد شامل البوليصة
     final List<String> statuses = ['Pending', 'Processing', 'Waybill', 'Shipped', 'Delivered', 'Cancelled'];
     final adminOrdersCubit = context.read<AdminOrdersCubit>();
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // 👈 منع الأوفر فلو
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (bottomSheetContext) {
         return Directionality(
@@ -306,7 +311,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 right: 16,
                 top: 20
             ),
-            child: SingleChildScrollView( // 👈 حل جذري للأوفر فلو في الشاشات الصغيرة
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -326,10 +331,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       onTap: () async {
                         Navigator.pop(bottomSheetContext);
                         if (!isSelected) {
-                          // تحديث الحالة في قاعدة البيانات الرئيسية
                           adminOrdersCubit.updateStatus(order, status);
-
-                          // 🚀 السحر: لو اختار "تم التوصيل"، سجل الفاتورة والتحصيل أوتوماتيك
                           if (status == 'Delivered') {
                             await _automateLedgerEntry(order);
                           }

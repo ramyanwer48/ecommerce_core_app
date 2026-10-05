@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 👈 استدعاء المصادقة
 import '../../../core/widgets/custom_bottom_sheet.dart';
 import '../data/models/product_model.dart';
 import '../../../core/di/dependency_injection.dart';
@@ -46,6 +47,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _showAddReviewDialog(BuildContext context, ReviewsCubit cubit) {
+    // 🚀 حماية إضافية: التأكد إن المستخدم مسجل دخول قبل ما يفتح نافذة التقييم أصلاً
+    if (FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('يجب تسجيل الدخول أولاً لإضافة تقييم 🔒', style: TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: Colors.red
+        ),
+      );
+      return;
+    }
+
     double selectedRating = 5.0;
     final nameController = TextEditingController();
     final commentController = TextEditingController();
@@ -117,7 +129,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 👇 التعديل هنا: تجميع كل الصور (القديمة والجديدة) لضمان عدم ضياع أي صورة للعميل
     List<String> displayImages = [];
     if (widget.product.imageUrl.isNotEmpty) {
       displayImages.add(widget.product.imageUrl);
@@ -181,7 +192,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
               body: Column(
                 children: [
-                  // 🖼️ مساحة عرض الصور مع الـ Carousel والـ Dots
                   Container(
                     width: double.infinity,
                     height: 300,

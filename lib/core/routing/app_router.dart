@@ -72,7 +72,7 @@ import '../../features/admin/ui/pos_screen.dart';
 import '../../features/admin/ui/inventory_audit_screen.dart';
 import '../../features/admin/ui/treasury_screen.dart';
 import '../../features/admin/ui/shipping_companies_screen.dart';
-
+import '../../features/admin/ui/waybills_screen.dart'; // حط دي فوق مع الاستدعاءات
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -265,6 +265,10 @@ class AppRouter {
       GoRoute(
         path: Routes.shippingCompanies,
         builder: (context, state) => const ShippingCompaniesScreen(),
+      ),
+      GoRoute(
+        path: Routes.waybills,
+        builder: (context, state) => const WaybillsScreen(),
       ),
     ],
   );

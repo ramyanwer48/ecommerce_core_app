@@ -27,6 +27,8 @@ class CheckoutRepo {
     required double totalSellingAmount,
     required Map<String, dynamic> shippingAddress,
     required String paymentMethod,
+    required String orderType, // 👈 التعديل: استلام نوع الطلب (pos أو online)
+    required String status,    // 👈 التعديل: استلام الحالة المبدئية (Delivered أو Pending)
   }) async {
     final orderRef = _firestore.collection('orders').doc();
     final counterRef = _firestore.collection('system').doc('orders_counter');
@@ -47,7 +49,6 @@ class CheckoutRepo {
       }
 
       // 2. العمليات الحسابية
-      // 👈 تم إضافة التحويل الآمن لـ int هنا
       int currentNumber = 1000;
       if (counterSnap.exists) {
         currentNumber = ((counterSnap.data()?['lastNumber'] as num?)?.toInt() ?? 1000) + 1;
@@ -62,7 +63,6 @@ class CheckoutRepo {
         var snap = productSnaps[i];
         var data = snap.data() as Map<String, dynamic>;
 
-        // 👈 تم إضافة التحويل الآمن لـ int هنا
         int quantityToDeduct = (item['quantity'] as num).toInt();
         List<dynamic> batches = data['batches'] ?? [];
 
@@ -79,7 +79,6 @@ class CheckoutRepo {
 
         for (var b in batches) {
           Map<String, dynamic> batchData = Map<String, dynamic>.from(b);
-          // 👈 تم إضافة التحويل الآمن لـ int هنا
           int batchQty = (batchData['quantity'] as num).toInt();
           double batchCost = (batchData['costPrice'] as num?)?.toDouble() ?? 0.0;
 
@@ -128,7 +127,6 @@ class CheckoutRepo {
 
         totalOrderCostPrice += itemTotalCost;
 
-        // 👈 تم إضافة التحويل الآمن لـ int هنا
         int currentStockQty = (data['stockQuantity'] as num?)?.toInt() ?? 0;
         int newStockQty = currentStockQty - quantityToDeduct;
 
@@ -146,20 +144,30 @@ class CheckoutRepo {
         transaction.update(snap.reference, updateData);
       });
 
+      // 🚀 التعديل: تنظيف العنوان من دمج الاسم إذا تم إرساله مدمجاً
+      String cleanAddress = shippingAddress['address'] ?? 'غير متوفر';
+      String customerName = '${shippingAddress['firstName'] ?? ''} ${shippingAddress['lastName'] ?? ''}'.trim();
+      if (cleanAddress.contains('(') && cleanAddress.contains(customerName) && customerName.isNotEmpty) {
+        // محاولة إزالة الجزء المدمج بين الأقواس لتنظيف العنوان
+        cleanAddress = cleanAddress.replaceAll(RegExp(r'\(.*?\)'), '').trim();
+      }
+
       // تسجيل وثيقة الطلب
       transaction.set(orderRef, {
         'id': orderRef.id,
         'orderNumber': currentNumber,
         'userId': userId,
+        'orderType': orderType, // 👈 التعديل: حفظ نوع الطلب
         'items': finalOrderItems,
         'subtotal': subtotal,
         'discountAmount': discountAmount,
         'totalPrice': totalSellingAmount,
         'totalAmount': totalSellingAmount,
         'totalCostPrice': totalOrderCostPrice,
-        'status': 'Pending',
+        'status': status,       // 👈 التعديل: حفظ الحالة بناءً على نوع الطلب
         'phone': shippingAddress['phone'] ?? 'غير متوفر',
-        'address': shippingAddress['address'] ?? 'غير متوفر',
+        'address': cleanAddress, // 👈 العنوان النظيف
+        'customerName': customerName.isNotEmpty ? customerName : 'عميل', // حفظ الاسم الصريح
         'shippingAddress': shippingAddress,
         'paymentMethod': paymentMethod,
         'orderDate': Timestamp.now(),
@@ -167,6 +175,16 @@ class CheckoutRepo {
       });
 
       // القيد المحاسبي المزدوج (Double-Entry Bookkeeping)
+      // 🚀 التعديل: تحديد الحساب بناءً على طريقة الدفع ونوع الطلب
+      String debitAccount = 'الخزينة (كاش)';
+      if (paymentMethod == 'Online Card') {
+        debitAccount = 'بوابة الدفع (Paymob)';
+      } else if (orderType == 'pos') {
+        debitAccount = 'درج الكاشير'; // يمكن تغييرها حسب شجرة حساباتك
+      } else if (paymentMethod == 'الدفع عند الاستلام' && status != 'Delivered') {
+        debitAccount = 'العملاء (ذمم مدينة)'; // أونلاين لم يتم تسليمه بعد
+      }
+
       transaction.set(ledgerRef, {
         'id': ledgerRef.id,
         'orderId': orderRef.id,
@@ -176,7 +194,7 @@ class CheckoutRepo {
         'type': 'Sales',
         'entries': [
           {
-            'account': paymentMethod == 'Online Card' ? 'بوابة الدفع (Paymob)' : 'الخزينة (كاش)',
+            'account': debitAccount,
             'debit': totalSellingAmount,
             'credit': 0.0,
           },
@@ -236,7 +254,6 @@ class CheckoutRepo {
       for (var item in items) {
         final productId = item['productId'];
         final consumedBatches = List<Map<String, dynamic>>.from(item['consumedBatches'] ?? []);
-        // 👈 تم إضافة التحويل الآمن لـ int هنا
         final quantityToRestore = (item['quantity'] as num?)?.toInt() ?? 0;
 
         final pSnap = productSnaps[productId];
@@ -247,13 +264,12 @@ class CheckoutRepo {
           for (var cb in consumedBatches) {
             batches.add({
               'batchId': cb['batchId'],
-              'quantity': (cb['quantity'] as num).toInt(), // 👈 تحويل آمن
-              'costPrice': (cb['costPrice'] as num).toDouble(), // 👈 تحويل آمن
+              'quantity': (cb['quantity'] as num).toInt(),
+              'costPrice': (cb['costPrice'] as num).toDouble(),
               'dateAdded': Timestamp.now(),
             });
           }
 
-          // 👈 تم إضافة التحويل الآمن لـ int هنا
           int currentStock = (pData['stockQuantity'] as num?)?.toInt() ?? 0;
           int newStock = currentStock + quantityToRestore;
 

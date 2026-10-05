@@ -39,4 +39,5 @@ class Routes {
   static const String inventoryAudit = '/inventoryAudit';
   static const String treasury = '/treasury';
   static const String shippingCompanies = '/shippingCompanies';
+  static const String waybills = '/waybills';
 }

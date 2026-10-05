@@ -1,10 +1,8 @@
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 
 class ThermalPrinterService {
-  // إنشاء نسخة (Instance) من مكتبة الطباعة
   final BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
 
-  // 1. جلب قائمة الطابعات المقترنة (Bonded Devices) بموبايلك
   Future<List<BluetoothDevice>> getBondedDevices() async {
     try {
       return await bluetooth.getBondedDevices();
@@ -14,7 +12,6 @@ class ThermalPrinterService {
     }
   }
 
-  // 2. الاتصال بالطابعة المختارة
   Future<void> connectToPrinter(BluetoothDevice device) async {
     try {
       await bluetooth.connect(device);
@@ -23,14 +20,13 @@ class ThermalPrinterService {
     }
   }
 
-  // 3. قطع الاتصال بالطابعة (مهم لتوفير البطارية ومنع التعليق)
   Future<void> disconnectPrinter() async {
     await bluetooth.disconnect();
   }
 
-  // 4. تصميم الفاتورة / بوليصة الشحن وإرسالها للطابعة (محدثة لتوافق الحسابات والخصومات)
+  // 1. الفاتورة العادية
   Future<void> printOrderReceipt({
-    required String orderNumber,               // 👈 تم التعديل إلى String لاستقبال التنسيق الجديد
+    required String orderNumber,
     required String customerName,
     required String phone,
     required String address,
@@ -41,20 +37,14 @@ class ThermalPrinterService {
     required List<Map<String, dynamic>> products,
   }) async {
     bool? isConnected = await bluetooth.isConnected;
-    if (isConnected != true) {
-      throw Exception("برجاء الاتصال بالطابعة أولاً من القائمة");
-    }
+    if (isConnected != true) throw Exception("برجاء الاتصال بالطابعة أولاً من القائمة");
 
-    // تنسيق التاريخ بالتردد المحاسبي (يوم/شهر/سنة)
     String formattedDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
-
     bluetooth.printNewLine();
-    bluetooth.printCustom("RAMY STORE - ERP", 3, 1); // اسم المتجر (حجم كبير، في المنتصف)
+    bluetooth.printCustom("RAMY STORE - ERP", 3, 1);
     bluetooth.printCustom("Official Receipt", 1, 1);
     bluetooth.printNewLine();
-
     bluetooth.printCustom("--------------------------------", 1, 1);
-    // 👈 تم حذف علامة # ليطبع النص (ORD-...) بشكله الاحترافي كما هو
     bluetooth.printCustom("Order No: $orderNumber", 1, 0);
     bluetooth.printCustom("Date: $formattedDate", 1, 0);
     bluetooth.printCustom("Customer: $customerName", 1, 0);
@@ -63,38 +53,92 @@ class ThermalPrinterService {
     bluetooth.printCustom("Payment: $paymentMethod", 1, 0);
     bluetooth.printCustom("--------------------------------", 1, 1);
 
-    // طباعة المنتجات
     bluetooth.printCustom("Products:", 1, 0);
     for (var item in products) {
       String name = item['name'].toString();
       String qty = item['quantity'].toString();
       double price = (item['unitPrice'] ?? item['price'] ?? 0.0).toDouble();
-
-      // تقصير اسم المنتج لو طويل جداً على ورقة الطابعة (58mm)
       String shortName = name.length > 20 ? name.substring(0, 20) : name;
-
-      // طباعة: (الكمية × اسم المنتج) على اليسار، و(السعر) على اليمين
       bluetooth.printLeftRight("$qty x $shortName", "${price.toStringAsFixed(2)} EGP", 1);
     }
 
     bluetooth.printCustom("--------------------------------", 1, 1);
-
-    // الملخص المالي المطابق للقيود المحاسبية
     bluetooth.printLeftRight("Subtotal:", "${subtotal.toStringAsFixed(2)} EGP", 1);
-
-    // طباعة سطر الخصم فقط لو كان هناك كوبون مستخدم بقيمة أكبر من صفر
-    if (discountAmount > 0) {
-      bluetooth.printLeftRight("Discount:", "-${discountAmount.toStringAsFixed(2)} EGP", 1);
-    }
-
+    if (discountAmount > 0) bluetooth.printLeftRight("Discount:", "-${discountAmount.toStringAsFixed(2)} EGP", 1);
     bluetooth.printLeftRight("Final Total:", "${totalAmount.toStringAsFixed(2)} EGP", 1);
-
     bluetooth.printNewLine();
     bluetooth.printCustom("Thank You For Shopping!", 1, 1);
     bluetooth.printCustom("System Engineered by Ramy Anwar", 0, 1);
     bluetooth.printNewLine();
     bluetooth.printNewLine();
+    bluetooth.paperCut();
+  }
 
-    bluetooth.paperCut(); // أمر قص الورق التلقائي للطابعة
+  // 🚀 2. بوليصة الشحن (النسخة الاحترافية بالباركود ورقم التتبع الموحد)
+  // 🚀 2. بوليصة الشحن (النسخة الاحترافية بالباركود والمنتجات)
+  Future<void> printWaybill({
+    required String orderNumber,
+    required String customerName,
+    required String phone,
+    required String address,
+    required double totalAmount,
+    required String paymentMethod,
+    required String courierName,
+    required List<Map<String, dynamic>> products, // 👈 تم إضافة المنتجات هنا
+  }) async {
+    bool? isConnected = await bluetooth.isConnected;
+    if (isConnected != true) throw Exception("برجاء الاتصال بالطابعة أولاً");
+
+    String formattedDate = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+
+    bluetooth.printNewLine();
+    bluetooth.printCustom("RAMY STORE - WAYBILL", 3, 1);
+    bluetooth.printNewLine();
+
+    // طباعة باركود (QR) ورقم التتبع
+    bluetooth.printQRcode(orderNumber, 200, 200, 1);
+    bluetooth.printCustom("TRACKING ID", 1, 1);
+    bluetooth.printCustom(orderNumber, 2, 1);
+
+    bluetooth.printCustom("--------------------------------", 1, 1);
+    bluetooth.printCustom("Date: $formattedDate", 1, 0);
+    bluetooth.printCustom("Courier: $courierName", 1, 0);
+    bluetooth.printCustom("--------------------------------", 1, 1);
+
+    bluetooth.printCustom("DELIVER TO:", 1, 0);
+    bluetooth.printCustom("Name: $customerName", 1, 0);
+    bluetooth.printCustom("Phone: $phone", 1, 0);
+    bluetooth.printCustom("Address: $address", 1, 0);
+    bluetooth.printCustom("--------------------------------", 1, 1);
+
+    // 🌟 طباعة المنتجات (فاتورة مصغرة للمندوب والعميل)
+    bluetooth.printCustom("Products:", 1, 0);
+    for (var item in products) {
+      String name = item['name'].toString();
+      String qty = item['quantity'].toString();
+      double price = (item['unitPrice'] ?? item['price'] ?? 0.0).toDouble();
+      String shortName = name.length > 20 ? name.substring(0, 20) : name;
+      bluetooth.printLeftRight("$qty x $shortName", "${price.toStringAsFixed(2)} EGP", 1);
+    }
+    bluetooth.printCustom("--------------------------------", 1, 1);
+
+    // المبلغ المطلوب تحصيله
+    String displayPayment = paymentMethod;
+    if (displayPayment.toLowerCase() == 'cash' || displayPayment == 'كاش') {
+      displayPayment = 'الدفع عند الاستلام';
+    }
+
+    bluetooth.printCustom("Payment: $displayPayment", 1, 0);
+    if (displayPayment == 'الدفع عند الاستلام') {
+      bluetooth.printLeftRight("COD AMOUNT:", "${totalAmount.toStringAsFixed(2)} EGP", 1);
+    } else {
+      bluetooth.printLeftRight("COD AMOUNT:", "PAID ONLINE", 1);
+    }
+
+    bluetooth.printNewLine();
+    bluetooth.printCustom("System Engineered by Ramy Anwar", 0, 1);
+    bluetooth.printNewLine();
+    bluetooth.printNewLine();
+    bluetooth.paperCut();
   }
 }

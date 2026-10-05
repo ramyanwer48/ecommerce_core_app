@@ -145,20 +145,25 @@ class CheckoutCubit extends Cubit<CheckoutState> {
     required double totalSellingAmount,
     required Map<String, dynamic> shippingAddress,
     required String paymentMethod,
+    String orderType = 'online', // 🚀 التعديل: نوع الطلب افتراضياً أونلاين
   }) async {
     emit(CheckoutOrderLoading());
     try {
-      // 👈 حساب قيمة الخصم (لو مفيش خصم، totalSellingAmount هيساوي subTotal والنتيجة صفر)
       double discountAmount = subTotal - totalSellingAmount;
+
+      // 🚀 التعديل: لو الطلب من المحل يبقى Delivered فوراً، لو أونلاين يبقى Pending
+      String finalStatus = (orderType == 'pos') ? 'Delivered' : 'Pending';
 
       await _repo.placeOrderWithFIFO(
         userId: userId,
         cartItems: cartItems,
-        subtotal: subTotal,             // 👈 تمرير الإجمالي قبل الخصم
-        discountAmount: discountAmount, // 👈 تمرير الخصم المسموح به
+        subtotal: subTotal,
+        discountAmount: discountAmount,
         totalSellingAmount: totalSellingAmount,
         shippingAddress: shippingAddress,
         paymentMethod: paymentMethod,
+        orderType: orderType, // 👈 إرسال نوع الطلب للريبو
+        status: finalStatus,  // 👈 إرسال الحالة للريبو
       );
 
       emit(CheckoutOrderSuccess());

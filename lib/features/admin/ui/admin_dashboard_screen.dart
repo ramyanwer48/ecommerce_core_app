@@ -218,7 +218,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       final data = doc.data() as Map<String, dynamic>;
                       String status = data['status']?.toString().toLowerCase() ?? 'new';
 
-                      // 🛠️ الفلترة الدقيقة لحالات الطلب
                       if (status == 'new' || status == 'جديد' || status == 'pending') newOrders++;
                       else if (status == 'preparing' || status == 'تجهيز' || status == 'processing' || status == 'جاري التجهيز') preparing++;
                       else if (status == 'waybill' || status == 'بوليصة') waybill++;
@@ -258,11 +257,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               GridView.count(
                 crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                 children: [
-                  // 👈 التعديل تم هنا: ربط الزر بمسار الـ POS مباشرة
-                  _buildActionCard(title: 'فاتورة بيع (POS)', subtitle: 'مبيعات مباشرة/كاشير', icon: Icons.point_of_sale_rounded, color: Colors.green.shade600, onTap: () => context.push(Routes.pos)),
-                  _buildActionCard(title: 'طلبات أونلاين', subtitle: 'أوردرات المتجر', icon: Icons.shopping_bag_rounded, color: Colors.orange.shade700, onTap: () => context.push(Routes.adminOrders)),
-                  _buildActionCard(title: 'سجل المبيعات', subtitle: 'فواتير العملاء السابقة', icon: Icons.receipt_long_rounded, color: Colors.teal.shade600, onTap: () => context.push(Routes.salesInvoices)),
-                  _buildActionCard(title: 'حسابات العملاء', subtitle: 'المدينون (العملاء)', icon: Icons.groups_rounded, color: Colors.blueGrey, onTap: () => context.push(Routes.customers)),
+                  // 🚀 التعديلات هنا: المسميات الاحترافية الجديدة اللي اتفقنا عليها
+                  _buildActionCard(title: 'المبيعات المباشرة', subtitle: 'مبيعات المقر/الكاشير', icon: Icons.storefront_rounded, color: Colors.green.shade600, onTap: () => context.push(Routes.pos)),
+                  _buildActionCard(title: 'طلبات المتجر', subtitle: 'أوردرات الأونلاين', icon: Icons.language_rounded, color: Colors.orange.shade700, onTap: () => context.push(Routes.adminOrders)),
+                  _buildActionCard(title: 'فواتير المبيعات', subtitle: 'السجل المجمع (المقر والأونلاين)', icon: Icons.receipt_long_rounded, color: Colors.teal.shade600, onTap: () => context.push(Routes.salesInvoices)),
+                  _buildActionCard(title: 'حسابات العملاء', subtitle: 'المدينون وأرصدتهم', icon: Icons.groups_rounded, color: Colors.blueGrey, onTap: () => context.push(Routes.customers)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -281,7 +280,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                 children: [
                   _buildActionCard(title: 'شركات الشحن', subtitle: 'حسابات ومستحقات', icon: Icons.directions_car_rounded, color: Colors.lightBlue.shade700, onTap: () => context.push(Routes.shippingCompanies)),
-                  _buildActionCard(title: 'بوالص الشحن', subtitle: 'تتبع وحالات الطرود', icon: Icons.assignment_return_rounded, color: Colors.cyan.shade700, onTap: () => _showComingSoon(context, 'تتبع البوالص')),
+                  _buildActionCard(title: 'بوالص الشحن', subtitle: 'إسناد وطباعة البوليصة', icon: Icons.receipt_long_rounded, color: Colors.deepPurple.shade600, onTap: () => context.push(Routes.waybills)),
                 ],
               ),
               const SizedBox(height: 24),

@@ -24,6 +24,10 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
     emit(AdminOrdersLoading());
     try {
       final orders = await _ordersRepo.getAllOrders();
+
+      // 🚀 التعديل هنا: ترتيب الطلبات بحيث يظهر الأحدث في أعلى القائمة دائماً
+      orders.sort((a, b) => b.date.compareTo(a.date));
+
       emit(AdminOrdersLoaded(orders));
     } catch (e) {
       emit(AdminOrdersError(e.toString()));
@@ -81,11 +85,11 @@ class AdminOrdersCubit extends Cubit<AdminOrdersState> {
         status: 'paid',
       );
 
-      // ⚠️️ التعديل هنا: تم إيقاف دالة الحفظ القديمة التي تم حذفها
+      // ⚠ التعديل هنا: تم إيقاف دالة الحفظ القديمة التي تم حذفها
       // سيتم ربط هذا الجزء لاحقاً بخدمة (CheckoutRepo) لتطبيق الـ FIFO في المبيعات!
       // await _invoiceRepo.createInvoiceAndSyncStock(invoice);
 
-      print('تم تجهيز بيانات الفاتورة بنجاح: ${invoice.invoiceNumber} (في انتظار ربطها بخدمة המبيعات الجديدة)');
+      print('تم تجهيز بيانات الفاتورة بنجاح: ${invoice.invoiceNumber} (في انتظار ربطها بخدمة المبيعات الجديدة)');
 
     } catch (e) {
       print('Error generating auto-invoice: $e');
