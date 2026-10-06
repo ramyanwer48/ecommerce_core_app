@@ -9,109 +9,37 @@ class CustomersScreen extends StatefulWidget {
   State<CustomersScreen> createState() => _CustomersScreenState();
 }
 
-class _CustomersScreenState extends State<CustomersScreen> {
+class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = Colors.orange.shade600;
-  bool _isSyncing = false;
 
-  Future<void> _syncCustomersFromOrders() async {
-    setState(() => _isSyncing = true);
-    try {
-      QuerySnapshot ordersSnap = await _firestore.collection('orders').get();
-      WriteBatch batch = _firestore.batch();
-      Map<String, DocumentReference> newCustomersCache = {};
-      int syncCount = 0;
+  late TabController _tabController;
+  late TextEditingController _searchController;
+  late FocusNode _searchFocusNode;
 
-      for (var doc in ordersSnap.docs) {
-        var data = doc.data() as Map<String, dynamic>;
+  String _searchQuery = '';
 
-        String name = '';
-        if (data.containsKey('shippingAddress') && data['shippingAddress'] is Map) {
-          var addr = data['shippingAddress'];
-          name = '${addr['firstName'] ?? ''} ${addr['lastName'] ?? ''}'.trim();
-          if (name.isEmpty) name = (addr['name'] ?? addr['fullName'] ?? '').toString().trim();
-        }
-        if (name.isEmpty) name = (data['userName'] ?? data['customerName'] ?? data['name'] ?? '').toString().trim();
-        if (name.isEmpty) name = 'عميل أونلاين (${doc.id.substring(0, 4)})';
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
 
-        String phone = '';
-        if (data.containsKey('shippingAddress') && data['shippingAddress'] is Map) {
-          phone = (data['shippingAddress']['phone'] ?? '').toString().trim();
-        }
-        if (phone.isEmpty) phone = (data['phone'] ?? data['customerPhone'] ?? '').toString().trim();
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
 
-        double price = double.tryParse((data['totalPrice'] ?? data['totalAmount'] ?? data['grandTotal'] ?? data['amount'] ?? 0).toString()) ?? 0.0;
-        if (price <= 0) continue;
-
-        String status = data['status']?.toString().toLowerCase() ?? '';
-        bool isPaid = data['isPaid'] == true || status == 'delivered' || status == 'تم التسليم';
-        double netBalanceEffect = isPaid ? 0.0 : price;
-
-        DocumentReference customerRef;
-        String customerId;
-
-        if (newCustomersCache.containsKey(name)) {
-          customerRef = newCustomersCache[name]!;
-          customerId = customerRef.id;
-          if (netBalanceEffect > 0) batch.update(customerRef, {'balance': FieldValue.increment(netBalanceEffect)});
-        } else {
-          // 👈 التعديل هنا: بنقرأ ونكتب في كوليكشن customers المستقل
-          QuerySnapshot customerSnap = await _firestore.collection('customers').where('name', isEqualTo: name).get();
-          if (customerSnap.docs.isEmpty) {
-            customerRef = _firestore.collection('customers').doc();
-            customerId = customerRef.id;
-            newCustomersCache[name] = customerRef;
-            batch.set(customerRef, {
-              'name': name,
-              'phone': phone,
-              'balance': netBalanceEffect,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-          } else {
-            customerRef = customerSnap.docs.first.reference;
-            customerId = customerSnap.docs.first.id;
-            if (netBalanceEffect > 0) batch.update(customerRef, {'balance': FieldValue.increment(netBalanceEffect)});
-          }
-        }
-
-        DocumentReference saleRef = _firestore.collection('ledger_entries').doc('order_${doc.id}');
-        batch.set(saleRef, {
-          'partnerId': customerId,
-          'partnerName': name,
-          'type': 'sale',
-          'amount': price,
-          'date': data['createdAt'] ?? FieldValue.serverTimestamp(),
-          'note': 'أوردر المتجر رقم: ${doc.id.substring(0, 5)}',
-        }, SetOptions(merge: true));
-
-        if (isPaid) {
-          DocumentReference autoReceiptRef = _firestore.collection('ledger_entries').doc('auto_receipt_${doc.id}');
-          batch.set(autoReceiptRef, {
-            'partnerId': customerId,
-            'partnerName': name,
-            'type': 'receipt',
-            'amount': price,
-            'date': FieldValue.serverTimestamp(),
-            'note': 'تحصيل أوتوماتيكي (تم التسليم/الدفع)',
-          }, SetOptions(merge: true));
-        }
-
-        syncCount++;
-      }
-
-      if (syncCount > 0) await batch.commit();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم المزامنة بنجاح!', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   void _showAddCustomerModal(BuildContext context) {
@@ -126,7 +54,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom, left: 20, right: 20, top: 20),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -142,7 +70,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), backgroundColor: brandOrange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
                     onPressed: () async {
                       if (nameController.text.trim().isEmpty) return;
-                      // 👈 التعديل هنا: الإضافة في كوليكشن customers
                       await _firestore.collection('customers').add({
                         'name': nameController.text.trim(),
                         'phone': phoneController.text.trim(),
@@ -171,117 +98,273 @@ class _CustomersScreenState extends State<CustomersScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
+        backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('حسابات العملاء (المدينون)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+          title: const Text('حسابات العملاء', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
           centerTitle: true,
           backgroundColor: primaryNavy,
           iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
-          actions: [
-            IconButton(
-              icon: _isSyncing
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.sync),
-              tooltip: 'مزامنة أوردرات المتجر',
-              onPressed: _isSyncing ? null : _syncCustomersFromOrders,
-            ),
-          ],
         ),
-        // 👈 التعديل هنا: قراءة العملاء من كوليكشن customers فقط
-        body: StreamBuilder<QuerySnapshot>(
-          stream: _firestore.collection('customers').snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
-            if (snapshot.hasError) return Center(child: Text('حدث خطأ: ${snapshot.error}'));
-
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Text(
-                      'لا توجد حسابات عملاء مسجلة حتى الآن.\nاضغط على أيقونة (🔄) بالأعلى لجلب الأوردرات أو أضف عميل يدوياً من الأسفل.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)
-                  ),
+        body: Column(
+          children: [
+            Container(
+              color: primaryNavy,
+              padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16, top: 4),
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(fontFamily: 'Cairo'),
+                decoration: InputDecoration(
+                  hintText: 'ابحث بالاسم أو رقم الهاتف...',
+                  hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => _searchController.clear())
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
-              );
-            }
+              ),
+            ),
 
-            final customers = snapshot.data!.docs;
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _firestore.collection('customers').orderBy('createdAt', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
+                  if (snapshot.hasError) return Center(child: Text('حدث خطأ: ${snapshot.error}'));
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: customers.length,
-              itemBuilder: (context, index) {
-                final doc = customers[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final customerId = doc.id;
-                final customerName = data['name'] ?? 'بدون اسم';
-                final customerPhone = data['phone'] ?? '';
-                final double balance = (data['balance'] ?? 0).toDouble();
+                  var allCustomers = snapshot.data?.docs ?? [];
 
-                return Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: brandOrange.withOpacity(0.4), width: 1.5)),
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CustomerLedgerScreen(
-                            customerId: customerId,
-                            customerName: customerName,
-                            currentBalance: balance,
+                  double totalDebt = 0;
+                  for (var doc in allCustomers) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    double bal = double.tryParse((data['balance'] ?? 0).toString()) ?? 0;
+                    if (bal > 0) totalDebt += bal;
+                  }
+
+                  var searchFiltered = allCustomers.where((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    String name = (data['name'] ?? '').toString().toLowerCase();
+                    String phone = (data['phone'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery) || phone.contains(_searchQuery);
+                  }).toList();
+
+                  var debtorsList = searchFiltered.where((doc) {
+                    double bal = double.tryParse(((doc.data() as Map)['balance'] ?? 0).toString()) ?? 0;
+                    return bal > 0;
+                  }).toList();
+                  debtorsList.sort((a, b) => (double.tryParse(((b.data() as Map)['balance'] ?? 0).toString()) ?? 0).compareTo(double.tryParse(((a.data() as Map)['balance'] ?? 0).toString()) ?? 0));
+
+                  var clearedList = searchFiltered.where((doc) {
+                    double bal = double.tryParse(((doc.data() as Map)['balance'] ?? 0).toString()) ?? 0;
+                    return bal <= 0;
+                  }).toList();
+
+                  return Column(
+                    children: [
+                      Container(
+                        color: primaryNavy,
+                        padding: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.2)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('إجمالي الديون بالخارج', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text('${totalDebt.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: brandOrange)),
+                            ],
                           ),
                         ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          CircleAvatar(radius: 22, backgroundColor: brandOrange.withOpacity(0.15), child: Icon(Icons.person, color: brandOrange, size: 22)),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(customerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15, color: primaryNavy)),
-                                const SizedBox(height: 4),
-                                Text(customerPhone.isEmpty ? 'بدون هاتف' : customerPhone, style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade600)),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(color: const Color(0xFF1B2A4A), borderRadius: BorderRadius.circular(12), border: Border.all(color: brandOrange.withOpacity(0.6), width: 1.2)),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Text('الرصيد', style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold)),
-                                Text('${balance.toStringAsFixed(2)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: brandOrange, fontSize: 13)),
-                              ],
-                            ),
-                          )
-                        ],
                       ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
+
+                      // 🚀 التبويبات بالمسميات الجديدة والـ FittedBox لمنع قص الحروف
+                      Container(
+                        color: Colors.white,
+                        child: TabBar(
+                          controller: _tabController,
+                          labelColor: brandOrange,
+                          unselectedLabelColor: Colors.grey.shade600,
+                          indicatorColor: brandOrange,
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 2), // تقليل المسافة الجانبية
+                          tabs: [
+                            Tab(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('الكل (${searchFiltered.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                            Tab(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('رصيد صفري (${clearedList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                            Tab(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('أرصدة مستحقة (${debtorsList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildCustomersList(searchFiltered, 'لا توجد نتائج'),
+                            _buildCustomersList(clearedList, 'لا يوجد عملاء بأرصدة صفرية'),
+                            _buildCustomersList(debtorsList, 'لا يوجد عملاء عليهم مستحقات'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showAddCustomerModal(context),
           backgroundColor: brandOrange,
-          icon: const Icon(Icons.add, color: Colors.white),
+          icon: const Icon(Icons.person_add, color: Colors.white),
           label: const Text('إضافة عميل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
         ),
       ),
+    );
+  }
+
+  Widget _buildCustomersList(List<QueryDocumentSnapshot> list, String emptyMessage) {
+    if (list.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_off_outlined, size: 60, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
+            Text(emptyMessage, style: TextStyle(fontFamily: 'Cairo', fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: list.length,
+      itemBuilder: (context, index) {
+        final doc = list[index];
+        final data = doc.data() as Map<String, dynamic>;
+        final customerId = doc.id;
+        final customerName = data['name'] ?? 'بدون اسم';
+        final customerPhone = data['phone'] ?? '';
+        final double balance = double.tryParse((data['balance'] ?? 0).toString()) ?? 0.0;
+
+        bool hasDebt = balance > 0;
+        Color cardBorderColor = hasDebt ? Colors.red.shade500 : Colors.green.shade500;
+        Color badgeBgColor = hasDebt ? Colors.red.shade50 : Colors.green.shade50;
+        Color badgeTextColor = hasDebt ? Colors.red.shade700 : Colors.green.shade700;
+        String badgeText = hasDebt ? 'مستحقات' : 'صافي الحساب';
+        IconData badgeIcon = hasDebt ? Icons.warning_amber_rounded : Icons.check_circle_outline;
+
+        return Card(
+          elevation: 1.5,
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              _searchFocusNode.unfocus();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CustomerLedgerScreen(
+                    customerId: customerId,
+                    customerName: customerName,
+                    currentBalance: balance,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: cardBorderColor, width: 4)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: badgeBgColor,
+                      child: Icon(Icons.person, color: badgeTextColor, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            customerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 15, color: primaryNavy),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text(
+                                customerPhone.isEmpty ? 'بدون هاتف' : customerPhone,
+                                style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: badgeBgColor, borderRadius: BorderRadius.circular(4)),
+                                child: Row(
+                                  children: [
+                                    Icon(badgeIcon, size: 10, color: badgeTextColor),
+                                    const SizedBox(width: 4),
+                                    Text(badgeText, style: TextStyle(fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold, color: badgeTextColor)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'الرصيد',
+                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${balance.toStringAsFixed(2)} ج',
+                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: cardBorderColor, fontSize: 15),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

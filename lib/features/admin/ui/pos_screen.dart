@@ -15,7 +15,7 @@ class _PosScreenState extends State<PosScreen> {
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = Colors.orange.shade600;
 
-  String _customerName = 'عميل نقدي (مقر الشركة)';
+  String _customerName = 'عميل نقدي (الشركة)';
   String _customerId = 'CASH_CUSTOMER';
   String _searchQuery = '';
 
@@ -31,14 +31,17 @@ class _PosScreenState extends State<PosScreen> {
       SnackBar(
         content: Row(
           children: [
-            Icon(isError ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white))),
+            Icon(isError ? Icons.warning_rounded : Icons.check_circle_rounded, color: isError ? Colors.redAccent : brandOrange, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13))),
           ],
         ),
-        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        backgroundColor: primaryNavy,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: isError ? Colors.redAccent : brandOrange, width: 1.5)
+        ),
         margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
         duration: const Duration(seconds: 2),
       ),
@@ -48,7 +51,7 @@ class _PosScreenState extends State<PosScreen> {
   void _startNewInvoice() {
     setState(() {
       _cartItems.clear();
-      _customerName = 'عميل نقدي (مقر الشركة)';
+      _customerName = 'عميل نقدي (الشركة)';
       _customerId = 'CASH_CUSTOMER';
     });
   }
@@ -58,10 +61,12 @@ class _PosScreenState extends State<PosScreen> {
     String id = doc.id;
     String name = data['name'] ?? 'منتج';
     double price = double.tryParse((data['price'] ?? 0).toString()) ?? 0.0;
+    // 🚀 التعديل هنا: سحب تكلفة المنتج من الداتا بيز
+    double cost = double.tryParse((data['costPrice'] ?? 0).toString()) ?? 0.0;
     int stock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
 
     if (stock <= 0) {
-      _showCustomSnackBar('عفواً، هذا المنتج نفد من المخزن!', true);
+      _showCustomSnackBar('المنتج غير متوفر بالمخزن!', true);
       return;
     }
 
@@ -71,50 +76,105 @@ class _PosScreenState extends State<PosScreen> {
         if (_cartItems[index]['qty'] < stock) {
           _cartItems[index]['qty']++;
         } else {
-          _showCustomSnackBar('الكمية المطلوبة تتجاوز رصيد المخزن!', true);
+          _showCustomSnackBar('الكمية تتجاوز رصيد المخزن!', true);
         }
       } else {
-        _cartItems.add({'id': id, 'name': name, 'price': price, 'qty': 1, 'stock': stock});
+        // 🚀 التعديل هنا: إضافة التكلفة (cost) لعنصر السلة
+        _cartItems.add({'id': id, 'name': name, 'price': price, 'cost': cost, 'qty': 1, 'stock': stock});
       }
     });
   }
 
-  Future<void> _saveInvoice(BuildContext sheetContext) async {
+  void _showCreditAlert(BuildContext context) {
+    showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: brandOrange, width: 2),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), shape: BoxShape.circle),
+                  child: Icon(Icons.warning_amber_rounded, color: brandOrange, size: 45),
+                ),
+                const SizedBox(height: 16),
+                Text('إجراء غير مسموح', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
+                const SizedBox(height: 8),
+                const Text('لا يمكن تسجيل فاتورة آجلة لعميل نقدي.\nيرجى اختيار عميل مسجل أولاً.', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey, height: 1.4)),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 45,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: primaryNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('حسناً', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                )
+              ],
+            ),
+          ),
+        )
+    );
+  }
+
+  Future<void> _saveInvoice(BuildContext sheetContext, double paidAmount, String paymentType) async {
     if (_cartItems.isEmpty) return;
+    double remainingAmount = _total - paidAmount;
+
+    // 🚀 التعديل هنا: حساب إجمالي تكلفة البضاعة في هذه الفاتورة
+    double totalCostPrice = _cartItems.fold(0, (sum, item) => sum + (item['cost'] * item['qty']));
+
+    if (remainingAmount > 0 && _customerId == 'CASH_CUSTOMER') {
+      _showCreditAlert(sheetContext);
+      return;
+    }
 
     String orderId = _firestore.collection('orders').doc().id;
     String invoiceNum = 'POS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     String currentUserId = _auth.currentUser?.uid ?? '';
 
     if (currentUserId.isEmpty) {
-      _showCustomSnackBar('يجب تسجيل الدخول أولاً', true);
+      _showCustomSnackBar('يجب تسجيل الدخول', true);
       return;
     }
 
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const Center(child: CircularProgressIndicator()));
+    showDialog(context: context, barrierDismissible: false, builder: (ctx) => Center(child: CircularProgressIndicator(color: brandOrange)));
 
     try {
       WriteBatch batch = _firestore.batch();
-
       DocumentReference orderRef = _firestore.collection('orders').doc(orderId);
+
       batch.set(orderRef, {
         'id': orderId,
         'userId': currentUserId,
         'orderNumber': invoiceNum,
         'customerName': _customerName,
         'phone': 'عميل مقر',
-        'address': 'مبيعات مباشرة (مقر الشركة)',
+        'address': 'مبيعات مباشرة (الشركة)',
         'items': _cartItems.map((item) => {
           'productId': item['id'],
           'productName': item['name'],
           'name': item['name'],
           'price': item['price'],
+          'costPrice': item['cost'], // 🚀 تسجيل التكلفة لكل منتج
           'quantity': item['qty'],
         }).toList(),
         'totalPrice': _total,
+        'totalCostPrice': totalCostPrice, // 🚀 تسجيل إجمالي التكلفة للفاتورة
         'subtotal': _subtotal,
         'discountAmount': _discount,
-        'paymentMethod': 'كاش',
+        'paidAmount': paidAmount,
+        'remainingAmount': remainingAmount,
+        'paymentMethod': paymentType,
         'status': 'Delivered',
         'orderType': 'pos',
         'createdAt': FieldValue.serverTimestamp(),
@@ -130,15 +190,22 @@ class _PosScreenState extends State<PosScreen> {
         'note': 'مبيعات مباشرة (الشركة) - $invoiceNum',
       });
 
-      DocumentReference receiptRef = _firestore.collection('ledger_entries').doc('receipt_$orderId');
-      batch.set(receiptRef, {
-        'partnerId': _customerId,
-        'partnerName': _customerName,
-        'type': 'receipt',
-        'amount': _total,
-        'date': FieldValue.serverTimestamp(),
-        'note': 'تحصيل نقدي أوتوماتيكي (مبيعات الشركة)',
-      });
+      if (paidAmount > 0) {
+        DocumentReference receiptRef = _firestore.collection('ledger_entries').doc('receipt_$orderId');
+        batch.set(receiptRef, {
+          'partnerId': _customerId,
+          'partnerName': _customerName,
+          'type': 'receipt',
+          'amount': paidAmount,
+          'date': FieldValue.serverTimestamp(),
+          'note': 'تحصيل نقدي - $invoiceNum',
+        });
+      }
+
+      if (remainingAmount > 0 && _customerId != 'CASH_CUSTOMER') {
+        DocumentReference customerRef = _firestore.collection('customers').doc(_customerId);
+        batch.update(customerRef, {'balance': FieldValue.increment(remainingAmount)});
+      }
 
       for (var item in _cartItems) {
         DocumentReference productRef = _firestore.collection('products').doc(item['id']);
@@ -151,15 +218,14 @@ class _PosScreenState extends State<PosScreen> {
         Navigator.pop(context);
         Navigator.pop(sheetContext);
         _startNewInvoice();
-        _showCustomSnackBar('تم إتمام البيع بنجاح 🚀', false);
+        _showCustomSnackBar('تم إتمام البيع بنجاح', false);
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      _showCustomSnackBar('حدث خطأ: $e', true);
+      _showCustomSnackBar('خطأ: $e', true);
     }
   }
 
-  // الشيت السريع المدمج للعملاء
   void _showCustomersSheet(StateSetter parentSetState) {
     bool isAddingNew = false;
     bool isSaving = false;
@@ -197,47 +263,25 @@ class _PosScreenState extends State<PosScreen> {
                               TextField(
                                 controller: nameCtrl,
                                 autofocus: true,
-                                decoration: InputDecoration(
-                                  labelText: 'اسم العميل *',
-                                  labelStyle: const TextStyle(fontFamily: 'Cairo'),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                                ),
+                                decoration: InputDecoration(labelText: 'اسم العميل *', labelStyle: const TextStyle(fontFamily: 'Cairo'), filled: true, fillColor: Colors.grey.shade50, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)),
                               ),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: phoneCtrl,
                                 keyboardType: TextInputType.phone,
-                                decoration: InputDecoration(
-                                  labelText: 'رقم الهاتف (اختياري)',
-                                  labelStyle: const TextStyle(fontFamily: 'Cairo'),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                                ),
+                                decoration: InputDecoration(labelText: 'رقم الهاتف (اختياري)', labelStyle: const TextStyle(fontFamily: 'Cairo'), filled: true, fillColor: Colors.grey.shade50, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)),
                               ),
                               const SizedBox(height: 24),
                               Row(
                                 children: [
-                                  Expanded(
-                                    child: TextButton(
-                                      onPressed: () => setLocalState(() => isAddingNew = false),
-                                      child: const Text('رجوع للقائمة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ),
+                                  Expanded(child: TextButton(onPressed: () => setLocalState(() => isAddingNew = false), child: const Text('رجوع', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold)))),
                                   Expanded(
                                     flex: 2,
                                     child: ElevatedButton(
                                       style: ElevatedButton.styleFrom(backgroundColor: brandOrange, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                                       onPressed: isSaving ? null : () async {
-                                        if (nameCtrl.text.trim().isEmpty) {
-                                          _showCustomSnackBar('يرجى إدخال اسم العميل', true);
-                                          return;
-                                        }
-
+                                        if (nameCtrl.text.trim().isEmpty) { _showCustomSnackBar('يرجى إدخال اسم العميل', true); return; }
                                         setLocalState(() => isSaving = true);
-
                                         try {
                                           DocumentReference newCustomer = await _firestore.collection('customers').add({
                                             'name': nameCtrl.text.trim(),
@@ -245,24 +289,18 @@ class _PosScreenState extends State<PosScreen> {
                                             'balance': 0.0,
                                             'createdAt': FieldValue.serverTimestamp(),
                                           });
-
                                           if (mounted) {
-                                            setState(() {
-                                              _customerName = nameCtrl.text.trim();
-                                              _customerId = newCustomer.id;
-                                            });
+                                            setState(() { _customerName = nameCtrl.text.trim(); _customerId = newCustomer.id; });
                                             parentSetState(() {});
                                             Navigator.pop(ctx);
-                                            _showCustomSnackBar('تم اختيار العميل بنجاح', false);
+                                            _showCustomSnackBar('تمت الإضافة', false);
                                           }
                                         } catch (e) {
                                           setLocalState(() => isSaving = false);
-                                          _showCustomSnackBar('حدث خطأ أثناء الإضافة', true);
+                                          _showCustomSnackBar('خطأ أثناء الحفظ', true);
                                         }
                                       },
-                                      child: isSaving
-                                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                          : const Text('حفظ واختيار', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                                      child: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('حفظ', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
                                     ),
                                   ),
                                 ],
@@ -274,9 +312,9 @@ class _PosScreenState extends State<PosScreen> {
                     ] else ...[
                       ListTile(
                         leading: const Icon(Icons.person, color: Colors.green),
-                        title: const Text('عميل نقدي (مقر الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        title: const Text('عميل نقدي (الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                         onTap: () {
-                          setState(() { _customerName = 'عميل نقدي (مقر الشركة)'; _customerId = 'CASH_CUSTOMER'; });
+                          setState(() { _customerName = 'عميل نقدي (الشركة)'; _customerId = 'CASH_CUSTOMER'; });
                           parentSetState(() {});
                           Navigator.pop(ctx);
                         },
@@ -307,18 +345,11 @@ class _PosScreenState extends State<PosScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // 🚀 الزرار تم نقله للأسفل مع تثبيته ليكون مرئي دائماً
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryNavy.withOpacity(0.05),
-                            foregroundColor: primaryNavy,
-                            elevation: 0,
-                            minimumSize: const Size(double.infinity, 45),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-                        ),
+                        style: ElevatedButton.styleFrom(backgroundColor: primaryNavy.withOpacity(0.05), foregroundColor: primaryNavy, elevation: 0, minimumSize: const Size(double.infinity, 45), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                         onPressed: () => setLocalState(() => isAddingNew = true),
                         icon: const Icon(Icons.person_add),
-                        label: const Text('إضافة عميل جديد للسيستم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        label: const Text('إضافة عميل للسيستم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                       ),
                     ]
                   ],
@@ -331,7 +362,37 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  Widget _buildPaymentTypeBtn(String title, String currentSelection, Function(String) onSelect) {
+    bool isSelected = title == currentSelection;
+    return InkWell(
+      onTap: () => onSelect(title),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+            color: isSelected ? primaryNavy : Colors.transparent,
+            border: Border.all(color: isSelected ? primaryNavy : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8)
+        ),
+        child: Center(
+            child: Text(
+                title,
+                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey.shade700)
+            )
+        ),
+      ),
+    );
+  }
+
   void _showCartAndCheckoutSheet() {
+    ValueNotifier<String> paymentTypeNotifier = ValueNotifier<String>('كاش');
+    TextEditingController partialAmountCtrl = TextEditingController();
+
+    ValueNotifier<double> partialAmountNotifier = ValueNotifier<double>(0.0);
+    partialAmountCtrl.addListener(() {
+      partialAmountNotifier.value = double.tryParse(partialAmountCtrl.text) ?? 0.0;
+    });
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -340,111 +401,181 @@ class _PosScreenState extends State<PosScreen> {
           builder: (ctx, setSheetState) {
             return Directionality(
               textDirection: TextDirection.rtl,
-              child: Container(
-                height: MediaQuery.of(context).size.height * 0.85,
-                padding: const EdgeInsets.only(top: 16),
-                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                child: Column(
-                  children: [
-                    Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-                    const SizedBox(height: 16),
-                    const Text('مراجعة السلة', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                child: Container(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.90),
+                  padding: const EdgeInsets.only(top: 16),
+                  decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 16),
+                      const Text('إتمام البيع', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Divider(),
 
-                    // 🚀 الكارت كله بقى قابل للضغط لفتح الشيت السريع
-                    InkWell(
-                      onTap: () => _showCustomersSheet(setSheetState),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Row(
-                          children: [
-                            CircleAvatar(backgroundColor: primaryNavy.withOpacity(0.1), child: Icon(Icons.person, color: primaryNavy)),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      InkWell(
+                        onTap: () => _showCustomersSheet(setSheetState),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(
+                            children: [
+                              CircleAvatar(backgroundColor: primaryNavy.withOpacity(0.1), child: Icon(Icons.person, color: primaryNavy)),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('العميل', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+                                    Text(_customerName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.black, fontSize: 15)),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down_circle_outlined, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const Divider(),
+
+                      Flexible(
+                        child: _cartItems.isEmpty
+                            ? const Center(child: Text('السلة فارغة', style: TextStyle(fontFamily: 'Cairo')))
+                            : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _cartItems.length,
+                          itemBuilder: (context, index) {
+                            final item = _cartItems[index];
+                            return ListTile(
+                              title: Text(item['name'], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                              subtitle: Text('${item['price']} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 11)),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text('العميل الحالي', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-                                  Text(_customerName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.black, fontSize: 15)),
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                                    onPressed: () {
+                                      setSheetState(() {
+                                        setState(() {
+                                          if (item['qty'] > 1) item['qty']--;
+                                          else {
+                                            _cartItems.removeAt(index);
+                                            if (_cartItems.isEmpty) Navigator.pop(sheetContext);
+                                          }
+                                        });
+                                      });
+                                    },
+                                  ),
+                                  Text('${item['qty']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
+                                    onPressed: () {
+                                      if (item['qty'] < item['stock']) setSheetState(() => setState(() => item['qty']++));
+                                      else _showCustomSnackBar('المخزون لا يكفي', true);
+                                    },
+                                  ),
                                 ],
                               ),
-                            ),
-                            const Icon(Icons.arrow_drop_down_circle_outlined, color: Colors.grey),
-                          ],
+                            );
+                          },
                         ),
                       ),
-                    ),
-                    const Divider(),
 
-                    Expanded(
-                      child: _cartItems.isEmpty
-                          ? const Center(child: Text('السلة فارغة', style: TextStyle(fontFamily: 'Cairo')))
-                          : ListView.builder(
-                        itemCount: _cartItems.length,
-                        itemBuilder: (context, index) {
-                          final item = _cartItems[index];
-                          return ListTile(
-                            title: Text(item['name'], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
-                            subtitle: Text('${item['price']} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                                  onPressed: () {
-                                    setSheetState(() {
-                                      setState(() {
-                                        if (item['qty'] > 1) {
-                                          item['qty']--;
-                                        } else {
-                                          _cartItems.removeAt(index);
-                                          if (_cartItems.isEmpty) Navigator.pop(sheetContext);
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]),
+                        child: ValueListenableBuilder<String>(
+                            valueListenable: paymentTypeNotifier,
+                            builder: (context, paymentType, child) {
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('الإجمالي:', style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                        Text('${_total.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold, color: primaryNavy))
+                                      ]
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  Row(
+                                    children: [
+                                      Expanded(child: _buildPaymentTypeBtn('كاش', paymentType, (val) => paymentTypeNotifier.value = val)),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: _buildPaymentTypeBtn('آجل', paymentType, (val) => paymentTypeNotifier.value = val)),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: _buildPaymentTypeBtn('جزئي', paymentType, (val) => paymentTypeNotifier.value = val)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  if (paymentType == 'جزئي')
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: TextField(
+                                        controller: partialAmountCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        decoration: InputDecoration(
+                                          labelText: 'المبلغ المدفوع كاش الآن',
+                                          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                                          prefixIcon: const Icon(Icons.attach_money),
+                                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: brandOrange, width: 2)),
+                                        ),
+                                      ),
+                                    ),
+
+                                  if (paymentType != 'كاش')
+                                    ValueListenableBuilder<double>(
+                                        valueListenable: partialAmountNotifier,
+                                        builder: (context, partialAmount, child) {
+                                          double paidAmount = paymentType == 'آجل' ? 0 : partialAmount;
+                                          double remaining = _total - paidAmount;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 8),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text('المتبقي للآجل:', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                                                Text('${remaining.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                                              ],
+                                            ),
+                                          );
                                         }
-                                      });
-                                    });
-                                  },
-                                ),
-                                Text('${item['qty']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, color: Colors.green),
-                                  onPressed: () {
-                                    if (item['qty'] < item['stock']) {
-                                      setSheetState(() => setState(() => item['qty']++));
-                                    } else {
-                                      _showCustomSnackBar('لا يوجد رصيد كافي في المخزن', true);
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+                                    ),
 
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]),
-                      child: SafeArea(
-                        child: Column(
-                          children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('المطلوب دفعه:', style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold)), Text('${_total.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 22, fontWeight: FontWeight.bold, color: primaryNavy))]),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(backgroundColor: brandOrange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                                onPressed: () => _saveInvoice(sheetContext),
-                                icon: const Icon(Icons.point_of_sale),
-                                label: const Text('دفع وإتمام البيع', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18)),
-                              ),
-                            )
-                          ],
+                                  const SizedBox(height: 6),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 45,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: brandOrange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                      onPressed: () {
+                                        double paidAmount = _total;
+                                        if (paymentType == 'آجل') paidAmount = 0;
+                                        if (paymentType == 'جزئي') paidAmount = partialAmountNotifier.value;
+
+                                        if (paymentType == 'جزئي' && (paidAmount <= 0 || paidAmount >= _total)) {
+                                          _showCustomSnackBar('المبلغ المدفوع غير صحيح', true);
+                                          return;
+                                        }
+                                        _saveInvoice(sheetContext, paidAmount, paymentType);
+                                      },
+                                      icon: const Icon(Icons.check_circle_outline),
+                                      label: const Text('تأكيد وحفظ الفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15)),
+                                    ),
+                                  )
+                                ],
+                              );
+                            }
                         ),
-                      ),
-                    )
-                  ],
+                      )
+                    ],
+                  ),
                 ),
               ),
             );
@@ -460,7 +591,7 @@ class _PosScreenState extends State<PosScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('المبيعات المباشرة (مقر الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+          title: const Text('المبيعات المباشرة (الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
           backgroundColor: primaryNavy,
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
@@ -500,12 +631,7 @@ class _PosScreenState extends State<PosScreen> {
 
                   return GridView.builder(
                     padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.72,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                    ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.72, crossAxisSpacing: 10, mainAxisSpacing: 10),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       var doc = docs[index];
@@ -534,29 +660,15 @@ class _PosScreenState extends State<PosScreen> {
                                     children: [
                                       Container(
                                         width: double.infinity,
-                                        decoration: BoxDecoration(
-                                          color: primaryNavy.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
+                                        decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
                                         child: imageUrl.isNotEmpty
-                                            ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(10),
-                                          child: Image.network(
-                                            imageUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (ctx, err, stack) => Icon(Icons.image_not_supported, size: 30, color: Colors.grey.shade400),
-                                          ),
-                                        )
+                                            ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => Icon(Icons.image_not_supported, size: 30, color: Colors.grey.shade400)))
                                             : Icon(Icons.inventory_2, size: 40, color: primaryNavy.withOpacity(0.3)),
                                       ),
                                       if (qtyInCart > 0)
                                         Padding(
                                           padding: const EdgeInsets.all(4.0),
-                                          child: CircleAvatar(
-                                            radius: 12,
-                                            backgroundColor: brandOrange,
-                                            child: Text('$qtyInCart', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                          ),
+                                          child: CircleAvatar(radius: 12, backgroundColor: brandOrange, child: Text('$qtyInCart', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
                                         ),
                                     ],
                                   ),
@@ -598,7 +710,7 @@ class _PosScreenState extends State<PosScreen> {
                   children: [
                     Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: Text('${_cartItems.length}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                     const SizedBox(width: 12),
-                    const Text('مراجعة السلة', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('مراجعة وإتمام', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                   ],
                 ),
                 Text('${_total.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 18)),
