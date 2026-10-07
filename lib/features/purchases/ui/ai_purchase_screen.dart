@@ -143,12 +143,30 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
       child: Scaffold(
         backgroundColor: bgSoftColor,
         appBar: AppBar(
-          automaticallyImplyLeading: false, // 👈 بتمنع ظهور أي أسهم افتراضية
+          automaticallyImplyLeading: false,
           title: Text('الفاتورة الذكية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          // 🚀 تم نسف السهم اللي كان موجود هنا بناءً على طلبك
+          // 🚀 السحر هنا: إضافة علامة X على الشمال للخروج من الشاشة
+          actions: [
+            Directionality(
+              textDirection: TextDirection.ltr, // عشان الأيقونة تبان على الشمال في وضع الـ RTL
+              child: IconButton(
+                icon: Icon(Icons.close_rounded, color: primaryNavy, size: 28),
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    // لو الشاشة دي مفتوحة كأنها رئيسية (مثلاً من الـ Bottom Nav)، ممكن نوديه للرئيسية
+                    context.go(Routes.home);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         body: Center(
           child: SingleChildScrollView(

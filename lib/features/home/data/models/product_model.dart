@@ -39,10 +39,12 @@ class ProductModel {
   final String name;
   final String description;
   final double price;
-
-  // 👈 الحقول الجديدة المطلوبة للتحكم الفعلي
   final double oldPrice;
   final int salesCount;
+
+  // 🚀 حقول التقييم الجديدة
+  final double rating;
+  final int reviewsCount;
 
   final String imageUrl;
   final List<String> images;
@@ -53,21 +55,30 @@ class ProductModel {
   final String unitOfMeasure;
   final String storageLocation;
 
+  // 🚀 رجعتلك inStock كمتغير أساسي عشان الشاشات التانية متضربش إيرور
   final bool inStock;
   final bool isActive;
   final List<ProductBatch> batches;
 
+  final int _dbStockQuantity;
+
   int get stockQuantity {
-    if (batches.isEmpty) return 0;
-    return batches.fold(0, (sum, batch) => sum + batch.quantity);
+    if (batches.isNotEmpty) {
+      return batches.fold(0, (sum, batch) => sum + batch.quantity);
+    }
+    return _dbStockQuantity;
   }
 
   ProductModel({
     required this.id, required this.name, required this.description, required this.price,
-    this.oldPrice = 0.0, this.salesCount = 0, // 👈 تهيئة القيم الافتراضية
+    this.oldPrice = 0.0, this.salesCount = 0,
+    this.rating = 0.0, this.reviewsCount = 0, // 👈 قيم اختيارية آمنة
     required this.imageUrl, required this.images, required this.variations, required this.category,
-    this.subCategory = 'Uncategorized', this.barcodes = const [], this.unitOfMeasure = 'Piece', this.storageLocation = 'Main Storage', this.inStock = true, this.isActive = true, required this.batches,
-  });
+    this.subCategory = 'Uncategorized', this.barcodes = const [], this.unitOfMeasure = 'Piece', this.storageLocation = 'Main Storage',
+    this.inStock = true, // 👈 رجعت للـ Constructor زي زمان
+    this.isActive = true, required this.batches,
+    int dbStockQuantity = 0,
+  }) : _dbStockQuantity = dbStockQuantity;
 
   factory ProductModel.fromJson(Map<String, dynamic> json, String documentId) {
     List<String> parsedImages = [];
@@ -92,18 +103,27 @@ class ProductModel {
     }
 
     double resolvedPrice = (json['price'] as num?)?.toDouble() ?? 0.0;
-
-    // 👈 استخراج السعر القديم والمبيعات من قاعدة البيانات
     double resolvedOldPrice = (json['oldPrice'] as num?)?.toDouble() ?? 0.0;
     int resolvedSalesCount = (json['salesCount'] as num?)?.toInt() ?? 0;
+
+    double resolvedRating = (json['rating'] as num?)?.toDouble() ?? 0.0;
+    int resolvedReviewsCount = (json['reviewsCount'] as num?)?.toInt() ?? 0;
+
+    int resolvedStockQty = (json['stockQuantity'] as num?)?.toInt() ?? 0;
+
+    // 💡 اللوجيك بيتحسب هنا بنظافة وبدون ما نبوظ الهيكلة
+    int calculatedStock = parsedBatches.isNotEmpty ? parsedBatches.fold(0, (sum, b) => sum + b.quantity) : resolvedStockQty;
+    bool resolvedInStock = (json['inStock'] == true) || calculatedStock > 0;
 
     return ProductModel(
       id: documentId,
       name: json['name'] ?? json['title'] ?? '',
       description: json['description'] ?? '',
       price: resolvedPrice,
-      oldPrice: resolvedOldPrice, // 👈
-      salesCount: resolvedSalesCount, // 👈
+      oldPrice: resolvedOldPrice,
+      salesCount: resolvedSalesCount,
+      rating: resolvedRating,
+      reviewsCount: resolvedReviewsCount,
       imageUrl: json['imageUrl'] ?? '',
       images: parsedImages,
       variations: parsedVariations,
@@ -112,17 +132,21 @@ class ProductModel {
       barcodes: parsedBarcodes,
       unitOfMeasure: json['unitOfMeasure'] ?? 'Piece',
       storageLocation: json['storageLocation'] ?? 'Main Storage',
-      inStock: json['inStock'] ?? true,
+      inStock: resolvedInStock, // 👈 بنبعت القيمة المحسوبة بأمان
       isActive: json['isActive'] ?? true,
       batches: parsedBatches,
+      dbStockQuantity: resolvedStockQty,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'name': name, 'description': description, 'price': price,
-      'oldPrice': oldPrice, 'salesCount': salesCount, // 👈 حفظهم في قاعدة البيانات
-      'imageUrl': imageUrl, 'imageUrls': images, 'images': images, 'variations': variations, 'category': category, 'subCategory': subCategory, 'barcodes': barcodes, 'unitOfMeasure': unitOfMeasure, 'storageLocation': storageLocation, 'inStock': stockQuantity > 0, 'isActive': isActive, 'stockQuantity': stockQuantity, 'batches': batches.map((b) => b.toJson()).toList(),
+      'oldPrice': oldPrice, 'salesCount': salesCount,
+      'rating': rating, 'reviewsCount': reviewsCount,
+      'imageUrl': imageUrl, 'imageUrls': images, 'images': images, 'variations': variations, 'category': category, 'subCategory': subCategory, 'barcodes': barcodes, 'unitOfMeasure': unitOfMeasure, 'storageLocation': storageLocation,
+      'inStock': inStock,
+      'isActive': isActive, 'stockQuantity': stockQuantity, 'batches': batches.map((b) => b.toJson()).toList(),
     };
   }
 }

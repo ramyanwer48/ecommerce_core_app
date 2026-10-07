@@ -115,7 +115,6 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 1. المفضلة
                 BlocBuilder<FavoritesCubit, FavoritesState>(
                   builder: (context, favState) {
                     int favCount = 0;
@@ -140,8 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
-
-                // 🚀 2. السلة اللي اتنقلت من تحت لفوق هنا (Cart Icon with Badge)
                 BlocBuilder<CartCubit, CartState>(
                   builder: (context, state) {
                     int badgeCount = 0;
@@ -152,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         IconButton(
                           icon: Icon(Icons.shopping_cart_outlined, color: primaryNavy, size: 26),
-                          onPressed: () => context.push(Routes.cart), // توجه العميل لشاشة السلة
+                          onPressed: () => context.push(Routes.cart),
                         ),
                         if (badgeCount > 0)
                           Positioned(
@@ -172,8 +169,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
-
-                // 3. البروفايل
                 IconButton(
                   icon: Icon(Icons.person_outline, color: primaryNavy, size: 28),
                   onPressed: () => context.push(Routes.profile),
@@ -443,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       HapticFeedback.selectionClick();
                                       context.read<HomeCubit>().applyAdvancedFilters(category: cat.name);
                                       setState(() {
-                                        _isFilterActive = cat.name != 'الكل'; // تفعيل النقطة الحمراء لو اختار قسم
+                                        _isFilterActive = cat.name != 'الكل';
                                       });
                                     },
                                     child: Container(
@@ -492,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       sliver: SliverGrid(
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
-                          childAspectRatio: 0.72,
+                          childAspectRatio: 0.70, // 👈 تم التعديل طفيفاً عشان مساحة النجوم
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
                         ),
@@ -541,16 +536,19 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
     bool hasDiscount = oldPrice > widget.product.price;
     int discountPerc = hasDiscount ? (((oldPrice - widget.product.price) / oldPrice) * 100).toInt() : 0;
 
+    // 🚀 جلب التقييم الفعلي من المنتج
     double actualRating = 0.0;
     int actualReviewsCount = 0;
     try {
-      actualRating = double.tryParse((widget.product as dynamic).rating.toString()) ?? 0.0;
+      actualRating = double.tryParse((widget.product as dynamic).rating?.toString() ?? '0') ?? 0.0;
     } catch(e) {}
     try {
-      actualReviewsCount = int.tryParse((widget.product as dynamic).reviewsCount.toString()) ?? 0;
+      actualReviewsCount = int.tryParse((widget.product as dynamic).reviewsCount?.toString() ?? '0') ?? 0;
     } catch(e) {}
 
     bool hasReviews = actualRating > 0 && actualReviewsCount > 0;
+    // تحديد لو المنتج جديد (لو مفيش تقييمات ولا مبيعات)
+    bool isNewProduct = !hasReviews && !isBestSeller;
 
     return GestureDetector(
       onTap: () {
@@ -572,7 +570,7 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    padding: const EdgeInsets.only(top: 12, bottom: 4),
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
@@ -603,22 +601,24 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                         ),
                         const SizedBox(height: 4),
 
-                        hasReviews
-                            ? Row(
-                          children: [
-                            Icon(Icons.star, color: Colors.amber.shade600, size: 12),
-                            const SizedBox(width: 4),
-                            Text(toArabicNumbers(actualRating.toStringAsFixed(1)), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                            Text(toArabicNumbers(' ($actualReviewsCount)'), style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                          ],
-                        )
-                            : Row(
-                          children: [
-                            Icon(Icons.new_releases, color: Colors.teal.shade400, size: 12),
-                            const SizedBox(width: 4),
-                            Text('منتج جديد', style: TextStyle(color: Colors.teal.shade600, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                          ],
-                        ),
+                        // 🚀 عرض النجوم والتقييمات بطريقة احترافية
+                        if (hasReviews)
+                          Row(
+                            children: [
+                              Icon(Icons.star_rounded, color: Colors.amber.shade600, size: 14),
+                              const SizedBox(width: 2),
+                              Text(toArabicNumbers(actualRating.toStringAsFixed(1)), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                              Text(toArabicNumbers(' ($actualReviewsCount)'), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                            ],
+                          )
+                        else
+                          Row(
+                            children: [
+                              Icon(Icons.star_outline_rounded, color: Colors.grey.shade300, size: 14),
+                              const SizedBox(width: 2),
+                              Text('بدون تقييمات', style: TextStyle(color: Colors.grey.shade400, fontSize: 10, fontFamily: 'Cairo')),
+                            ],
+                          ),
 
                         const SizedBox(height: 6),
                         Row(
@@ -657,6 +657,8 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                 ),
               ],
             ),
+
+            // 🚀 بادج "الأكثر مبيعاً"
             if (isBestSeller)
               Positioned(
                 top: 0, right: 0,
@@ -668,7 +670,28 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                   ),
                   child: const Text('الأكثر مبيعاً', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 ),
+              )
+            // 🚀 بادج "منتج جديد" (بيظهر لو ملهاش مبيعات أو تقييمات قوية)
+            else if (isNewProduct)
+              Positioned(
+                top: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade600,
+                    borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomRight: Radius.circular(12)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.local_fire_department_rounded, color: Colors.white, size: 10),
+                      SizedBox(width: 2),
+                      Text('جديد', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                    ],
+                  ),
+                ),
               ),
+
             Positioned(
               top: 6, left: 6,
               child: BlocBuilder<FavoritesCubit, FavoritesState>(

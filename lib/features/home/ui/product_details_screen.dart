@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 👈 استدعاء المصادقة
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/widgets/custom_bottom_sheet.dart';
 import '../data/models/product_model.dart';
 import '../../../core/di/dependency_injection.dart';
@@ -47,7 +48,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _showAddReviewDialog(BuildContext context, ReviewsCubit cubit) {
-    // 🚀 حماية إضافية: التأكد إن المستخدم مسجل دخول قبل ما يفتح نافذة التقييم أصلاً
     if (FirebaseAuth.instance.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -75,6 +75,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   children: List.generate(5, (index) {
                     return GestureDetector(
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         setStateSheet(() => selectedRating = index + 1.0);
                       },
                       child: Padding(
@@ -111,7 +112,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     onPressed: () {
                       cubit.addReview(
                         productId: widget.product.id,
-                        userName: nameController.text.isNotEmpty ? nameController.text : 'عميل RAMY STORE',
+                        userName: nameController.text.isNotEmpty ? nameController.text : 'عميل المتجر',
                         rating: selectedRating,
                         comment: commentController.text,
                       );
@@ -182,6 +183,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           size: 28,
                         ),
                         onPressed: () {
+                          HapticFeedback.lightImpact();
                           context.read<FavoritesCubit>().toggleFavorite(widget.product);
                         },
                       );
@@ -192,6 +194,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
               body: Column(
                 children: [
+                  // 🚀 منطقة عرض الصور (حجمك الأصلي) مع إضافة بادج (جديد)
                   Container(
                     width: double.infinity,
                     height: 300,
@@ -211,6 +214,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           itemBuilder: (context, index) {
                             return Image.network(displayImages[index], fit: BoxFit.contain);
                           },
+                        ),
+                        // 🚀 بادج جديد احترافي في الزاوية
+                        Positioned(
+                          top: 16,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade600,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 12)),
+                          ),
                         ),
                         if (displayImages.length > 1)
                           Positioned(
@@ -264,7 +280,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
+                            // 🚀 النجوم بقت تحت الاسم مباشرة
                             BlocBuilder<ReviewsCubit, ReviewsState>(
                               builder: (context, state) {
                                 double avg = 0.0;
@@ -278,32 +295,43 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     _buildStars(avg, size: 18),
                                     const SizedBox(width: 8),
                                     Text(
-                                      '${avg.toStringAsFixed(1)} ($count تقييم)',
-                                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+                                      count > 0 ? '${avg.toStringAsFixed(1)} ($count تقييم)' : 'بدون تقييمات',
+                                      style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13),
                                     ),
                                   ],
                                 );
                               },
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Icon(
-                                  widget.product.inStock ? Icons.check_circle : Icons.cancel,
-                                  color: widget.product.inStock ? Colors.green : Colors.red,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  widget.product.inStock ? 'متوفر في المخزن' : 'نفذت الكمية',
-                                  style: TextStyle(
-                                      color: widget.product.inStock ? Colors.green : Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                      fontFamily: 'Cairo'
-                                  ),
-                                ),
-                              ],
+
+                            // 🚀 الحل العبقري للغز "نفدت الكمية"
+                            Builder(
+                                builder: (context) {
+                                  // 💡 بنشيك لو الـ inStock اللي جاية من الفايربيز متفعلة (True)
+                                  // أو لو الكمية اللي جاية من الدفعات أكبر من الصفر
+                                  bool isAvailable = widget.product.inStock || widget.product.stockQuantity > 0;
+
+                                  return Row(
+                                    children: [
+                                      Icon(
+                                        isAvailable ? Icons.check_circle : Icons.cancel,
+                                        color: isAvailable ? Colors.green : Colors.red,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isAvailable ? 'متوفر في المخزن' : 'نفذت الكمية',
+                                        style: TextStyle(
+                                            color: isAvailable ? Colors.green : Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontFamily: 'Cairo'
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
                             ),
+
                             const Divider(height: 24),
                             if (widget.product.variations.isNotEmpty) ...[
                               const Text('الخيارات المتاحة:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),

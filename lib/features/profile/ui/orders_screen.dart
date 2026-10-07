@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../logic/order_cubit.dart';
 import '../logic/order_state.dart';
@@ -7,38 +8,53 @@ import '../data/models/order_model.dart';
 class OrdersScreen extends StatelessWidget {
   const OrdersScreen({super.key});
 
+  // 🚀 ألوان الهوية البصرية الأساسية
+  final Color primaryNavy = const Color(0xFF0D1B2A);
+  final Color brandOrange = const Color(0xFFFF9F0A);
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FA),
+        backgroundColor: const Color(0xFFF5F7FA), // خلفية ناعمة جداً
         appBar: AppBar(
-          title: const Text('سجل الطلبات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          title: const Text('سجل الطلبات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo', fontSize: 18)),
           centerTitle: true,
-          backgroundColor: const Color(0xFF000826),
+          backgroundColor: primaryNavy, // 👈 كحلي فخم
           iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
         ),
         body: BlocConsumer<OrderCubit, OrderState>(
           listener: (context, state) {
             if (state is OrderError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('حدث خطأ: ${state.error}'), backgroundColor: Colors.red),
+                SnackBar(content: Text('حدث خطأ: ${state.error}', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
               );
             }
           },
           builder: (context, state) {
             if (state is OrderLoading) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFF000826)));
+              return Center(child: CircularProgressIndicator(color: brandOrange)); // 👈 برتقالي
             }
 
             if (state is OrderLoaded) {
               final orders = state.orders;
               if (orders.isEmpty) {
-                return const Center(child: Text('لا توجد طلبات حتى الآن 📭', style: TextStyle(fontSize: 18, color: Colors.grey)));
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox_rounded, size: 80, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      Text('لا توجد طلبات حتى الآن', style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                );
               }
 
               return ListView.builder(
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 itemCount: orders.length,
                 itemBuilder: (context, index) {
@@ -60,65 +76,97 @@ class OrdersScreen extends StatelessWidget {
                     productsSummary = 'منتجات غير محددة';
                   }
 
-                  return Card(
-                    elevation: 3,
+                  return Container(
                     margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+                      ],
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // 🚀 الهيدر: رقم الطلب والتاريخ
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                displayOrderNumber,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF000826)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
+                                child: Text(
+                                  displayOrderNumber,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy, fontFamily: 'Cairo', letterSpacing: 0.5),
+                                ),
                               ),
                               Text(
-                                '${order.date.day}/${order.date.month}/${order.date.year}',
-                                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                '${order.date.year}/${order.date.month.toString().padLeft(2, '0')}/${order.date.day.toString().padLeft(2, '0')}',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
+
+                          // 🚀 ملخص المنتجات
                           Row(
                             children: [
-                              const Icon(Icons.shopping_bag_outlined, size: 18, color: Colors.grey),
-                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.grey.shade50, shape: BoxShape.circle),
+                                child: Icon(Icons.shopping_bag_outlined, size: 20, color: primaryNavy),
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   productsSummary,
-                                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                                  style: const TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'الإجمالي: ${order.totalPrice.toStringAsFixed(2)} ج.م',
-                            style: const TextStyle(color: Color(0xFF007BFF), fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                          const Divider(height: 24),
+                          const SizedBox(height: 16),
 
+                          // 🚀 الإجمالي
+                          Row(
+                            children: [
+                              Text('الإجمالي: ', style: TextStyle(color: Colors.grey.shade600, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                              Text(
+                                '${order.totalPrice.toStringAsFixed(2)} ج.م',
+                                style: TextStyle(color: brandOrange, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+                              ),
+                            ],
+                          ),
+
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Divider(height: 1, thickness: 1),
+                          ),
+
+                          // 🚀 شريط الحالات (التتبع)
                           _buildOrderTracker(order.status),
 
-                          // 👈 زر الإلغاء يظهر فقط في حالة الـ Pending
+                          // 🚀 زر الإلغاء
                           if (order.status.toLowerCase() == 'pending') ...[
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerLeft,
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
                               child: TextButton.icon(
-                                onPressed: () => _showCancelConfirmation(context, order.id),
-                                icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 18),
-                                label: const Text('إلغاء الطلب', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  _showCancelConfirmation(context, order.id);
+                                },
+                                icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+                                label: const Text('إلغاء الطلب', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  backgroundColor: Colors.red.withValues(alpha: 0.1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  backgroundColor: Colors.red.withOpacity(0.05),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 ),
                               ),
                             ),
@@ -137,37 +185,44 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  // نافذة تأكيد الإلغاء
   void _showCancelConfirmation(BuildContext context, String orderId) {
     showDialog(
       context: context,
       builder: (dialogContext) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('تأكيد الإلغاء', style: TextStyle(fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              const Text('تأكيد الإلغاء', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18)),
             ],
           ),
-          content: const Text('هل أنت متأكد من رغبتك في إلغاء هذا الطلب؟ لا يمكن التراجع عن هذه الخطوة.'),
+          content: const Text('هل أنت متأكد من رغبتك في إلغاء هذا الطلب؟\nلا يمكن التراجع عن هذه الخطوة.', style: TextStyle(fontFamily: 'Cairo', fontSize: 14, height: 1.5)),
+          actionsPadding: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('تراجع', style: TextStyle(color: Colors.grey)),
+              child: const Text('تراجع', style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(dialogContext); // إغلاق النافذة
-                context.read<OrderCubit>().cancelOrder(orderId); // تنفيذ الإلغاء
+                HapticFeedback.heavyImpact();
+                Navigator.pop(dialogContext);
+                context.read<OrderCubit>().cancelOrder(orderId);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                backgroundColor: Colors.redAccent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
-              child: const Text('نعم، قم بالإلغاء', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('نعم، إلغاء الطلب', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             ),
           ],
         ),
@@ -182,38 +237,78 @@ class OrdersScreen extends StatelessWidget {
       case 'processing': currentStep = 1; break;
       case 'shipped': currentStep = 2; break;
       case 'delivered': currentStep = 3; break;
-      case 'cancelled': return const Center(child: Text('تم إلغاء الطلب ❌', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)));
+      case 'cancelled':
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.red.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cancel, color: Colors.redAccent, size: 20),
+              SizedBox(width: 8),
+              Text('تم إلغاء الطلب', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 15, fontFamily: 'Cairo')),
+            ],
+          ),
+        );
       default: currentStep = 0;
     }
 
     final steps = [
-      {'title': 'الطلب', 'icon': Icons.receipt_long},
-      {'title': 'التجهيز', 'icon': Icons.inventory_2_outlined},
-      {'title': 'الشحن', 'icon': Icons.local_shipping_outlined},
-      {'title': 'التوصيل', 'icon': Icons.check_circle_outline},
+      {'title': 'الطلب', 'icon': Icons.receipt_long_rounded},
+      {'title': 'التجهيز', 'icon': Icons.inventory_2_rounded},
+      {'title': 'الشحن', 'icon': Icons.local_shipping_rounded},
+      {'title': 'التوصيل', 'icon': Icons.check_circle_rounded},
     ];
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: List.generate(steps.length, (index) {
         final isActive = index <= currentStep;
-        return Column(
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: isActive ? const Color(0xFF00D4FF) : Colors.grey.shade300,
-              child: Icon(steps[index]['icon'] as IconData, size: 16, color: isActive ? Colors.white : Colors.grey),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              steps[index]['title'] as String,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                color: isActive ? Colors.black87 : Colors.grey,
+
+        return Expanded(
+          child: Row(
+            children: [
+              // 🚀 الدائرة
+              Column(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isActive ? brandOrange : Colors.grey.shade100, // 👈 برتقالي لو نشط
+                      shape: BoxShape.circle,
+                      border: Border.all(color: isActive ? brandOrange : Colors.grey.shade300, width: 2),
+                      boxShadow: isActive ? [BoxShadow(color: brandOrange.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 3))] : [],
+                    ),
+                    child: Icon(steps[index]['icon'] as IconData, size: 18, color: isActive ? Colors.white : Colors.grey.shade400),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    steps[index]['title'] as String,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontFamily: 'Cairo',
+                      fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
+                      color: isActive ? primaryNavy : Colors.grey.shade500, // 👈 كحلي للنص
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              // 🚀 الخط المتصل بين الدواير
+              if (index < steps.length - 1)
+                Expanded(
+                  child: Container(
+                    height: 3,
+                    margin: const EdgeInsets.only(bottom: 24, left: 4, right: 4),
+                    decoration: BoxDecoration(
+                      color: index < currentStep ? brandOrange : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       }),
     );
