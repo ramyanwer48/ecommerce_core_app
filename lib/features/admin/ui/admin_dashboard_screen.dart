@@ -179,17 +179,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       double totalCustomerBalance = 0;
       for (var doc in customersSnap.docs) { totalCustomerBalance += double.tryParse((doc.data()['balance'] ?? 0).toString()) ?? 0; }
 
-      double discrepancy = (totalReceipts + totalCustomerBalance) - totalSales;
+      double expectedCash = totalSales - totalCustomerBalance;
+      double discrepancy = totalReceipts - expectedCash;
+
       String analysisNote = '';
       if (discrepancy.abs() <= 5) {
-        analysisNote = 'حساباتك متطابقة 100%. كل الفواتير الصادرة يقابلها إما نقدية بالخزينة أو مديونية مسجلة.';
+        analysisNote = 'الحسابات مسطرة 100%. كل المبيعات إما دخلت الخزينة نقداً أو مسجلة كمديونية على العملاء.';
       } else if (discrepancy < -5) {
-        analysisNote = '🚨 يوجد عجز مالي! إجمالي المبيعات أكبر من النقدية والديون.\nالسبب المحتمل: فواتير بيع تم إصدارها ولم يتم تسجيل تحصيلها في الخزينة، أو نسيان إضافة قيمتها كمديونية على حساب العميل.';
+        analysisNote = '🚨 يوجد عجز في الخزينة!\nالمشكلة: في بضاعة طلعت واتسجلت مبيعات، لكن فلوسها لا دخلت الخزينة ولا اتسجلت مديونية على العميل. (راجع فواتير الآجل اللي متسجلتش في حسابات العملاء).';
       } else if (discrepancy > 5) {
-        analysisNote = '⚠️ يوجد زيادة مالية! النقدية والديون أكبر من المبيعات.\nالسبب المحتمل: تم إيداع نقدية في الخزينة أو تسجيل ديون على عميل بدون إصدار فواتير مبيعات تقابلها (مبيعات غير مسجلة).';
+        analysisNote = '⚠️ يوجد زيادة غير مبررة في الخزينة!\nالمشكلة: في فلوس دخلت الدرج ومفيش فاتورة مبيعات تقابلها، أو العميل سدد دينه وإنت نسيت تنزله من رصيده.';
       }
 
       if (context.mounted) Navigator.pop(context);
+
       if (context.mounted) {
         showModalBottomSheet(
           context: context,
@@ -198,59 +201,84 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           builder: (ctx) => Directionality(
             textDirection: TextDirection.rtl,
             child: Container(
-              padding: const EdgeInsets.all(20),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
               decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(discrepancy.abs() <= 5 ? Icons.verified_rounded : Icons.warning_rounded, color: discrepancy.abs() <= 5 ? Colors.green : Colors.red, size: 30),
-                      const SizedBox(width: 12),
-                      const Text('تقرير المطابقة والتدقيق', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D1B2A))),
+                      Icon(discrepancy.abs() <= 5 ? Icons.verified_user_rounded : Icons.warning_rounded, color: discrepancy.abs() <= 5 ? Colors.green : Colors.red, size: 28),
+                      const SizedBox(width: 8),
+                      const Text('التدقيق والمطابقة المحاسبية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D1B2A))),
                       const Spacer(),
                       IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
                   const Divider(height: 16),
 
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: discrepancy.abs() <= 5 ? Colors.green.shade50 : Colors.red.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: discrepancy.abs() <= 5 ? Colors.green.shade200 : Colors.red.shade200)),
-                    child: Column(
-                      children: [
-                        Text(discrepancy.abs() <= 5 ? 'الحسابات متطابقة 100%' : 'نتيجة الفحص: ${discrepancy < 0 ? 'عجز' : 'زيادة'}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.red.shade700)),
-                        const SizedBox(height: 8),
-                        Text('${discrepancy.abs().toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 28, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.red.shade700)),
-                      ],
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: discrepancy.abs() <= 5 ? Colors.green.shade50 : Colors.red.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: discrepancy.abs() <= 5 ? Colors.green.shade200 : Colors.red.shade200)),
+                            child: Column(
+                              children: [
+                                Text(discrepancy.abs() <= 5 ? 'مطابقة ممتازة (0.00)' : 'نتيجة الفحص: ${discrepancy < 0 ? 'عجز في الخزينة' : 'زيادة في الخزينة'}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.red.shade700)),
+                                const SizedBox(height: 8),
+                                Text('${discrepancy.abs().toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 28, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.red.shade700)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: discrepancy.abs() <= 5 ? Colors.green.shade50 : Colors.amber.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: discrepancy.abs() <= 5 ? Colors.green.shade200 : Colors.amber.shade300)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.lightbulb_outline, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.brown.shade800, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text('التشخيص الآلي:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.brown.shade800)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(analysisNote, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: discrepancy.abs() <= 5 ? Colors.green.shade700 : Colors.brown.shade800, fontWeight: FontWeight.bold, height: 1.5)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          const Text('تفاصيل المعادلة المحاسبية:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
+                          const SizedBox(height: 12),
+                          _buildReportRow('1. إجمالي المبيعات', totalSales, Colors.blue.shade700),
+                          const SizedBox(height: 4),
+                          _buildReportRow('2. يخصم: ديون العملاء (الآجل)', totalCustomerBalance, Colors.orange.shade700, isMinus: true),
+                          const Divider(height: 20),
+                          _buildReportRow('المفروض يكون في الخزينة (=)', expectedCash, Colors.black87),
+                          const SizedBox(height: 12),
+                          _buildReportRow('الموجود بالخزينة فعلياً', totalReceipts, Colors.green.shade700),
+                          const Divider(height: 24),
+
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D1B2A), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('إغلاق التقرير', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.amber.shade300)),
-                    child: Text(analysisNote, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.brown.shade800, fontWeight: FontWeight.bold, height: 1.4)),
-                  ),
-                  const SizedBox(height: 24),
-
-                  const Text('تفاصيل الأرقام للمراجعة:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('إجمالي إيرادات المبيعات (نقطة الأساس)', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)), Text('${totalSales.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blue.shade700))]),
-                  const Divider(height: 24),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('النقدية الفعلية المحصلة (المقبوضات)', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)), Text('${totalReceipts.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green.shade700))]),
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('ديون العملاء المعلقة (الآجل)', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)), Text('${totalCustomerBalance.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold, color: Colors.orange.shade700))]),
-
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D1B2A), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('إغلاق التقرير', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
-                  )
                 ],
               ),
             ),
@@ -261,6 +289,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (context.mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo'))));
     }
+  }
+
+  Widget _buildReportRow(String label, double amount, Color color, {bool isMinus = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+        Text('${isMinus ? '-' : ''}${amount.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
   }
 
   void _showStaffManagementSheet(BuildContext context) {
@@ -434,13 +472,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) => Directionality(textDirection: TextDirection.rtl, child: Container(height: MediaQuery.of(context).size.height * 0.65, padding: const EdgeInsets.all(20), decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: Container(width: 40, height: 5, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(3)))), Row(children: [const Icon(Icons.warning_rounded, color: Colors.red, size: 28), const SizedBox(width: 8), const Text('تنبيه نواقص المخزون', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')), const Spacer(), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)), child: Text('${lowStockItems.length} منتج', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))]), const Divider(height: 30), Expanded(child: ListView.separated(itemCount: lowStockItems.length, separatorBuilder: (context, index) => const Divider(), itemBuilder: (context, index) { final item = lowStockItems[index]; final name = item['name'] ?? 'منتج غير معروف'; final stock = item['stockQuantity'] ?? 0; return ListTile(contentPadding: EdgeInsets.zero, leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.inventory_2_outlined, color: Colors.red, size: 20)), title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)), trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)), child: Text('باقي: $stock', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')))); } ))]))));
   }
 
+  // 🚀 أداة مساعدة لرسم الأيقونات بحجم "أكبر سِنة" ومريحة للضغط
+  Widget _buildHeaderIcon(IconData icon, Color bgColor, Color iconColor, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24), // تكبير مساحة التفاعل
+      child: Container(
+        padding: const EdgeInsets.all(10), // تكبير البادينج سِنة
+        decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+        child: Icon(icon, color: iconColor, size: 22), // 🚀 تكبير الأيقونة من 18 لـ 22
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color primaryNavy = Color(0xFF0D1B2A);
     const Color bgColor = Color(0xFFF5F7FA);
 
     String displayName = currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'المدير العام';
-    String displayEmail = currentUser?.email ?? '';
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -448,85 +498,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: bgColor,
         body: Column(
           children: [
-            // 🚀 الهيدر الاحترافي المضغوط (Compact UI Design)
+            // 🚀 الهيدر الاحترافي المضغوط بعد شيل الإيميل وتكبير الأيقونات
             Container(
               padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 8, // تقليل المساحة العلوية
-                  left: 16, right: 16, bottom: 16 // تقليل الحواف
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16, right: 16, bottom: 16
               ),
               decoration: const BoxDecoration(
                 color: primaryNavy,
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24)), // تقليل درجة الدوران ليتناسب مع الحجم الجديد
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. لوحة التحكم في المنتصف
-                  const Center(
-                    child: Text('لوحة تحكم (ERP)', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                  ),
-                  const SizedBox(height: 12), // تقليل المسافة
-
-                  // 2. الصورة والإيميل
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      GestureDetector(
-                        onTap: _updateProfileImage,
-                        child: Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            CircleAvatar(
-                              radius: 26, // تصغير حجم دائرة الصورة
-                              backgroundColor: Colors.white,
-                              backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl!) : null,
-                              child: profileImageUrl == null ? const Icon(Icons.person, size: 30, color: primaryNavy) : null,
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(color: Colors.orange.shade600, shape: BoxShape.circle, border: Border.all(color: primaryNavy, width: 2)),
-                              child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
-                            )
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12), // تقليل المسافة
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(displayName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
-                            const SizedBox(height: 2),
-                            Text(displayEmail, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.white70)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12), // تقليل المسافة
-
-                  // 3. صف الأيقونات المضموم والمدمج
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // المفضلة
-                      StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('users').doc(currentUser?.uid).collection('favorites').snapshots(),
-                          builder: (context, snapshot) {
-                            int favCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                            return Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-                                    child: IconButton(icon: const Icon(Icons.favorite_border_rounded, color: Colors.white, size: 20), padding: const EdgeInsets.all(8), constraints: const BoxConstraints(), onPressed: () { HapticFeedback.selectionClick(); }),
-                                  ),
-                                  if (favCount > 0)
-                                    Positioned(top: -2, right: -2, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: Text('$favCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
-                                ]
-                            );
-                          }
-                      ),
-                      // النواقص
+                      const Text('لوحة تحكم (ERP)', style: TextStyle(fontFamily: 'Cairo', fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                       StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance.collection('products').snapshots(),
                           builder: (context, snapshot) {
@@ -541,36 +529,79 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 if (stock <= threshold) { lowStockCount++; lowStockList.add(data); }
                               }
                             }
-                            return Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-                                    child: IconButton(icon: const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 20), padding: const EdgeInsets.all(8), constraints: const BoxConstraints(), onPressed: () { HapticFeedback.selectionClick(); if (lowStockCount > 0) _showLowStockSheet(context, lowStockList); else ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('المخزون آمن!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green)); }),
-                                  ),
-                                  if (lowStockCount > 0)
-                                    Positioned(top: -2, right: -2, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: Text('$lowStockCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
-                                ]
+                            return InkWell(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                if (lowStockCount > 0) _showLowStockSheet(context, lowStockList);
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: lowStockCount > 0 ? Colors.red.shade600 : Colors.green.shade600,
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: lowStockCount > 0
+                                      ? [BoxShadow(color: Colors.red.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                                      : [BoxShadow(color: Colors.green.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 2))],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(lowStockCount > 0 ? Icons.warning_amber_rounded : Icons.check_circle_outline, color: Colors.white, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text(lowStockCount > 0 ? '$lowStockCount نواقص' : 'المخزون آمن', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                  ],
+                                ),
+                              ),
                             );
                           }
                       ),
-                      // البروفايل
-                      Container(
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-                        child: IconButton(icon: const Icon(Icons.person_rounded, color: Colors.white, size: 20), padding: const EdgeInsets.all(8), constraints: const BoxConstraints(), onPressed: () { HapticFeedback.lightImpact(); _showUserProfileData(); }),
-                      ),
-                      // الإعدادات
-                      Container(
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
-                        child: IconButton(icon: const Icon(Icons.settings_rounded, color: Colors.white, size: 20), padding: const EdgeInsets.all(8), constraints: const BoxConstraints(), onPressed: () { HapticFeedback.lightImpact(); _showSystemSettingsSheet(); }),
-                      ),
-                      // الخروج
-                      Container(
-                        decoration: BoxDecoration(color: Colors.red.withOpacity(0.2), shape: BoxShape.circle),
-                        child: IconButton(icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20), padding: const EdgeInsets.all(8), constraints: const BoxConstraints(), onPressed: () async { HapticFeedback.lightImpact(); await FirebaseAuth.instance.signOut(); if (context.mounted) context.go(Routes.login); }),
-                      ),
                     ],
-                  )
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _updateProfileImage,
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            CircleAvatar(
+                              radius: 26,
+                              backgroundColor: Colors.white,
+                              backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl!) : null,
+                              child: profileImageUrl == null ? const Icon(Icons.person, size: 30, color: primaryNavy) : null,
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(color: Colors.orange.shade600, shape: BoxShape.circle, border: Border.all(color: primaryNavy, width: 2)),
+                              child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
+                            )
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(displayName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                            const SizedBox(height: 2),
+                            // 🚀 تم إزالة الإيميل ووضع المسمى الوظيفي للحفاظ على الشياكة والمساحة
+                            Text('المدير العام', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.orange.shade400)),
+                          ],
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 10, // مسافة أوسع شوية بين الأيقونات
+                        children: [
+                          _buildHeaderIcon(Icons.person_rounded, Colors.white.withOpacity(0.1), Colors.white, () { HapticFeedback.lightImpact(); _showUserProfileData(); }),
+                          _buildHeaderIcon(Icons.settings_rounded, Colors.white.withOpacity(0.1), Colors.white, () { HapticFeedback.lightImpact(); _showSystemSettingsSheet(); }),
+                          _buildHeaderIcon(Icons.logout_rounded, Colors.red.withOpacity(0.2), Colors.redAccent, () async { HapticFeedback.lightImpact(); await FirebaseAuth.instance.signOut(); if (context.mounted) context.go(Routes.login); }),
+                        ],
+                      )
+                    ],
+                  ),
                 ],
               ),
             ),

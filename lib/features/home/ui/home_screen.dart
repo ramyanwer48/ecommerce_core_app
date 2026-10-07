@@ -115,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // 1. المفضلة
                 BlocBuilder<FavoritesCubit, FavoritesState>(
                   builder: (context, favState) {
                     int favCount = 0;
@@ -139,6 +140,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
+
+                // 🚀 2. السلة اللي اتنقلت من تحت لفوق هنا (Cart Icon with Badge)
+                BlocBuilder<CartCubit, CartState>(
+                  builder: (context, state) {
+                    int badgeCount = 0;
+                    if (state is CartUpdated) badgeCount = state.totalQuantity;
+
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.shopping_cart_outlined, color: primaryNavy, size: 26),
+                          onPressed: () => context.push(Routes.cart), // توجه العميل لشاشة السلة
+                        ),
+                        if (badgeCount > 0)
+                          Positioned(
+                            right: 4, top: 4,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              child: Text(
+                                badgeCount.toString().replaceAllMapped(RegExp(r'[0-9]'), (match) => String.fromCharCode(match.group(0)!.codeUnitAt(0) + 1584)),
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+
+                // 3. البروفايل
                 IconButton(
                   icon: Icon(Icons.person_outline, color: primaryNavy, size: 28),
                   onPressed: () => context.push(Routes.profile),
@@ -400,7 +435,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 itemBuilder: (context, index) {
                                   final cat = categories[index];
 
-                                  // 👈 التعديل السحري هنا لضبط إضاءة زرار "الكل" وأي قسم تاني
                                   final currentCat = context.read<HomeCubit>().currentCategory;
                                   final isSelected = (cat.name == 'الكل' && (currentCat == null || currentCat == 'الكل')) || currentCat == cat.name;
 
@@ -507,7 +541,6 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
     bool hasDiscount = oldPrice > widget.product.price;
     int discountPerc = hasDiscount ? (((oldPrice - widget.product.price) / oldPrice) * 100).toInt() : 0;
 
-    // جلب التقييم الفعلي وعدد المراجعات من الداتا بيز
     double actualRating = 0.0;
     int actualReviewsCount = 0;
     try {
@@ -517,7 +550,6 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
       actualReviewsCount = int.tryParse((widget.product as dynamic).reviewsCount.toString()) ?? 0;
     } catch(e) {}
 
-    // 👈 تحديد هل المنتج لديه تقييمات أم لا (بناءً على الـ UX Best Practices)
     bool hasReviews = actualRating > 0 && actualReviewsCount > 0;
 
     return GestureDetector(
@@ -571,7 +603,6 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                         ),
                         const SizedBox(height: 4),
 
-                        // 👈 اللمسة الاحترافية للتقييم
                         hasReviews
                             ? Row(
                           children: [
@@ -613,7 +644,7 @@ class _InteractiveProductCardState extends State<InteractiveProductCard> {
                                       ],
                                     )
                                   else
-                                    const SizedBox(height: 14), // للحفاظ على ارتفاع الكارت
+                                    const SizedBox(height: 14),
                                 ],
                               ),
                             ),

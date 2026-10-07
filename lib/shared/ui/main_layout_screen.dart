@@ -15,6 +15,8 @@ import '../../features/admin/ui/admin_orders_screen.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/cart/logic/cart_cubit.dart';
 import '../../features/cart/logic/cart_state.dart';
+// 🚀 تم إضافة استدعاء شاشة الفاتورة بالذكاء الاصطناعي هنا
+import '../../features/purchases/ui/ai_purchase_screen.dart';
 
 class MainLayoutScreen extends StatefulWidget {
   const MainLayoutScreen({super.key});
@@ -51,6 +53,7 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     }
   }
 
+  // 🚀 شاشات العميل العادي (السلة لسه موجودة له تحت)
   final List<Widget> _customerScreens = [
     const HomeScreen(),
     const OrdersScreen(),
@@ -58,9 +61,10 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     const ProfileScreen(),
   ];
 
+  // 🚀 شاشات المدير (تم استبدال السلة بشاشة إدخال الفواتير بالـ AI)
   final List<Widget> _adminScreens = [
     const HomeScreen(),
-    const CartScreen(),
+    const AiPurchaseScreen(), // 👈 هنا تم استبدال CartScreen
     const AdminDashboardScreen(),
     const ManageProductsScreen(),
     BlocProvider(
@@ -74,6 +78,7 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     setState(() => _currentIndex = index);
   }
 
+  // 🚀 أداة السلة بالأرقام (محتفظين بيها للعميل العادي)
   Widget _buildCartIconWithBadge(bool isActive) {
     return BlocBuilder<CartCubit, CartState>(
       builder: (context, state) {
@@ -106,7 +111,6 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 👈 تم حذف شاشة التحميل (Scaffold) بالكامل، ليتم رسم الهوم فوراً
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -123,13 +127,15 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
           type: BottomNavigationBarType.fixed,
           items: _isAdmin
               ? [
+            // 🚀 أزرار المدير بعد التعديل
             const BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
-            BottomNavigationBarItem(icon: _buildCartIconWithBadge(_currentIndex == 1), label: 'السلة'),
+            const BottomNavigationBarItem(icon: Icon(Icons.document_scanner_rounded), label: 'فاتورة AI ✨'), // 👈 الزرار الجديد
             const BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'اللوحة'),
             const BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'المخزون'),
             const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'الطلبات'),
           ]
               : [
+            // 🚀 أزرار العميل العادي
             const BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'الرئيسية'),
             const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'طلباتي'),
             BottomNavigationBarItem(icon: _buildCartIconWithBadge(_currentIndex == 2), label: 'السلة'),

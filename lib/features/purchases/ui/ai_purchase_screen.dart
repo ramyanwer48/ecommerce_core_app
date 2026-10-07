@@ -15,9 +15,10 @@ class AiPurchaseScreen extends StatefulWidget {
 }
 
 class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerProviderStateMixin {
+  // 🚀 الألوان الثابتة للهوية
   final Color primaryNavy = const Color(0xFF0D1B2A);
-  final Color brandBlue = const Color(0xFF1E5B70);
-  final Color brandPurple = Colors.deepPurple;
+  final Color brandOrange = Colors.orange.shade600;
+  final Color bgSoftColor = const Color(0xFFF4F7FB);
 
   bool _isAnalyzing = false;
   File? _selectedFile;
@@ -28,7 +29,7 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
   }
 
@@ -38,22 +39,22 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
     super.dispose();
   }
 
-  // ✂️ دالة اقتصاص الصورة
   Future<void> _cropImage(String sourcePath) async {
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: sourcePath,
       compressQuality: 90,
       uiSettings: [
         AndroidUiSettings(
-          toolbarTitle: 'تعديل الفاتورة',
+          toolbarTitle: 'تحديد حدود الفاتورة',
           toolbarColor: primaryNavy,
           toolbarWidgetColor: Colors.white,
+          activeControlsWidgetColor: brandOrange,
           initAspectRatio: CropAspectRatioPreset.original,
           lockAspectRatio: false,
           hideBottomControls: false,
         ),
         IOSUiSettings(
-          title: 'تعديل الفاتورة',
+          title: 'تحديد حدود الفاتورة',
         ),
       ],
     );
@@ -66,44 +67,31 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
     }
   }
 
-  // 📸 التقاط صورة من الكاميرا
   Future<void> _captureFromCamera() async {
     final ImagePicker picker = ImagePicker();
     final XFile? photo = await picker.pickImage(source: ImageSource.camera);
-
     if (photo != null) {
       await _cropImage(photo.path);
     }
   }
 
-  // 🖼️ اختيار صورة من الاستوديو
   Future<void> _pickFromGallery() async {
     final ImagePicker picker = ImagePicker();
     final XFile? photo = await picker.pickImage(source: ImageSource.gallery);
-
     if (photo != null) {
       await _cropImage(photo.path);
     }
   }
 
-  // 🤖 الدالة التشخيصية الدقيقة للاتصال بالـ Cloud Function
   Future<void> _simulateAiParsing() async {
     if (_selectedFile == null) return;
-
-    setState(() {
-      _isAnalyzing = true;
-    });
-
+    setState(() => _isAnalyzing = true);
     HapticFeedback.heavyImpact();
 
     try {
       final extractedData = await AiInvoiceService.analyzeInvoice(_selectedFile!);
-
       if (!mounted) return;
-
-      setState(() {
-        _isAnalyzing = false;
-      });
+      setState(() => _isAnalyzing = false);
 
       if (extractedData != null) {
         context.push(Routes.invoiceReview, extra: extractedData);
@@ -112,11 +100,7 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
       }
     } catch (e, stackTrace) {
       if (!mounted) return;
-
-      setState(() {
-        _isAnalyzing = false;
-      });
-
+      setState(() => _isAnalyzing = false);
       debugPrint("❌ AI Parsing Error StackTrace: $stackTrace");
       _showErrorDialog("❌ خطأ تقني صريح:\n${e.toString()}");
     }
@@ -125,22 +109,29 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
   void _showErrorDialog(String errorMsg) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('تشخيص خطأ الـ AI', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.red)),
-        content: SingleChildScrollView(
-          child: Text(
-            errorMsg,
-            style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4),
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.red),
+              const SizedBox(width: 8),
+              const Text('عذراً، حدث خطأ', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+            ],
           ),
+          content: SingleChildScrollView(
+            child: Text(errorMsg, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.5, color: Colors.grey.shade700)),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: primaryNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 0),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('حسناً', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: primaryNavy),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('حسناً', style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
-          ),
-        ],
       ),
     );
   }
@@ -150,17 +141,18 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFF102841),
+        backgroundColor: bgSoftColor,
         appBar: AppBar(
-          title: const Text('إدخال مشتريات (AI)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 17)),
+          automaticallyImplyLeading: false, // 👈 بتمنع ظهور أي أسهم افتراضية
+          title: Text('الفاتورة الذكية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
           centerTitle: true,
           backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
           elevation: 0,
+          // 🚀 تم نسف السهم اللي كان موجود هنا بناءً على طلبك
         ),
         body: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
             child: _isAnalyzing ? _buildAnalyzingState() : _buildUploadState(),
           ),
         ),
@@ -168,98 +160,168 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
     );
   }
 
+  // 🚀 واجهة الرفع بهوية التطبيق (كارت كحلي، إطار برتقالي)
   Widget _buildUploadState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A3A54),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3), width: 1.5),
+        color: primaryNavy,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: brandOrange, width: 2),
+        boxShadow: [
+          BoxShadow(color: brandOrange.withOpacity(0.15), blurRadius: 24, offset: const Offset(0, 10)),
+        ],
       ),
       child: Column(
         children: [
-          const Icon(Icons.document_scanner_rounded, size: 70, color: Colors.cyanAccent),
-          const SizedBox(height: 16),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: brandOrange.withOpacity(0.15),
+                ),
+              ),
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: brandOrange,
+                  boxShadow: [BoxShadow(color: brandOrange.withOpacity(0.5), blurRadius: 15, offset: const Offset(0, 5))],
+                ),
+                child: const Icon(Icons.document_scanner_rounded, size: 35, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
           const Text(
-            'مسح البيان والمطابقة الذكية',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+            'مسح البيان الذكي',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'سيتم قراءة الأصناف، الكميات، والأسعار تلقائياً\nحتى للفواتير المكتوبة بخط اليد.',
+
+          Text(
+            'صور الفاتورة وسيقوم الذكاء الاصطناعي\nباستخراج الأصناف والأسعار في ثوانٍ.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Colors.white70, fontFamily: 'Cairo', height: 1.5),
+            style: TextStyle(fontSize: 14, color: Colors.white70, fontFamily: 'Cairo', height: 1.6),
           ),
           const SizedBox(height: 40),
 
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _captureFromCamera,
-                  style: ElevatedButton.styleFrom( // 👈 تم التصحيح هنا بنجاح
-                    backgroundColor: const Color(0xFF1B6A7F),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  icon: const Icon(Icons.camera_alt, color: Colors.white),
-                  label: const Text('الكاميرا', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
-                ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                _captureFromCamera();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: brandOrange,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _pickFromGallery,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2C4C66),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  icon: const Icon(Icons.photo_library, color: Colors.white),
-                  label: const Text('الاستوديو', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
-                ),
+              icon: const Icon(Icons.camera_alt_rounded, size: 24, color: Colors.white),
+              label: const Text('التقاط بالكاميرا', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white)),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                _pickFromGallery();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-            ],
+              icon: Icon(Icons.photo_library_rounded, size: 24, color: primaryNavy),
+              label: Text('اختيار من الاستوديو', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: primaryNavy)),
+            ),
           ),
         ],
       ),
     );
   }
 
+  // 🚀 واجهة التحميل بنفس الستايل (كارت كحلي بإطار برتقالي)
   Widget _buildAnalyzingState() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        AnimatedBuilder(
-          animation: _pulseController,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: 1.0 + (_pulseController.value * 0.1),
-              child: Container(
-                padding: const EdgeInsets.all(30),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.cyanAccent.withValues(alpha: 0.1),
-                ),
-                child: const Icon(Icons.document_scanner_rounded, size: 60, color: Colors.cyanAccent),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 50, horizontal: 20),
+      decoration: BoxDecoration(
+        color: primaryNavy,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: brandOrange, width: 2),
+        boxShadow: [
+          BoxShadow(color: brandOrange.withOpacity(0.15), blurRadius: 24, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, child) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Transform.scale(
+                    scale: 1.0 + (_pulseController.value * 0.5),
+                    child: Container(
+                      width: 100, height: 100,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: brandOrange.withOpacity((1.0 - _pulseController.value) * 0.3)),
+                    ),
+                  ),
+                  Container(
+                    width: 90, height: 90,
+                    decoration: BoxDecoration(color: brandOrange, shape: BoxShape.circle, boxShadow: [BoxShadow(color: brandOrange.withOpacity(0.5), blurRadius: 20)]),
+                    child: const Icon(Icons.auto_awesome, size: 40, color: Colors.white),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 40),
+
+          const Text(
+            'لحظات من السحر...',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
+          ),
+          const SizedBox(height: 12),
+
+          Text(
+            'الذكاء الاصطناعي يقرأ فاتورتك الآن\nويستخرج البيانات بدقة.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.white70, fontFamily: 'Cairo', fontWeight: FontWeight.w600, height: 1.5),
+          ),
+          const SizedBox(height: 30),
+
+          SizedBox(
+            width: 150,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                backgroundColor: Colors.white.withOpacity(0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(brandOrange),
+                minHeight: 4,
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 30),
-        const Text(
-          'جاري استخراج البيانات...',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'يتم الآن تحليل الفاتورة ومطابقة الأصناف',
-          style: TextStyle(fontSize: 14, color: Colors.white70, fontFamily: 'Cairo'),
-        ),
-        const SizedBox(height: 30),
-        const CircularProgressIndicator(color: Colors.cyanAccent),
-      ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
