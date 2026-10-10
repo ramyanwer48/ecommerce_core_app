@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
-// ⚠️ تأكد من المسارات حسب مشروعك
 import '../../../core/services/pdf_invoice_service.dart';
 import '../../invoices/data/models/invoice_model.dart';
 
@@ -34,6 +33,10 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
   DateTimeRange? _selectedDateRange;
   String _filterSource = 'All';
   String _filterType = 'All';
+
+  String _formatMoney(double amount) {
+    return amount.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+  }
 
   Future<void> _openInvoicePdf(String ledgerDocId, String displayNote) async {
     showDialog(context: context, barrierDismissible: false, builder: (_) => Center(child: CircularProgressIndicator(color: brandOrange)));
@@ -87,6 +90,10 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
   }
 
   void _showAdvancedFilterSheet() {
+    String tempFilterSource = _filterSource;
+    String tempFilterType = _filterType;
+    DateTimeRange? tempDateRange = _selectedDateRange;
+
     showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -103,11 +110,20 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Center(child: Container(width: 40, height: 5, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('تصفية الحركات (تحليل مالي)', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
-                            IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx))
+                            const Text('تصفية الحركات', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                            IconButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              icon: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black87, width: 1.2)),
+                                child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
+                              ),
+                            )
                           ],
                         ),
                         const Divider(height: 20),
@@ -118,32 +134,34 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                           onTap: () async {
                             final DateTimeRange? picked = await showDateRangePicker(
                               context: context,
-                              initialDateRange: _selectedDateRange,
-                              firstDate: DateTime(2023),
-                              lastDate: DateTime.now(),
+                              initialDateRange: tempDateRange,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
                               builder: (context, child) => Theme(
                                 data: ThemeData.light().copyWith(colorScheme: ColorScheme.light(primary: brandOrange, onPrimary: Colors.white, onSurface: primaryNavy)),
                                 child: Directionality(textDirection: TextDirection.rtl, child: child!),
                               ),
                             );
-                            if (picked != null) setSheetState(() => _selectedDateRange = picked);
+                            if (picked != null) setSheetState(() => tempDateRange = picked);
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(color: Colors.grey.shade50, border: Border.all(color: _selectedDateRange != null ? brandOrange : Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: Colors.grey.shade50, border: Border.all(color: tempDateRange != null ? brandOrange : Colors.grey.shade300), borderRadius: BorderRadius.circular(12)),
                             child: Row(
                               children: [
-                                Icon(Icons.date_range, color: _selectedDateRange != null ? brandOrange : Colors.grey.shade600),
+                                Icon(Icons.date_range, color: tempDateRange != null ? brandOrange : Colors.grey.shade600),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    _selectedDateRange == null ? 'تحديد فترة (من - إلى)' : '${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month} - ${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}',
-                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: _selectedDateRange == null ? Colors.grey.shade700 : primaryNavy),
+                                    tempDateRange == null
+                                        ? 'تحديد فترة (من - إلى)'
+                                        : '${DateFormat('yyyy-MM-dd').format(tempDateRange!.start)} إلى ${DateFormat('yyyy-MM-dd').format(tempDateRange!.end)}',
+                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: tempDateRange == null ? Colors.grey.shade700 : primaryNavy),
                                   ),
                                 ),
-                                if (_selectedDateRange != null)
-                                  InkWell(onTap: () => setSheetState(() => _selectedDateRange = null), child: const Icon(Icons.close, color: Colors.red, size: 20))
+                                if (tempDateRange != null)
+                                  InkWell(onTap: () => setSheetState(() => tempDateRange = null), child: const Icon(Icons.close, color: Colors.red, size: 20))
                               ],
                             ),
                           ),
@@ -155,10 +173,10 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                         Wrap(
                           spacing: 8, runSpacing: 8,
                           children: [
-                            _buildFilterChip('الكل', 'All', _filterSource, (val) => setSheetState(() => _filterSource = val), Icons.all_inclusive),
-                            _buildFilterChip('الشركة', 'POS', _filterSource, (val) => setSheetState(() => _filterSource = val), Icons.storefront),
-                            _buildFilterChip('أونلاين', 'Online', _filterSource, (val) => setSheetState(() => _filterSource = val), Icons.language),
-                            _buildFilterChip('تحويل/محفظة', 'Transfer', _filterSource, (val) => setSheetState(() => _filterSource = val), Icons.phone_iphone),
+                            _buildFilterChip('الكل', 'All', tempFilterSource, (val) => setSheetState(() => tempFilterSource = val), Icons.all_inclusive),
+                            _buildFilterChip('الشركة', 'POS', tempFilterSource, (val) => setSheetState(() => tempFilterSource = val), Icons.storefront),
+                            _buildFilterChip('أونلاين', 'Online', tempFilterSource, (val) => setSheetState(() => tempFilterSource = val), Icons.language),
+                            _buildFilterChip('تحويل/محفظة', 'Transfer', tempFilterSource, (val) => setSheetState(() => tempFilterSource = val), Icons.phone_iphone),
                           ],
                         ),
                         const SizedBox(height: 20),
@@ -168,9 +186,9 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                         Wrap(
                           spacing: 8, runSpacing: 8,
                           children: [
-                            _buildFilterChip('الكل', 'All', _filterType, (val) => setSheetState(() => _filterType = val), Icons.list),
-                            _buildFilterChip('المبيعات', 'Sale', _filterType, (val) => setSheetState(() => _filterType = val), Icons.shopping_bag_outlined),
-                            _buildFilterChip('السدادات', 'Receipt', _filterType, (val) => setSheetState(() => _filterType = val), Icons.arrow_downward),
+                            _buildFilterChip('الكل', 'All', tempFilterType, (val) => setSheetState(() => tempFilterType = val), Icons.list),
+                            _buildFilterChip('المبيعات', 'Sale', tempFilterType, (val) => setSheetState(() => tempFilterType = val), Icons.shopping_bag_outlined),
+                            _buildFilterChip('السدادات', 'Receipt', tempFilterType, (val) => setSheetState(() => tempFilterType = val), Icons.arrow_downward),
                           ],
                         ),
                         const SizedBox(height: 30),
@@ -181,7 +199,11 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: brandOrange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                             onPressed: () {
-                              setState(() {});
+                              setState(() {
+                                _filterSource = tempFilterSource;
+                                _filterType = tempFilterType;
+                                _selectedDateRange = tempDateRange;
+                              });
                               Navigator.pop(ctx);
                             },
                             child: const Text('تطبيق الفلتر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
@@ -214,10 +236,11 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
       selectedColor: primaryNavy,
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? primaryNavy : Colors.grey.shade300)),
+      showCheckmark: false,
     );
   }
 
-  void _showReceiptSheet(BuildContext context, {DocumentSnapshot? existingDoc}) {
+  void _showReceiptSheet(BuildContext mainContext, {DocumentSnapshot? existingDoc}) {
     final bool isEditing = existingDoc != null;
     final Map<String, dynamic>? data = isEditing ? existingDoc.data() as Map<String, dynamic>? : null;
 
@@ -231,20 +254,21 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
     }
 
     File? selectedImage;
+    String? existingImageUrl = isEditing ? (data?['imageUrl'] as String?) : null;
     bool isSaving = false;
 
     showModalBottomSheet(
-      context: context,
+      context: mainContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-          builder: (context, setSheetState) {
+      builder: (sheetContext) => StatefulBuilder(
+          builder: (modalContext, setSheetState) {
             bool isTransfer = paymentMethod == 'تحويل مالي';
 
             return Directionality(
               textDirection: TextDirection.rtl,
               child: Container(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+                padding: EdgeInsets.only(bottom: MediaQuery.of(modalContext).viewInsets.bottom, left: 20, right: 20, top: 20),
                 decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 child: SingleChildScrollView(
                   child: Column(
@@ -254,8 +278,22 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(isEditing ? 'تعديل السداد' : 'تسجيل سداد جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                          IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx))
+                          const SizedBox(width: 40),
+                          Expanded(
+                            child: Text(
+                                isEditing ? 'تعديل السداد' : 'تسجيل سداد جديد',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            icon: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black87, width: 1.2)),
+                              child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
+                            ),
+                          )
                         ],
                       ),
                       const Divider(),
@@ -264,14 +302,16 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                       TextField(
                         controller: amountController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: primaryNavy),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: primaryNavy),
                         textAlign: TextAlign.center,
                         decoration: InputDecoration(
                             labelText: 'المبلغ المحصل',
-                            labelStyle: TextStyle(color: brandOrange),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: brandOrange, width: 2)),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            suffixText: 'ج.م'
+                            labelStyle: TextStyle(color: brandOrange, fontSize: 13, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: brandOrange, width: 2)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            suffixText: 'ج.م   ',
+                            suffixStyle: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: brandOrange)
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -320,7 +360,6 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                           decoration: InputDecoration(
                               labelText: 'رقم المحفظة المحول منها (إلزامي)',
                               prefixIcon: const Icon(Icons.phone_iphone),
-                              // 🚀 تحسين زر جهات الاتصال للتعامل مع المسافات والأخطاء
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.contacts, color: Colors.blue),
                                 onPressed: () async {
@@ -328,53 +367,82 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                                     if (await FlutterContacts.requestPermission(readonly: true)) {
                                       Contact? contact = await FlutterContacts.openExternalPick();
                                       if (contact != null && contact.phones.isNotEmpty) {
-                                        // مسح أي مسافات من الرقم المسحوب
                                         String cleanPhone = contact.phones.first.number.replaceAll(RegExp(r'\s+'), '');
                                         setSheetState(() => transferNumController.text = cleanPhone);
                                       }
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفض الصلاحية، يرجى التفعيل من الإعدادات', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                                      ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('تم رفض الصلاحية', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                                     }
                                   } catch (e) {
                                     debugPrint("Contacts Error: $e");
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ أثناء فتح جهات الاتصال', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.orange));
                                   }
                                 },
                               ),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))
                           ),
                         ),
                         const SizedBox(height: 12),
 
-                        InkWell(
+                        selectedImage != null
+                            ? Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(selectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              child: IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                                onPressed: () => setSheetState(() => selectedImage = null),
+                              ),
+                            ),
+                          ],
+                        )
+                            : (existingImageUrl != null
+                            ? Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(existingImageUrl!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              child: IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                                onPressed: () => setSheetState(() => existingImageUrl = null),
+                              ),
+                            ),
+                          ],
+                        )
+                            : InkWell(
                           onTap: () async {
                             final picker = ImagePicker();
                             final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
                             if (pickedFile != null) setSheetState(() => selectedImage = File(pickedFile.path));
                           },
                           child: Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                                color: selectedImage != null ? Colors.green.shade50 : Colors.grey.shade100,
-                                border: Border.all(color: selectedImage != null ? Colors.green : Colors.grey.shade400, style: BorderStyle.solid),
-                                borderRadius: BorderRadius.circular(12)
+                                color: Colors.grey.shade100,
+                                border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                                borderRadius: BorderRadius.circular(10)
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(selectedImage != null ? Icons.check_circle : Icons.add_photo_alternate_outlined, color: selectedImage != null ? Colors.green : primaryNavy),
+                                Icon(Icons.add_photo_alternate_outlined, color: primaryNavy),
                                 const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    selectedImage != null ? 'تم إرفاق الصورة بنجاح (اضغط لتغييرها)' : 'إرفاق صورة الإيصال (اختياري)',
-                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: selectedImage != null ? Colors.green : primaryNavy),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                                Text('إرفاق صورة الإيصال (اختياري)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy)),
                               ],
                             ),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 16),
                       ],
 
@@ -382,7 +450,8 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                         controller: noteController,
                         decoration: InputDecoration(
                             labelText: 'ملاحظات إضافية (اختياري)',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+                            contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -390,17 +459,31 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                             backgroundColor: brandOrange,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
                         ),
                         onPressed: isSaving ? null : () async {
                           String amountText = amountController.text.trim();
-                          if (amountText.isEmpty) return;
+
+                          amountText = amountText
+                              .replaceAll('٠', '0').replaceAll('١', '1').replaceAll('٢', '2')
+                              .replaceAll('٣', '3').replaceAll('٤', '4').replaceAll('٥', '5')
+                              .replaceAll('٦', '6').replaceAll('٧', '7').replaceAll('٨', '8')
+                              .replaceAll('٩', '9');
+
+                          if (amountText.isEmpty) {
+                            ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('الرجاء إدخال المبلغ أولاً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                            return;
+                          }
+
                           double newAmount = double.tryParse(amountText) ?? 0;
-                          if (newAmount <= 0) return;
+                          if (newAmount <= 0) {
+                            ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('المبلغ المدخل غير صحيح', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                            return;
+                          }
 
                           if (isTransfer && transferNumController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إدخال رقم المحفظة المحول منها', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                            ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('يرجى إدخال رقم المحفظة المحول منها', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                             return;
                           }
 
@@ -413,16 +496,21 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                             finalNote = 'سداد نقدي (الشركة)' + (finalNote.isNotEmpty ? ' - $finalNote' : '');
                           }
 
-                          try {
-                            String? imageUrl;
-                            if (selectedImage != null) {
-                              String fileName = 'receipts/${DateTime.now().millisecondsSinceEpoch}.jpg';
-                              TaskSnapshot snap = await FirebaseStorage.instance.ref(fileName).putFile(selectedImage!);
-                              imageUrl = await snap.ref.getDownloadURL();
-                            } else if (isEditing) {
-                              imageUrl = data?['imageUrl'];
-                            }
+                          String? finalImageUrl = existingImageUrl;
 
+                          if (selectedImage != null) {
+                            try {
+                              String fileName = 'receipts/${DateTime.now().millisecondsSinceEpoch}.jpg';
+                              TaskSnapshot snap = await FirebaseStorage.instance.ref(fileName).putFile(selectedImage!).timeout(const Duration(seconds: 15));
+                              finalImageUrl = await snap.ref.getDownloadURL();
+                            } catch (e) {
+                              setSheetState(() => isSaving = false);
+                              ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('مشكلة في رفع الصورة! تأكد من إعدادات الـ Storage في الفايربيز.', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red, duration: Duration(seconds: 4)));
+                              return;
+                            }
+                          }
+
+                          try {
                             WriteBatch batch = _firestore.batch();
                             DocumentReference customerRef = _firestore.collection('customers').doc(widget.customerId);
 
@@ -432,23 +520,29 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                               DocumentReference ledgerRef = existingDoc.reference;
 
                               Map<String, dynamic> updateData = {'amount': newAmount, 'note': finalNote, 'updatedAt': FieldValue.serverTimestamp()};
-                              if (imageUrl != null) updateData['imageUrl'] = imageUrl;
+                              updateData['imageUrl'] = finalImageUrl;
 
                               batch.update(ledgerRef, updateData);
                               if (difference != 0) batch.update(customerRef, {'balance': FieldValue.increment(-difference)});
                             } else {
                               DocumentReference ledgerRef = _firestore.collection('ledger_entries').doc();
                               Map<String, dynamic> insertData = {'partnerId': widget.customerId, 'partnerName': widget.customerName, 'type': 'receipt', 'amount': newAmount, 'date': FieldValue.serverTimestamp(), 'note': finalNote};
-                              if (imageUrl != null) insertData['imageUrl'] = imageUrl;
+                              if (finalImageUrl != null) insertData['imageUrl'] = finalImageUrl;
 
                               batch.set(ledgerRef, insertData);
                               batch.update(customerRef, {'balance': FieldValue.increment(-newAmount)});
                             }
+
                             await batch.commit();
-                            if (ctx.mounted) Navigator.pop(ctx);
+
+                            if (sheetContext.mounted) {
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(mainContext).showSnackBar(const SnackBar(content: Text('تم الحفظ بنجاح وتحديث الحساب', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+                            }
+
                           } catch (e) {
                             setSheetState(() => isSaving = false);
-                            debugPrint(e.toString());
+                            ScaffoldMessenger.of(mainContext).showSnackBar(SnackBar(content: Text('خطأ في حفظ البيانات: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
                           }
                         },
                         child: isSaving
@@ -503,7 +597,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
   String _formatDate(Timestamp? timestamp) {
     if (timestamp == null) return '';
     DateTime dt = timestamp.toDate();
-    return '${dt.day}/${dt.month}/${dt.year} - ${DateFormat('hh:mm a').format(dt)}';
+    return '${dt.day}/${dt.month}/${dt.year} | ${DateFormat('hh:mm a').format(dt)}';
   }
 
   void _showReceiptImage(String imageUrl) {
@@ -537,9 +631,20 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: Text('كشف حساب: ${widget.customerName}', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('كشف حساب (${widget.customerName})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+          ),
+          centerTitle: true,
           backgroundColor: primaryNavy,
-          foregroundColor: Colors.white,
           elevation: 0,
         ),
         body: Column(
@@ -547,19 +652,16 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
             Container(
               color: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Text(
+                      isFiltered ? 'فلاتر نشطة' : 'عرض كل الحركات',
+                      style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isFiltered ? brandOrange : Colors.grey.shade800, fontSize: 14)
+                  ),
                   Row(
                     children: [
-                      const Icon(Icons.analytics_outlined, color: Colors.grey, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                          isFiltered ? 'فلاتر نشطة:' : 'عرض كل الحركات',
-                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isFiltered ? brandOrange : Colors.grey.shade800, fontSize: 13)
-                      ),
-                      const Spacer(),
-                      if (isFiltered)
+                      if (isFiltered) ...[
                         InkWell(
                           onTap: () {
                             setState(() {
@@ -568,55 +670,36 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                               _selectedDateRange = null;
                             });
                           },
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           child: Container(
-                            margin: const EdgeInsets.only(left: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                            child: Row(
-                              children: [
-                                Text('إلغاء التصفية', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
-                                const SizedBox(width: 4),
-                                Icon(Icons.close, size: 14, color: Colors.red.shade700),
-                              ],
+                            height: 38,
+                            width: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.red.shade200),
                             ),
+                            child: Icon(Icons.close_rounded, color: Colors.red.shade700, size: 20),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                      ],
                       InkWell(
                         onTap: _showAdvancedFilterSheet,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), border: Border.all(color: primaryNavy.withOpacity(0.2)), borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.tune, size: 16, color: primaryNavy),
-                              const SizedBox(width: 6),
-                              Text('تصفية', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: primaryNavy)),
-                            ],
+                          height: 38,
+                          width: 38,
+                          decoration: BoxDecoration(
+                            color: isFiltered ? brandOrange : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: brandOrange),
                           ),
+                          child: Icon(Icons.tune_rounded, color: isFiltered ? Colors.white : brandOrange, size: 20),
                         ),
                       ),
                     ],
                   ),
-                  if (isFiltered)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            if (_filterSource != 'All')
-                              _buildActiveFilterChip(_filterSource == 'POS' ? 'الشركة' : (_filterSource == 'Online' ? 'أونلاين' : 'تحويل'), () => setState(() => _filterSource = 'All')),
-                            if (_filterType != 'All')
-                              _buildActiveFilterChip(_filterType == 'Sale' ? 'المبيعات' : 'السدادات', () => setState(() => _filterType = 'All')),
-                            if (_selectedDateRange != null)
-                              _buildActiveFilterChip('تاريخ مخصص', () => setState(() => _selectedDateRange = null)),
-                          ],
-                        ),
-                      ),
-                    )
                 ],
               ),
             ),
@@ -679,14 +762,14 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(isFiltered ? 'مبيعات (حسب الفلتر)' : 'إجمالي مسحوباته', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isFiltered ? brandOrange : Colors.grey)),
-                              Text('${totalSales.toStringAsFixed(2)} ج', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text('${_formatMoney(totalSales)} ج', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
                             ],
                           ),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(isFiltered ? 'مدفوعات (حسب الفلتر)' : 'إجمالي مدفوعاته', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: isFiltered ? brandOrange : Colors.grey)),
-                              Text('${totalReceipts.toStringAsFixed(2)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade700)),
+                              Text('${_formatMoney(totalReceipts)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade700)),
                             ],
                           ),
                         ],
@@ -700,7 +783,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(color: currentBal > 0 ? Colors.red.shade50 : Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
                             child: Text(
-                              '${currentBal.toStringAsFixed(2)} ج.م',
+                              '${_formatMoney(currentBal)} ج.م',
                               style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 20, color: currentBal > 0 ? Colors.red.shade700 : Colors.green.shade700),
                             ),
                           ),
@@ -763,7 +846,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
 
                   return ListView.builder(
                     itemCount: docs.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 90),
                     itemBuilder: (context, index) {
                       var doc = docs[index];
                       var data = doc.data() as Map<String, dynamic>;
@@ -825,26 +908,47 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
+                                  Text(note, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
+                                  const SizedBox(height: 4),
                                   Text(_formatDate(date), style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
+
+                                  if (imageUrl != null) ...[
+                                    const SizedBox(height: 8),
+                                    InkWell(
+                                      onTap: () => _showReceiptImage(imageUrl),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          imageUrl,
+                                          height: 50,
+                                          width: 80,
+                                          fit: BoxFit.cover,
+                                          loadingBuilder: (context, child, loadingProgress) {
+                                            if (loadingProgress == null) return child;
+                                            return Container(
+                                              height: 50, width: 80,
+                                              color: Colors.grey.shade200,
+                                              child: const Center(child: SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('${amount.toStringAsFixed(2)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isReceipt ? Colors.green.shade700 : Colors.red.shade700)),
+                                Text('${_formatMoney(amount)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: isReceipt ? Colors.green.shade700 : Colors.red.shade700)),
+                                const SizedBox(height: 8),
                                 Row(
                                   children: [
                                     if (isSale)
                                       InkWell(
                                         onTap: () => _openInvoicePdf(doc.id, note),
                                         child: const Padding(padding: EdgeInsets.all(4.0), child: Icon(Icons.print_outlined, size: 18, color: Colors.blue)),
-                                      ),
-                                    if (isReceipt && imageUrl != null)
-                                      InkWell(
-                                        onTap: () => _showReceiptImage(imageUrl),
-                                        child: Padding(padding: const EdgeInsets.all(4.0), child: Icon(Icons.image_outlined, size: 18, color: brandOrange)),
                                       ),
                                     if (isReceipt && !isAutomatedSystemEntry) ...[
                                       InkWell(
@@ -877,22 +981,6 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> {
           icon: const Icon(Icons.add, color: Colors.white),
           label: const Text('تسجيل سداد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActiveFilterChip(String label, VoidCallback onRemove) {
-    return Container(
-      margin: const EdgeInsets.only(left: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: brandOrange)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: brandOrange)),
-          const SizedBox(width: 4),
-          InkWell(onTap: onRemove, child: Icon(Icons.close, size: 14, color: brandOrange))
-        ],
       ),
     );
   }

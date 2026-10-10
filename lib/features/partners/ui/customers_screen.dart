@@ -42,6 +42,11 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
     super.dispose();
   }
 
+  // دالة لإزالة الأصفار العشرية
+  String _formatMoney(double amount) {
+    return amount.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+  }
+
   void _showAddCustomerModal(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController phoneController = TextEditingController();
@@ -60,7 +65,20 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('إضافة عميل جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: primaryNavy), textAlign: TextAlign.center),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('إضافة عميل جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: primaryNavy)),
+                      IconButton(
+                        onPressed: () => Navigator.pop(modalContext),
+                        icon: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black87, width: 1.2)),
+                          child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
+                        ),
+                      )
+                    ],
+                  ),
                   const SizedBox(height: 20),
                   TextField(controller: nameController, decoration: InputDecoration(labelText: 'اسم العميل', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), prefixIcon: const Icon(Icons.person))),
                   const SizedBox(height: 15),
@@ -100,10 +118,17 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
           title: const Text('حسابات العملاء', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
         ),
         body: Column(
@@ -170,7 +195,7 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
                         color: primaryNavy,
                         padding: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
                         child: Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(16),
@@ -180,13 +205,19 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('إجمالي الديون بالخارج', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                              Text('${totalDebt.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: brandOrange)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: brandOrange,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text('${_formatMoney(totalDebt)} ج.م', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                              ),
                             ],
                           ),
                         ),
                       ),
 
-                      // 🚀 التبويبات بالمسميات الجديدة والـ FittedBox لمنع قص الحروف
                       Container(
                         color: Colors.white,
                         child: TabBar(
@@ -194,26 +225,11 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
                           labelColor: brandOrange,
                           unselectedLabelColor: Colors.grey.shade600,
                           indicatorColor: brandOrange,
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 2), // تقليل المسافة الجانبية
+                          labelPadding: const EdgeInsets.symmetric(horizontal: 2),
                           tabs: [
-                            Tab(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('الكل (${searchFiltered.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ),
-                            Tab(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('رصيد صفري (${clearedList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ),
-                            Tab(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('أرصدة مستحقة (${debtorsList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ),
+                            Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('الكل (${searchFiltered.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
+                            Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('رصيد صفري (${clearedList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
+                            Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('أرصدة مستحقة (${debtorsList.length})', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
                           ],
                         ),
                       ),
@@ -260,7 +276,8 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      // 👈 تم إضافة مسافة سفلية (bottom: 90) عشان الزر العائم ميغطيش آخر عميل في القائمة
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 90),
       itemCount: list.length,
       itemBuilder: (context, index) {
         final doc = list[index];
@@ -285,14 +302,17 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
           child: InkWell(
             onTap: () {
               _searchFocusNode.unfocus();
+
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => CustomerLedgerScreen(
+                PageRouteBuilder(
+                  pageBuilder: (context, animation1, animation2) => CustomerLedgerScreen(
                     customerId: customerId,
                     customerName: customerName,
                     currentBalance: balance,
                   ),
+                  transitionDuration: Duration.zero,
+                  reverseTransitionDuration: Duration.zero,
                 ),
               );
             },
@@ -353,7 +373,7 @@ class _CustomersScreenState extends State<CustomersScreen> with SingleTickerProv
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${balance.toStringAsFixed(2)} ج',
+                          '${_formatMoney(balance)} ج',
                           style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: cardBorderColor, fontSize: 15),
                         ),
                       ],

@@ -46,7 +46,6 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
     );
   }
 
-  // 🚀 دالة اختيار فترة زمنية بتصميم مخصص خالي من اللون الأزرق الافتراضي
   Future<void> _pickDateRange(BuildContext context) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
@@ -56,17 +55,17 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            scaffoldBackgroundColor: Colors.white, // خلفية بيضاء للشاشة
+            scaffoldBackgroundColor: Colors.white,
             appBarTheme: AppBarTheme(
-              backgroundColor: primaryNavy, // لون شريط العنوان كحلي
+              backgroundColor: primaryNavy,
               foregroundColor: Colors.white,
               iconTheme: const IconThemeData(color: Colors.white),
             ),
             colorScheme: ColorScheme.light(
-              primary: brandOrange, // لون الأيام المحددة برتقالي
+              primary: brandOrange,
               onPrimary: Colors.white,
-              surface: Colors.white, // خلفية النتيجة نفسها
-              onSurface: primaryNavy, // لون أرقام الأيام والنصوص
+              surface: Colors.white,
+              onSurface: primaryNavy,
             ),
             dialogBackgroundColor: Colors.white,
           ),
@@ -86,24 +85,24 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String dateText = 'تحديد فترة';
-    if (_selectedDateRange != null) {
-      String startStr = '${_selectedDateRange!.start.day}/${_selectedDateRange!.start.month}';
-      String endStr = '${_selectedDateRange!.end.day}/${_selectedDateRange!.end.month}';
-      dateText = (_selectedDateRange!.start == _selectedDateRange!.end)
-          ? startStr
-          : '$startStr - $endStr';
-    }
+    bool hasDateFilter = _selectedDateRange != null;
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('سجل فواتير المبيعات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
+          title: const Text('سجل فواتير المبيعات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: Column(
           children: [
@@ -111,46 +110,49 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 4))],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.filter_list, color: Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      const Text('تصفية النتائج:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
-                      const Spacer(),
-                      InkWell(
-                        onTap: () => _pickDateRange(context),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _selectedDateRange == null ? Colors.grey.shade100 : brandOrange.withValues(alpha: 0.1),
-                            border: Border.all(color: _selectedDateRange == null ? Colors.grey.shade300 : brandOrange),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.date_range, size: 16, color: _selectedDateRange == null ? Colors.grey.shade700 : brandOrange),
-                              const SizedBox(width: 4),
-                              Text(
-                                dateText,
-                                style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: _selectedDateRange == null ? Colors.grey.shade700 : brandOrange),
+                      const Text('تصفية النتائج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 13)),
+                      Row(
+                        children: [
+                          if (hasDateFilter) ...[
+                            InkWell(
+                              onTap: () => setState(() => _selectedDateRange = null),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                height: 38,
+                                width: 38,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.black87, width: 1.2),
+                                ),
+                                child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
                               ),
-                              if (_selectedDateRange != null) ...[
-                                const SizedBox(width: 4),
-                                GestureDetector(
-                                  onTap: () => setState(() => _selectedDateRange = null),
-                                  child: Icon(Icons.close, size: 14, color: brandOrange),
-                                )
-                              ]
-                            ],
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          InkWell(
+                            onTap: () => _pickDateRange(context),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              height: 38,
+                              width: 38,
+                              decoration: BoxDecoration(
+                                color: hasDateFilter ? brandOrange : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: brandOrange),
+                              ),
+                              child: Icon(Icons.tune_rounded, color: hasDateFilter ? Colors.white : brandOrange, size: 20),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -245,14 +247,14 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
 
                       Timestamp? createdTs = data['createdAt'] ?? data['orderDate'];
                       DateTime dt = createdTs != null ? createdTs.toDate() : DateTime.now();
-                      String formattedDate = '${dt.day}/${dt.month}/${dt.year} - ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+                      String formattedDate = '${dt.day}/${dt.month}/${dt.year} | ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
 
                       return Card(
                         elevation: 2,
                         margin: const EdgeInsets.only(bottom: 14),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(color: brandOrange.withValues(alpha: 0.5), width: 1.5)
+                            side: BorderSide(color: brandOrange.withOpacity(0.5), width: 1.5)
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -293,7 +295,8 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
                                 children: [
                                   const Icon(Icons.person, size: 16, color: Colors.grey),
                                   const SizedBox(width: 6),
-                                  Expanded(child: Text(customerName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14))),
+                                  // 👈 إبراز اسم العميل بلون مميز
+                                  Expanded(child: Text(customerName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange))),
                                   Text('${total.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
                                 ],
                               ),
@@ -373,6 +376,7 @@ class _SalesInvoicesScreenState extends State<SalesInvoicesScreen> {
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: isSelected ? primaryNavy : Colors.grey.shade300),
       ),
+      showCheckmark: false,
     );
   }
 

@@ -322,7 +322,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(left: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? (isStatus ? appPrimaryColor : appSecondaryColor.withOpacity(0.15)) : Colors.transparent,
@@ -356,8 +356,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           centerTitle: true,
           elevation: 0,
           actions: [
-            // 🚀 السحر هنا: لو الشاشة دي مفتوحة من مكان ليه رجوع (زي لوحة التحكم)، السهم هيظهر.
-            // لو مفتوحة من الاختصارات اللي تحت (يعني مفيش رجوع)، السهم هيختفي لوحده!
             if (Navigator.canPop(context))
               Directionality(
                 textDirection: TextDirection.ltr,
@@ -409,31 +407,39 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))]
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center, // 👈 التوسيط العام لشريط الفلاتر
                   children: [
-                    SingleChildScrollView(
+                    // 👈 توسيط أزرار الفلتر (الكل، متاح، مخفي) في المنتصف
+                    Center(
+                      child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
-                            children: [
-                              _buildModernFilterTab('الكل', 'all', true),
-                              _buildModernFilterTab('متاح', 'active', true),
-                              _buildModernFilterTab('مخفي', 'archived', true),
-                            ]
-                        )
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildModernFilterTab('الكل', 'all', true),
+                            _buildModernFilterTab('متاح', 'active', true),
+                            _buildModernFilterTab('مخفي', 'archived', true),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
 
+                    // 👈 توسيط أقسام الفلتر في المنتصف
                     StreamBuilder<QuerySnapshot>(
                       stream: _firestore.collection('categories').snapshots(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) return const SizedBox(height: 35);
                         final categories = ['الكل', ...snapshot.data!.docs.map((e) => e.id)];
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Row(
-                              children: categories.map((cat) => _buildModernFilterTab(cat, cat, false)).toList()
+                        return Center(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: categories.map((cat) => _buildModernFilterTab(cat, cat, false)).toList(),
+                            ),
                           ),
                         );
                       },

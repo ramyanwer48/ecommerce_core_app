@@ -25,6 +25,16 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = Colors.orange.shade600;
 
+  // متغيرات الفلتر
+  DateTime? _startDate;
+  DateTime? _endDate;
+  String _filterType = 'all'; // all, purchase, payment
+
+  // دالة لتنسيق المبالغ وإزالة الأصفار العشرية لو كان الرقم صحيحاً
+  String _formatMoney(double amount) {
+    return amount.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+  }
+
   void _showPaymentSheet(BuildContext context, {DocumentSnapshot? existingDoc}) {
     final bool isEditing = existingDoc != null;
     final Map<String, dynamic>? data = isEditing ? existingDoc.data() as Map<String, dynamic>? : null;
@@ -45,44 +55,68 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
-        child: Padding(
-          // 👈 حل مشكلة الكيبورد بحيث ترتفع النافذة معها أوتوماتيكياً
+        child: Container(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
             left: 20,
             right: 20,
             top: 20,
           ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
                 Text(paymentTitle, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy), textAlign: TextAlign.center),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 TextField(
                   controller: amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: primaryNavy),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: primaryNavy),
                   textAlign: TextAlign.center,
-                  decoration: InputDecoration(labelText: 'المبلغ ($actionWord كام؟)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), suffixText: 'ج.م'),
+                  decoration: InputDecoration(
+                      labelText: 'المبلغ ($actionWord كام؟)',
+                      labelStyle: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey.shade600),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: brandOrange, width: 2)),
+                      suffixText: 'ج.م',
+                      suffixStyle: TextStyle(fontFamily: 'Cairo', color: brandOrange, fontWeight: FontWeight.bold)
+                  ),
                 ),
                 const SizedBox(height: 16),
 
                 TextField(
                   controller: noteController,
-                  decoration: InputDecoration(labelText: 'البيان (مثال: دفعة نقدية تحت الحساب)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                  style: const TextStyle(fontFamily: 'Cairo'),
+                  decoration: InputDecoration(
+                    labelText: 'البيان (اختياري)',
+                    labelStyle: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade600),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: brandOrange, width: 2)),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
 
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: brandOrange,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
@@ -104,13 +138,12 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
                       DocumentReference partnerRef = _firestore.collection('partners').doc(widget.partnerId);
 
                       if (isEditing) {
-                        // 🛡️ تأمين قراءة المبلغ القديم لمنع إيرور الـ Null Check
                         double oldAmount = 0.0;
                         if (data != null && data.containsKey('amount')) {
                           oldAmount = (data['amount'] ?? 0.0).toDouble();
                         }
 
-                        double difference = newAmount - oldAmount; // الفارق الحسابي
+                        double difference = newAmount - oldAmount;
 
                         DocumentReference ledgerRef = existingDoc.reference;
                         batch.update(ledgerRef, {
@@ -158,7 +191,6 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
                   },
                   child: Text(isEditing ? 'تعديل وحفظ التغيير' : 'حفظ وتسجيل سند الصرف', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                 ),
-                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -223,20 +255,253 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
     return DateFormat('yyyy-MM-dd | hh:mm a').format(timestamp.toDate());
   }
 
+  void _showFilterBottomSheet(BuildContext context) {
+    String tempFilterType = _filterType;
+    DateTime? tempStart = _startDate;
+    DateTime? tempEnd = _endDate;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+                    const SizedBox(height: 20),
+                    Text('تصفية الحركات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy), textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+
+                    Text('نوع الحركة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        _buildModalFilterChip('الكل', 'all', tempFilterType, (val) => setModalState(() => tempFilterType = val)),
+                        _buildModalFilterChip('فواتير مشتريات', 'purchase', tempFilterType, (val) => setModalState(() => tempFilterType = val)),
+                        _buildModalFilterChip('سندات صرف', 'payment', tempFilterType, (val) => setModalState(() => tempFilterType = val)),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    Text('الفترة الزمنية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: () async {
+                        DateTimeRange? picked = await showDateRangePicker(
+                          context: context,
+                          initialDateRange: tempStart != null && tempEnd != null
+                              ? DateTimeRange(start: tempStart!, end: tempEnd!)
+                              : null,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                          helpText: 'اختر الفترة (من - إلى)',
+                          cancelText: 'إلغاء',
+                          confirmText: 'تأكيد',
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                scaffoldBackgroundColor: Colors.white,
+                                dialogBackgroundColor: Colors.white,
+                                colorScheme: ColorScheme.light(
+                                  primary: brandOrange,
+                                  onPrimary: Colors.white,
+                                  surface: Colors.white,
+                                  onSurface: primaryNavy,
+                                ),
+                              ),
+                              child: Directionality(textDirection: TextDirection.rtl, child: child!),
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            tempStart = picked.start;
+                            tempEnd = picked.end;
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              tempStart != null && tempEnd != null
+                                  ? '${DateFormat('yyyy-MM-dd').format(tempStart!)}  إلى  ${DateFormat('yyyy-MM-dd').format(tempEnd!)}'
+                                  : 'اختر من الكالندر (من - إلى)',
+                              style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: tempStart != null ? primaryNavy : Colors.grey.shade600, fontWeight: tempStart != null ? FontWeight.bold : FontWeight.normal),
+                            ),
+                            Icon(Icons.calendar_month_rounded, color: brandOrange),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: brandOrange, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                            onPressed: () {
+                              setState(() {
+                                _filterType = tempFilterType;
+                                _startDate = tempStart;
+                                _endDate = tempEnd;
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text('تطبيق الفلتر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), side: BorderSide(color: primaryNavy.withOpacity(0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                            onPressed: () {
+                              setState(() {
+                                _filterType = 'all';
+                                _startDate = null;
+                                _endDate = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: Text('مسح الفلتر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: primaryNavy)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildModalFilterChip(String label, String value, String currentValue, Function(String) onSelected) {
+    bool isSelected = currentValue == value;
+    return ChoiceChip(
+      label: Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+      selected: isSelected,
+      selectedColor: brandOrange,
+      labelStyle: TextStyle(color: isSelected ? Colors.white : primaryNavy),
+      backgroundColor: Colors.white,
+      showCheckmark: false,
+      side: BorderSide(color: isSelected ? brandOrange : Colors.grey.shade300),
+      onSelected: (bool selected) {
+        if (selected) onSelected(value);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    bool hasFilter = _filterType != 'all' || _startDate != null;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
+        backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: Text('كشف حساب: ${widget.partnerName}', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
+          title: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text('كشف حساب', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(widget.partnerName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white70)),
+              ),
+            ],
+          ),
+          centerTitle: true,
           backgroundColor: primaryNavy,
-          foregroundColor: Colors.white,
           elevation: 0,
         ),
         body: Column(
           children: [
+            // شريط الفلتر
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('تصفية الحركات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                  Row(
+                    children: [
+                      if (hasFilter) ...[
+                        InkWell(
+                          onTap: () => setState(() {
+                            _filterType = 'all';
+                            _startDate = null;
+                            _endDate = null;
+                          }),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 38,
+                            width: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Icon(Icons.close_rounded, color: Colors.red.shade700, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      InkWell(
+                        onTap: () => _showFilterBottomSheet(context),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          height: 38,
+                          width: 38,
+                          decoration: BoxDecoration(
+                            color: hasFilter ? brandOrange : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: brandOrange),
+                          ),
+                          child: Icon(Icons.tune_rounded, color: hasFilter ? Colors.white : brandOrange, size: 20),
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            ),
+
+            // بطاقة الرصيد الإجمالي
             StreamBuilder<DocumentSnapshot>(
               stream: _firestore.collection('partners').doc(widget.partnerId).snapshots(),
               builder: (context, snapshot) {
@@ -253,37 +518,77 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
 
                 return Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   decoration: BoxDecoration(
-                      color: primaryNavy,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: brandOrange.withOpacity(0.5), width: 1.5),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, 3))]
+                    color: brandOrange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: brandOrange.withOpacity(0.3), width: 1.5),
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: brandOrange.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                            child: const Text('مورد', style: TextStyle(fontFamily: 'Cairo', color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(phone.isEmpty ? 'بدون رقم هاتف' : phone, style: const TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 13)),
-                        ],
+                      // بيانات المورد
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.store, size: 14, color: brandOrange),
+                                  const SizedBox(width: 4),
+                                  const Text('مورد', style: TextStyle(fontFamily: 'Cairo', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Icon(Icons.phone, size: 14, color: primaryNavy),
+                                const SizedBox(width: 6),
+                                Expanded(child: Text(phone.isEmpty ? 'بدون هاتف' : phone, style: TextStyle(fontFamily: 'Cairo', color: primaryNavy, fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                              ],
+                            )
+                          ],
+                        ),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Text('الرصيد الحالي', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 11)),
-                          const SizedBox(height: 2),
-                          Text('${liveBalance.abs().toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', color: brandOrange, fontSize: 20, fontWeight: FontWeight.bold)),
-                          Text(isCreditor ? 'دائن (له أموال)' : 'مدين (عليه أموال)', style: TextStyle(fontFamily: 'Cairo', color: brandOrange.withOpacity(0.8), fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
+
+                      // 👈 الرصيد الإجمالي (معدل بالتوسيط والكبسولة الكحلي)
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text('الرصيد الإجمالي', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade700, fontSize: 13, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            // كبسولة الرصيد
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: primaryNavy, // 👈 خلفية كحلي
+                                borderRadius: BorderRadius.circular(30), // حواف دائرية بالكامل
+                              ),
+                              child: Text(
+                                  '${_formatMoney(liveBalance.abs())} ج.م',
+                                  style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: isCreditor ? Colors.red.shade50 : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4)
+                              ),
+                              child: Text(isCreditor ? 'دائن (له أموال)' : 'مدين (عليه أموال)', style: TextStyle(fontFamily: 'Cairo', color: isCreditor ? Colors.red : Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -291,86 +596,167 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
               },
             ),
 
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Align(alignment: Alignment.centerRight, child: Text('حركة الحساب (Ledger) - (اضغط للتعديل أو اسحب للحذف)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Center(
+                  child: Text('كشف الحركات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy))
+              ),
             ),
 
+            // قائمة الحركات (فواتير + سندات)
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _firestore.collection('ledger_entries')
-                    .where('partnerId', isEqualTo: widget.partnerId)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator(color: brandOrange));
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(
-                      child: Text('لا توجد حركات مالية مسجلة لهذا الحساب.', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
-                    );
-                  }
+                stream: _firestore.collection('ledger_entries').where('partnerId', isEqualTo: widget.partnerId).snapshots(),
+                builder: (context, ledgerSnapshot) {
+                  return StreamBuilder<QuerySnapshot>(
+                      stream: _firestore.collection('purchases').where('supplierName', isEqualTo: widget.partnerName).snapshots(),
+                      builder: (context, purchasesSnapshot) {
 
-                  var docs = snapshot.data!.docs;
+                        if (ledgerSnapshot.connectionState == ConnectionState.waiting || purchasesSnapshot.connectionState == ConnectionState.waiting) {
+                          return Center(child: CircularProgressIndicator(color: brandOrange));
+                        }
 
-                  return ListView.builder(
-                    itemCount: docs.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemBuilder: (context, index) {
-                      var doc = docs[index];
-                      var data = doc.data() as Map<String, dynamic>;
+                        List<Map<String, dynamic>> combinedEntries = [];
 
-                      String type = data['type'] ?? 'unknown';
-                      double amount = (data['amount'] ?? 0).toDouble();
-                      String note = data['note'] ?? '';
-                      Timestamp? date = data['date'] as Timestamp?;
+                        if (ledgerSnapshot.hasData) {
+                          for (var doc in ledgerSnapshot.data!.docs) {
+                            var data = doc.data() as Map<String, dynamic>;
+                            data['docId'] = doc.id;
+                            data['source'] = 'payment';
+                            data['displayDate'] = data['date'];
+                            combinedEntries.add(data);
+                          }
+                        }
 
-                      bool isPayment = type == 'payment';
-                      IconData actionIcon = isPayment ? Icons.payments : Icons.receipt_long;
-                      Color actionColor = brandOrange;
+                        if (purchasesSnapshot.hasData) {
+                          for (var doc in purchasesSnapshot.data!.docs) {
+                            var data = doc.data() as Map<String, dynamic>;
+                            data['docId'] = doc.id;
+                            data['source'] = 'purchase';
+                            data['displayDate'] = data['date'];
+                            combinedEntries.add(data);
+                          }
+                        }
 
-                      return Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.grey.shade200),
-                        ),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          onTap: () {
-                            if (isPayment) {
-                              _showPaymentSheet(context, existingDoc: doc);
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('فواتير المشتريات تُعدل من قسم الفواتير الأساسي', style: TextStyle(fontFamily: 'Cairo'))),
-                              );
-                            }
-                          },
-                          leading: CircleAvatar(backgroundColor: actionColor.withOpacity(0.1), child: Icon(actionIcon, color: actionColor)),
-                          title: Text(isPayment ? 'سند صرف (دفعة نقدية)' : 'فاتورة مشتريات', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(note, style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade700)),
-                              Text(_formatDate(date), style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${amount.toStringAsFixed(2)} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: actionColor)),
-                              const SizedBox(width: 8),
-                              if (isPayment)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                  onPressed: () => _deleteLedgerEntry(doc),
-                                  tooltip: 'حذف السند',
+                        if (_filterType != 'all') {
+                          combinedEntries = combinedEntries.where((e) => e['source'] == _filterType).toList();
+                        }
+
+                        if (_startDate != null && _endDate != null) {
+                          DateTime endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+                          combinedEntries = combinedEntries.where((e) {
+                            Timestamp? t = e['displayDate'] as Timestamp?;
+                            if (t == null) return false;
+                            DateTime d = t.toDate();
+                            return d.isAfter(_startDate!.subtract(const Duration(seconds: 1))) && d.isBefore(endOfDay.add(const Duration(seconds: 1)));
+                          }).toList();
+                        }
+
+                        combinedEntries.sort((a, b) {
+                          Timestamp? timeA = a['displayDate'] as Timestamp?;
+                          Timestamp? timeB = b['displayDate'] as Timestamp?;
+                          if (timeA == null || timeB == null) return 0;
+                          return timeB.compareTo(timeA);
+                        });
+
+                        if (combinedEntries.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.receipt_long, size: 50, color: Colors.grey.shade300),
+                                const SizedBox(height: 12),
+                                Text('لا توجد حركات تطابق الفلتر.', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return ListView.builder(
+                          itemCount: combinedEntries.length,
+                          // 👈 تمت إضافة bottom: 90 لكي لا يُخفي الزر العائم الحركات الأخيرة
+                          padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 90),
+                          itemBuilder: (context, index) {
+                            var entryData = combinedEntries[index];
+
+                            bool isPurchase = entryData['source'] == 'purchase';
+                            String title = isPurchase ? 'فاتورة مشتريات #${entryData['invoiceNumber'] ?? ''}' : 'سند صرف (دفعة نقدية)';
+                            double amount = isPurchase ? (entryData['totalAmount'] ?? 0).toDouble() : (entryData['amount'] ?? 0).toDouble();
+                            String note = isPurchase ? '${entryData['itemCount'] ?? 0} أصناف' : (entryData['note'] ?? '');
+                            Timestamp? date = entryData['displayDate'] as Timestamp?;
+
+                            IconData actionIcon = isPurchase ? Icons.shopping_cart_outlined : Icons.payments_outlined;
+                            Color actionColor = isPurchase ? Colors.blue.shade700 : brandOrange;
+                            Color bgColor = isPurchase ? Colors.blue.shade50 : brandOrange.withOpacity(0.1);
+
+                            // 👈 تفريق لون كبسولة المبلغ بين الفاتورة (كحلي) والسند (برتقالي)
+                            Color amountBgColor = isPurchase ? primaryNavy : brandOrange;
+
+                            return Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade200),
+                              ),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                onTap: () {
+                                  if (!isPurchase) {
+                                    var docToEdit = ledgerSnapshot.data!.docs.firstWhere((doc) => doc.id == entryData['docId']);
+                                    _showPaymentSheet(context, existingDoc: docToEdit);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('فواتير المشتريات تُعرض وتُعدل من قسم المشتريات', style: TextStyle(fontFamily: 'Cairo'))),
+                                    );
+                                  }
+                                },
+                                leading: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
+                                    child: Icon(actionIcon, color: actionColor, size: 22)
                                 ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                                title: Text(title, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Text(note, style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade600)),
+                                    Text(_formatDate(date), style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
+                                  ],
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: amountBgColor, // 👈 اللون الديناميكي للمبلغ
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                          '${_formatMoney(amount)} ج',
+                                          style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)
+                                      ),
+                                    ),
+                                    if (!isPurchase) ...[
+                                      const SizedBox(height: 4),
+                                      InkWell(
+                                        onTap: () {
+                                          var docToDelete = ledgerSnapshot.data!.docs.firstWhere((doc) => doc.id == entryData['docId']);
+                                          _deleteLedgerEntry(docToDelete);
+                                        },
+                                        child: const Text('حذف السند', style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                                      )
+                                    ]
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }
                   );
                 },
               ),
@@ -381,8 +767,8 @@ class _PartnerLedgerScreenState extends State<PartnerLedgerScreen> {
           onPressed: () => _showPaymentSheet(context),
           backgroundColor: brandOrange,
           elevation: 2,
-          icon: const Icon(Icons.add_card, color: Colors.white),
-          label: const Text('سند صرف (دفعة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+          icon: const Icon(Icons.add_card, color: Colors.white, size: 20),
+          label: const Text('سند صرف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
         ),
       ),
     );

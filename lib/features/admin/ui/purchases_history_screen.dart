@@ -14,24 +14,23 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
   final Color brandOrange = Colors.orange.shade600;
 
   String _searchQuery = '';
-  String _filterType = 'all'; // all, today, week, month
+
+  // متغيرات فلتر التاريخ
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   Stream<QuerySnapshot> _getPurchasesStream() {
-    Query query = FirebaseFirestore.instance.collection('purchases').orderBy('date', descending: true);
+    Query query = FirebaseFirestore.instance
+        .collection('purchases')
+        .orderBy('date', descending: true);
 
-    DateTime now = DateTime.now();
-    DateTime? startDate;
-
-    if (_filterType == 'today') {
-      startDate = DateTime(now.year, now.month, now.day);
-    } else if (_filterType == 'week') {
-      startDate = now.subtract(const Duration(days: 7));
-    } else if (_filterType == 'month') {
-      startDate = DateTime(now.year, now.month - 1, now.day);
+    if (_startDate != null) {
+      query = query.where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(_startDate!));
     }
-
-    if (startDate != null) {
-      query = query.where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+    if (_endDate != null) {
+      // ضبط تاريخ النهاية ليشمل آخر دقيقة في اليوم المختار
+      DateTime endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+      query = query.where('date', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay));
     }
 
     return query.snapshots();
@@ -44,6 +43,58 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
 
   String _formatMoney(double amount) {
     return amount.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+  }
+
+  // دالة فتح كالندر واحدة لاختيار (من - إلى) بألوان مخصصة ونظيفة
+  Future<void> _pickDateRange() async {
+    DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      helpText: 'اختر فترة الفواتير (من - إلى)',
+      cancelText: 'إلغاء',
+      confirmText: 'تأكيد',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            scaffoldBackgroundColor: Colors.white,
+            dialogBackgroundColor: Colors.white,
+            colorScheme: ColorScheme.light(
+              primary: brandOrange, // لون تحديد الأيام
+              onPrimary: Colors.white, // لون النص داخل الأيام المحددة
+              surface: Colors.white, // خلفية الكالندر
+              onSurface: primaryNavy, // لون أرقام الأيام العادية
+            ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.white,
+              foregroundColor: primaryNavy, // لون النص والأيقونات في الأعلى
+              elevation: 0,
+              iconTheme: IconThemeData(color: primaryNavy),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: brandOrange, // لون الأزرار السفلية (تأكيد / إلغاء)
+                textStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: child!,
+          ),
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+    }
   }
 
   void _showInvoiceDetails(Map<String, dynamic> data) {
@@ -87,7 +138,6 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                   ),
                   const Divider(height: 30),
 
-                  // بيانات المورد بتصميم يظهر الاسم كامل في المنتصف باللون البرتقالي
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
@@ -98,13 +148,13 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: brandOrange.withOpacity(0.5))),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center, // توسيط
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 const Text('المورد', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
                                 Text(
                                   data['supplierName'] ?? 'غير معروف',
-                                  textAlign: TextAlign.center, // توسيط
-                                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange), // لون برتقالي
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange),
                                 ),
                               ],
                             ),
@@ -181,47 +231,89 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool hasFilter = _startDate != null || _endDate != null;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
           title: const Text('سجل المشتريات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
         ),
         body: Column(
           children: [
+            // شريط البحث وأزرار الفلتر
             Container(
               color: primaryNavy,
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-              child: Column(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16, top: 8),
+              child: Row(
                 children: [
-                  TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'ابحث برقم الفاتورة أو اسم المورد...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      filled: true, fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                      style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'ابحث برقم الفاتورة أو المورد...',
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip('الكل', 'all'),
-                        _buildFilterChip('اليوم', 'today'),
-                        _buildFilterChip('آخر 7 أيام', 'week'),
-                        _buildFilterChip('هذا الشهر', 'month'),
-                      ],
+                  const SizedBox(width: 12),
+
+                  // زر إلغاء الفلتر (X) - يظهر فقط إذا كان هناك فلتر نشط
+                  if (hasFilter) ...[
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _startDate = null;
+                          _endDate = null;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 48,
+                        width: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Icon(Icons.close_rounded, color: Colors.red.shade700),
+                      ),
                     ),
-                  )
+                    const SizedBox(width: 8),
+                  ],
+
+                  // زر فتح الكالندر (Date Range)
+                  InkWell(
+                    onTap: _pickDateRange,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: hasFilter ? brandOrange : primaryNavy.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: brandOrange),
+                      ),
+                      child: const Icon(Icons.calendar_month_rounded, color: Colors.white),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -240,6 +332,7 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
 
                   var docs = snapshot.data!.docs;
 
+                  // تطبيق فلتر البحث النصي
                   if (_searchQuery.isNotEmpty) {
                     docs = docs.where((doc) {
                       var data = doc.data() as Map<String, dynamic>;
@@ -250,103 +343,115 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                   }
 
                   if (docs.isEmpty) {
-                    return _buildEmptyState('لم يتم العثور على فواتير تطابق بحثك.');
+                    return _buildEmptyState('لم يتم العثور على فواتير تطابق بحثك أو الفلتر.');
                   }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      final data = docs[index].data() as Map<String, dynamic>;
-                      return GestureDetector(
-                        onTap: () => _showInvoiceDetails(data),
-                        child: Card(
-                          margin: const EdgeInsets.only(bottom: 16), // مسافة أوسع بين الفواتير
-                          elevation: 3,
-                          shadowColor: Colors.black26,
-                          // 👈 إطار الفاتورة المميز عشان متسيحش في اللي تحتها
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(color: brandOrange.withOpacity(0.5), width: 1.5),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch, // التمدد بالعرض
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('# ${data['invoiceNumber']}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
-                                    Text(_formatDate(data['date'] as Timestamp?), style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
+                  // حساب إجمالي قيمة الفواتير المعروضة
+                  double totalSum = docs.fold(0, (sum, doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    return sum + (data['totalAmount'] ?? 0).toDouble();
+                  });
 
-                                // 👈 اسم المورد في المنتصف باللون البرتقالي
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.storefront, size: 20, color: brandOrange),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                          data['supplierName'] ?? 'مورد غير معروف',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: brandOrange)
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 16),
-                                const Divider(height: 1, thickness: 1),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
-                                          child: Text('${data['itemCount'] ?? 0} أصناف', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
-                                        ),
-                                      ],
-                                    ),
-                                    Text('${_formatMoney((data['totalAmount'] ?? 0).toDouble())} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
-                                  ],
-                                )
-                              ],
-                            ),
-                          ),
+                  return Column(
+                    children: [
+                      // بطاقة إجمالي الفواتير
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: brandOrange.withOpacity(0.3)),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4, offset: const Offset(0, 2))],
                         ),
-                      );
-                    },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(hasFilter ? 'الإجمالي في هذه الفترة:' : 'إجمالي جميع الفواتير:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                            Text('${_formatMoney(totalSum)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: brandOrange)),
+                          ],
+                        ),
+                      ),
+
+                      // قائمة الفواتير
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final data = docs[index].data() as Map<String, dynamic>;
+                            return GestureDetector(
+                              onTap: () => _showInvoiceDetails(data),
+                              child: Card(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                elevation: 3,
+                                shadowColor: Colors.black26,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(color: brandOrange.withOpacity(0.5), width: 1.5),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('# ${data['invoiceNumber']}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
+                                          Text(_formatDate(data['date'] as Timestamp?), style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.storefront, size: 20, color: brandOrange),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                                data['supplierName'] ?? 'مورد غير معروف',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: brandOrange)
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 16),
+                                      const Divider(height: 1, thickness: 1),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+                                                child: Text('${data['itemCount'] ?? 0} أصناف', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700)),
+                                              ),
+                                            ],
+                                          ),
+                                          Text('${_formatMoney((data['totalAmount'] ?? 0).toDouble())} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
+                                        ],
+                                      )
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, String value) {
-    bool isSelected = _filterType == value;
-    return Padding(
-      padding: const EdgeInsets.only(left: 8),
-      child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold)),
-        selected: isSelected,
-        selectedColor: brandOrange,
-        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87),
-        backgroundColor: Colors.white,
-        side: BorderSide.none,
-        onSelected: (bool selected) {
-          if (selected) setState(() => _filterType = value);
-        },
       ),
     );
   }

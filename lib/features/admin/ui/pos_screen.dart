@@ -61,7 +61,6 @@ class _PosScreenState extends State<PosScreen> {
     String id = doc.id;
     String name = data['name'] ?? 'منتج';
     double price = double.tryParse((data['price'] ?? 0).toString()) ?? 0.0;
-    // 🚀 التعديل هنا: سحب تكلفة المنتج من الداتا بيز
     double cost = double.tryParse((data['costPrice'] ?? 0).toString()) ?? 0.0;
     int stock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
 
@@ -79,7 +78,6 @@ class _PosScreenState extends State<PosScreen> {
           _showCustomSnackBar('الكمية تتجاوز رصيد المخزن!', true);
         }
       } else {
-        // 🚀 التعديل هنا: إضافة التكلفة (cost) لعنصر السلة
         _cartItems.add({'id': id, 'name': name, 'price': price, 'cost': cost, 'qty': 1, 'stock': stock});
       }
     });
@@ -129,8 +127,6 @@ class _PosScreenState extends State<PosScreen> {
   Future<void> _saveInvoice(BuildContext sheetContext, double paidAmount, String paymentType) async {
     if (_cartItems.isEmpty) return;
     double remainingAmount = _total - paidAmount;
-
-    // 🚀 التعديل هنا: حساب إجمالي تكلفة البضاعة في هذه الفاتورة
     double totalCostPrice = _cartItems.fold(0, (sum, item) => sum + (item['cost'] * item['qty']));
 
     if (remainingAmount > 0 && _customerId == 'CASH_CUSTOMER') {
@@ -165,11 +161,11 @@ class _PosScreenState extends State<PosScreen> {
           'productName': item['name'],
           'name': item['name'],
           'price': item['price'],
-          'costPrice': item['cost'], // 🚀 تسجيل التكلفة لكل منتج
+          'costPrice': item['cost'],
           'quantity': item['qty'],
         }).toList(),
         'totalPrice': _total,
-        'totalCostPrice': totalCostPrice, // 🚀 تسجيل إجمالي التكلفة للفاتورة
+        'totalCostPrice': totalCostPrice,
         'subtotal': _subtotal,
         'discountAmount': _discount,
         'paidAmount': paidAmount,
@@ -243,14 +239,33 @@ class _PosScreenState extends State<PosScreen> {
             child: Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
               child: Container(
-                height: MediaQuery.of(context).size.height * 0.65,
-                padding: const EdgeInsets.all(16),
+                height: MediaQuery.of(context).size.height * 0.70,
+                padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
                 decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 child: Column(
                   children: [
                     Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-                    const SizedBox(height: 16),
-                    Text(isAddingNew ? 'إضافة عميل جديد' : 'اختر العميل', style: const TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isAddingNew ? 'إضافة عميل جديد' : 'اختر العميل', style: const TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                        // 👈 تم توحيد تصميم زر الإغلاق ليكون بإطار أسود وخلفية بيضاء
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.black87, width: 1.2)
+                            ),
+                            child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
+                          ),
+                        )
+                      ],
+                    ),
                     const Divider(),
 
                     if (isAddingNew) ...[
@@ -263,18 +278,27 @@ class _PosScreenState extends State<PosScreen> {
                               TextField(
                                 controller: nameCtrl,
                                 autofocus: true,
+                                style: const TextStyle(fontFamily: 'Cairo'),
                                 decoration: InputDecoration(labelText: 'اسم العميل *', labelStyle: const TextStyle(fontFamily: 'Cairo'), filled: true, fillColor: Colors.grey.shade50, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)),
                               ),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: phoneCtrl,
                                 keyboardType: TextInputType.phone,
+                                style: const TextStyle(fontFamily: 'Cairo'),
                                 decoration: InputDecoration(labelText: 'رقم الهاتف (اختياري)', labelStyle: const TextStyle(fontFamily: 'Cairo'), filled: true, fillColor: Colors.grey.shade50, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none)),
                               ),
                               const SizedBox(height: 24),
                               Row(
                                 children: [
-                                  Expanded(child: TextButton(onPressed: () => setLocalState(() => isAddingNew = false), child: const Text('رجوع', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold)))),
+                                  Expanded(
+                                      child: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                          onPressed: () => setLocalState(() => isAddingNew = false),
+                                          child: const Text('رجوع للقائمة', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold))
+                                      )
+                                  ),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     flex: 2,
                                     child: ElevatedButton(
@@ -300,7 +324,7 @@ class _PosScreenState extends State<PosScreen> {
                                           _showCustomSnackBar('خطأ أثناء الحفظ', true);
                                         }
                                       },
-                                      child: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('حفظ', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                                      child: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('حفظ واختيار', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
                                     ),
                                   ),
                                 ],
@@ -311,8 +335,13 @@ class _PosScreenState extends State<PosScreen> {
                       )
                     ] else ...[
                       ListTile(
-                        leading: const Icon(Icons.person, color: Colors.green),
+                        leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                            child: Icon(Icons.person, color: Colors.green.shade700)
+                        ),
                         title: const Text('عميل نقدي (الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         onTap: () {
                           setState(() { _customerName = 'عميل نقدي (الشركة)'; _customerId = 'CASH_CUSTOMER'; });
                           parentSetState(() {});
@@ -322,22 +351,32 @@ class _PosScreenState extends State<PosScreen> {
                       const Divider(),
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
-                          stream: _firestore.collection('customers').snapshots(),
+                          stream: _firestore.collection('customers').orderBy('createdAt', descending: true).snapshots(),
                           builder: (context, snapshot) {
-                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                            if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: brandOrange));
                             var docs = snapshot.data!.docs;
+                            if (docs.isEmpty) {
+                              return const Center(child: Text('لا يوجد عملاء مسجلين', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)));
+                            }
                             return ListView.builder(
                               itemCount: docs.length,
                               itemBuilder: (context, index) {
                                 var doc = docs[index];
-                                return ListTile(
-                                  title: Text(doc['name'], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                  subtitle: Text(doc['phone'] ?? ''),
-                                  onTap: () {
-                                    setState(() { _customerName = doc['name']; _customerId = doc.id; });
-                                    parentSetState(() {});
-                                    Navigator.pop(ctx);
-                                  },
+                                return Card(
+                                  elevation: 0,
+                                  color: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: CircleAvatar(backgroundColor: primaryNavy.withOpacity(0.05), child: Icon(Icons.person_outline, color: primaryNavy, size: 20)),
+                                    title: Text(doc['name'], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+                                    subtitle: Text(doc['phone'] ?? 'بدون رقم', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade600)),
+                                    onTap: () {
+                                      setState(() { _customerName = doc['name']; _customerId = doc.id; });
+                                      parentSetState(() {});
+                                      Navigator.pop(ctx);
+                                    },
+                                  ),
                                 );
                               },
                             );
@@ -346,11 +385,18 @@ class _PosScreenState extends State<PosScreen> {
                       ),
                       const SizedBox(height: 8),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: primaryNavy.withOpacity(0.05), foregroundColor: primaryNavy, elevation: 0, minimumSize: const Size(double.infinity, 45), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryNavy.withOpacity(0.05),
+                            foregroundColor: primaryNavy,
+                            elevation: 0,
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                        ),
                         onPressed: () => setLocalState(() => isAddingNew = true),
                         icon: const Icon(Icons.person_add),
-                        label: const Text('إضافة عميل للسيستم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        label: const Text('إضافة عميل جديد للسيستم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                       ),
+                      const SizedBox(height: 10),
                     ]
                   ],
                 ),
@@ -411,28 +457,61 @@ class _PosScreenState extends State<PosScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-                      const SizedBox(height: 16),
-                      const Text('إتمام البيع', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('إتمام البيع', style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                            // 👈 تم توحيد تصميم زر الإغلاق ليكون بإطار أسود وخلفية بيضاء
+                            IconButton(
+                              onPressed: () => Navigator.pop(sheetContext),
+                              icon: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.black87, width: 1.2)
+                                ),
+                                child: const Icon(Icons.close_rounded, color: Colors.black87, size: 20),
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
                       const Divider(),
 
                       InkWell(
                         onTap: () => _showCustomersSheet(setSheetState),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              border: Border.all(color: Colors.blue.shade200),
+                              borderRadius: BorderRadius.circular(12)
+                          ),
                           child: Row(
                             children: [
-                              CircleAvatar(backgroundColor: primaryNavy.withOpacity(0.1), child: Icon(Icons.person, color: primaryNavy)),
+                              CircleAvatar(backgroundColor: Colors.blue.shade100, child: Icon(Icons.person, color: Colors.blue.shade700)),
                               const SizedBox(width: 16),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('العميل', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-                                    Text(_customerName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.black, fontSize: 15)),
+                                    Text('العميل الحالي:', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+                                    Text(_customerName, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 14)),
                                   ],
                                 ),
                               ),
-                              const Icon(Icons.arrow_drop_down_circle_outlined, color: Colors.grey),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                                child: const Text('تغيير العميل', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold)),
+                              )
                             ],
                           ),
                         ),
@@ -535,6 +614,7 @@ class _PosScreenState extends State<PosScreen> {
                                         builder: (context, partialAmount, child) {
                                           double paidAmount = paymentType == 'آجل' ? 0 : partialAmount;
                                           double remaining = _total - paidAmount;
+
                                           return Padding(
                                             padding: const EdgeInsets.only(bottom: 8),
                                             child: Row(
@@ -591,17 +671,23 @@ class _PosScreenState extends State<PosScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('المبيعات المباشرة (الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
-          backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
+          automaticallyImplyLeading: false,
           actions: [
-            IconButton(icon: const Icon(Icons.cleaning_services_rounded), onPressed: _startNewInvoice, tooltip: 'تفريغ الفاتورة'),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 20, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
           ],
+          title: const Text('المبيعات المباشرة (الشركة)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+          centerTitle: true,
+          backgroundColor: primaryNavy,
+          elevation: 0,
         ),
         body: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12, top: 8),
               color: primaryNavy,
               child: TextField(
                 onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
@@ -691,31 +777,55 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
 
-        bottomNavigationBar: _cartItems.isEmpty ? null : InkWell(
-          onTap: _showCartAndCheckoutSheet,
-          child: Container(
-            height: 65,
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-                color: primaryNavy,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: brandOrange, width: 2.5),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))]
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: Text('${_cartItems.length}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                    const SizedBox(width: 12),
-                    const Text('مراجعة وإتمام', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
+        bottomNavigationBar: _cartItems.isEmpty ? null : Container(
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              InkWell(
+                onTap: _startNewInvoice,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  height: 55,
+                  width: 55,
+                  decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200)
+                  ),
+                  child: Icon(Icons.delete_sweep_rounded, color: Colors.red.shade700, size: 28),
                 ),
-                Text('${_total.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  onTap: _showCartAndCheckoutSheet,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 55,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                        color: primaryNavy,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(color: primaryNavy.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: brandOrange, shape: BoxShape.circle), child: Text('${_cartItems.length}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                            const SizedBox(width: 10),
+                            const Text('مراجعة وإتمام', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          ],
+                        ),
+                        Text('${_total.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
