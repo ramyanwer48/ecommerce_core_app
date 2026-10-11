@@ -94,7 +94,11 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          // 🚀 التعديل: المسمى الاحترافي الجديد
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
           title: const Text('إدارة طلبات الأونلاين', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
           centerTitle: true,
           backgroundColor: const Color(0xFF000826),

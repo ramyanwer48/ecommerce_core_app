@@ -19,14 +19,81 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
   @override
   void initState() {
     super.initState();
-    // إعداد التابات الثلاثة
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  String _formatNumber(double value) {
+    if (value == value.truncateToDouble()) {
+      return value.truncate().toString();
+    }
+    return value.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+  }
+
+  // 🌟 الرسالة الجديدة: (أظرف، أسرع، في المنتصف، وتختفي تلقائياً)
+  void _showFastCenterMessage(BuildContext context, bool isSuccess, String message) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black12, // لون خلفية خفيف جداً عشان متكونش مزعجة
+      barrierDismissible: true,
+      builder: (ctx) {
+        // إغلاق تلقائي بعد ثانية وربع للسرعة
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          if (ctx.mounted && Navigator.canPop(ctx)) {
+            Navigator.pop(ctx);
+          }
+        });
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Dialog(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isSuccess ? Icons.check_circle_outline_rounded : Icons.cancel_outlined,
+                      color: isSuccess ? Colors.green : Colors.red,
+                      size: 60,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: isSuccess ? Colors.green.shade700 : Colors.red.shade700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -36,28 +103,36 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('جرد المخزن وتقييم الأصول', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+          automaticallyImplyLeading: false,
+          title: const Text('إدارة المخزون وتقييم الأصول', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            const SizedBox(width: 8),
+          ],
           bottom: TabBar(
             controller: _tabController,
+            isScrollable: false,
             labelColor: brandOrange,
             unselectedLabelColor: Colors.white70,
             indicatorColor: brandOrange,
             indicatorWeight: 4,
-            labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
+            labelPadding: EdgeInsets.zero,
             tabs: const [
-              Tab(icon: Icon(Icons.fact_check_rounded), text: 'المطابقة (عجز/زيادة)'),
-              Tab(icon: Icon(Icons.account_balance_wallet_rounded), text: 'تقييم رأس المال'),
-              Tab(icon: Icon(Icons.delete_sweep_rounded), text: 'التوالف والهالك'),
+              Tab(icon: Icon(Icons.pending_actions_rounded), child: Text('الاعتمادات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12))),
+              Tab(icon: Icon(Icons.fact_check_rounded), child: Text('تعديل سريع', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12))),
+              Tab(icon: Icon(Icons.account_balance_wallet_rounded), child: Text('التقييم', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12))),
+              Tab(icon: Icon(Icons.history_edu_rounded), child: Text('السجل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12))),
             ],
           ),
         ),
         body: Column(
           children: [
-            // شريط البحث الموحد
             Container(
               color: primaryNavy,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -65,7 +140,7 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
                 onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                 style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'ابحث عن منتج للجرد...',
+                  hintText: 'ابحث عن منتج...',
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   filled: true, fillColor: Colors.white,
                   contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -73,15 +148,14 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
                 ),
               ),
             ),
-
-            // محتوى التابات
             Expanded(
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildReconciliationTab(), // 1. تاب المطابقة الفعلي مع الدفتري
-                  _buildValuationTab(),      // 2. تاب تقييم رأس المال المتجمد
-                  _buildSpoilageTab(),       // 3. تاب سجل التوالف
+                  _buildPendingAuditsTab(),
+                  _buildReconciliationTab(),
+                  _buildValuationTab(),
+                  _buildSpoilageTab(),
                 ],
               ),
             ),
@@ -92,7 +166,252 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
   }
 
   // =====================================================================
-  // 1. التاب الأول: مطابقة الجرد (Reconciliation)
+  // 1. التاب الأول: الاعتمادات المعلقة
+  // =====================================================================
+  Widget _buildPendingAuditsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('pending_audits').where('status', isEqualTo: 'pending').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('خطأ: ${snapshot.error}', style: const TextStyle(fontFamily: 'Cairo', color: Colors.red)));
+        if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey.shade400),
+                const SizedBox(height: 12),
+                const Text('لا توجد طلبات جرد معلقة.', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 16)),
+              ],
+            ),
+          );
+        }
+
+        var docs = snapshot.data!.docs.toList();
+        docs.sort((a, b) {
+          Timestamp tA = (a.data() as Map<String, dynamic>)['timestamp'] ?? Timestamp.now();
+          Timestamp tB = (b.data() as Map<String, dynamic>)['timestamp'] ?? Timestamp.now();
+          return tB.compareTo(tA);
+        });
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final String productName = data['productName'] ?? 'غير معروف';
+            final int systemStock = data['systemStock'] ?? 0;
+            final int goodStock = data['actualGoodStock'] ?? 0;
+            final int damagedStock = data['damagedStock'] ?? 0;
+            final String? photoUrl = data['photoUrl'];
+            final String submittedBy = data['submittedBy'] ?? 'موظف مجهول';
+
+            final int totalActual = goodStock + damagedStock;
+            final int difference = totalActual - systemStock;
+
+            Color diffColor = difference < 0 ? Colors.red : (difference > 0 ? Colors.green : Colors.blue);
+            String diffText = difference < 0 ? 'عجز (${difference.abs()})' : (difference > 0 ? 'زيادة (+$difference)' : 'مطابق');
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade300)),
+              elevation: 4,
+              shadowColor: Colors.black12,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('جرد: $productName', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy))),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: diffColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: diffColor.withOpacity(0.5))),
+                          child: Text(diffText, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: diffColor, fontSize: 12)),
+                        )
+                      ],
+                    ),
+                    const Divider(),
+                    Row(
+                      children: [
+                        const Icon(Icons.person, size: 16, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('أمين المخزن: $submittedBy', style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: _buildStockInfoCard('السيستم', systemStock.toString(), Colors.blue)),
+                        const SizedBox(width: 8),
+                        Expanded(child: _buildStockInfoCard('سليم (فعلي)', goodStock.toString(), Colors.green)),
+                        if (damagedStock > 0) ...[
+                          const SizedBox(width: 8),
+                          Expanded(child: _buildStockInfoCard('تالف (فعلي)', damagedStock.toString(), Colors.red)),
+                        ]
+                      ],
+                    ),
+
+                    if (damagedStock > 0 && photoUrl != null) ...[
+                      const SizedBox(height: 16),
+                      const Text('صورة البضاعة التالفة:', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => _showImageDialog(context, photoUrl),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            photoUrl,
+                            width: double.infinity,
+                            height: 160,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (ctx, child, progress) {
+                              if (progress == null) return child;
+                              return Container(
+                                height: 160, width: double.infinity,
+                                color: Colors.grey.shade100,
+                                child: const Center(child: CircularProgressIndicator()),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                            onPressed: () => _handleAuditAction(doc.id, 'rejected', data),
+                            child: const Text('رفض وإعادة جرد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: brandOrange),
+                            onPressed: () => _handleAuditAction(doc.id, 'approved', data),
+                            child: const Text('اعتماد وتحديث', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showImageDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(height: 300, color: Colors.white, child: const Center(child: CircularProgressIndicator()));
+                },
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStockInfoCard(String title, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      decoration: BoxDecoration(color: color.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
+      child: Column(
+        children: [
+          Text(title, style: TextStyle(fontFamily: 'Cairo', fontSize: 10, color: color, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: color.withOpacity(0.8))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleAuditAction(String requestId, String action, Map<String, dynamic> data) async {
+    try {
+      WriteBatch batch = _firestore.batch();
+      DocumentReference requestRef = _firestore.collection('pending_audits').doc(requestId);
+      batch.update(requestRef, {'status': action, 'actionDate': FieldValue.serverTimestamp()});
+
+      if (action == 'approved') {
+        final String productId = data['productId'];
+        final int goodStock = data['actualGoodStock'] ?? 0;
+        final int systemStock = data['systemStock'] ?? 0;
+        final int damagedStock = data['damagedStock'] ?? 0;
+        final int difference = (goodStock + damagedStock) - systemStock;
+
+        DocumentReference productRef = _firestore.collection('products').doc(productId);
+        batch.update(productRef, {
+          'stockQuantity': goodStock,
+          'damagedQuantity': FieldValue.increment(damagedStock)
+        });
+
+        DocumentReference auditRef = _firestore.collection('inventory_audits').doc();
+        batch.set(auditRef, {
+          'productId': productId,
+          'productName': data['productName'],
+          'oldStock': systemStock,
+          'newStock': goodStock,
+          'difference': difference,
+          'damagedStock': damagedStock,
+          'note': damagedStock > 0 ? 'تم اعتماد العجز/التالف بصورة' : (difference < 0 ? 'عجز معتمد' : 'زيادة معتمدة'),
+          'type': (difference < 0 || damagedStock > 0) ? 'loss' : 'gain',
+          'date': FieldValue.serverTimestamp(),
+          'submittedBy': data['submittedBy'],
+        });
+      }
+
+      await batch.commit();
+
+      // 🌟 استدعاء الدالة الجديدة السريعة في المنتصف بدلاً من الـ SnackBar القديم
+      if (mounted) {
+        _showFastCenterMessage(
+            context,
+            action == 'approved',
+            action == 'approved' ? 'تم اعتماد الجرد بنجاح' : 'تم رفض الجرد وإعادته للموظف'
+        );
+      }
+
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+    }
+  }
+
+  // =====================================================================
+  // 2. التاب الثاني: تعديل سريع للمدير
   // =====================================================================
   Widget _buildReconciliationTab() {
     return StreamBuilder<QuerySnapshot>(
@@ -115,6 +434,8 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
             final String name = data['name'] ?? 'غير معروف';
             final int currentStock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
 
+            final String? imageUrl = data['imageUrl'] ?? data['image'];
+
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
@@ -123,7 +444,16 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    CircleAvatar(backgroundColor: Colors.blue.shade50, child: Icon(Icons.inventory_2, color: Colors.blue.shade700)),
+                    Container(
+                      width: 50, height: 50,
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade200)),
+                      child: (imageUrl != null && imageUrl.isNotEmpty)
+                          ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => Icon(Icons.image_not_supported, color: Colors.blue.shade300)),
+                      )
+                          : Icon(Icons.inventory_2_rounded, color: Colors.blue.shade700),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -136,8 +466,8 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: brandOrange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                      onPressed: () => _showAuditDialog(productId, name, currentStock),
-                      child: const Text('جرد فعلي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
+                      onPressed: () => _showDirectAuditBottomSheet(productId, name, currentStock),
+                      child: const Text('تعديل يـدوي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12)),
                     )
                   ],
                 ),
@@ -149,89 +479,68 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
     );
   }
 
-  // نافذة الجرد الفعلي (حساب العجز والزيادة أوتوماتيكياً)
-  void _showAuditDialog(String productId, String productName, int currentStock) {
+  void _showDirectAuditBottomSheet(String productId, String productName, int currentStock) {
     TextEditingController actualStockCtrl = TextEditingController();
-    TextEditingController noteCtrl = TextEditingController();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (context, setSheetState) {
             int actualStock = int.tryParse(actualStockCtrl.text) ?? currentStock;
             int difference = actualStock - currentStock;
-            Color diffColor = difference < 0 ? Colors.red : (difference > 0 ? Colors.green : Colors.grey);
-            String diffText = difference < 0 ? 'عجز (${difference.abs()})' : (difference > 0 ? 'زيادة (+$difference)' : 'الرصيد مطابق');
 
             return Directionality(
               textDirection: TextDirection.rtl,
-              child: AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: Text('جرد: $productName', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 16)),
-                content: SingleChildScrollView(
+              child: Container(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 20, left: 20, right: 20, top: 16),
+                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('الرصيد الدفتري (السيستم):', style: TextStyle(fontFamily: 'Cairo')), Text('$currentStock', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy))]),
-                      ),
+                      Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                      const SizedBox(height: 16),
+                      Text('تعديل رصيد سريع: $productName', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 16)),
                       const SizedBox(height: 16),
                       TextField(
                         controller: actualStockCtrl,
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        autofocus: true,
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                         decoration: InputDecoration(
-                          labelText: 'الرصيد الفعلي (على الرف)',
-                          labelStyle: const TextStyle(fontFamily: 'Cairo'),
+                          labelText: 'الرصيد الصحيح الجديد',
+                          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: brandOrange, width: 2)),
                         ),
-                        onChanged: (val) => setDialogState((){}), // تحديث العجز اللايف
+                        onChanged: (val) => setSheetState((){}),
                       ),
-                      const SizedBox(height: 12),
-                      if (actualStockCtrl.text.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: diffColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(difference < 0 ? Icons.trending_down : (difference > 0 ? Icons.trending_up : Icons.check_circle), color: diffColor, size: 20),
-                              const SizedBox(width: 8),
-                              Text(diffText, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: diffColor)),
-                            ],
-                          ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: brandOrange, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                          onPressed: () {
+                            if (actualStockCtrl.text.isNotEmpty && difference != 0) {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              _firestore.collection('products').doc(productId).update({'stockQuantity': actualStock});
+                              _firestore.collection('inventory_audits').doc().set({
+                                'productId': productId, 'productName': productName, 'oldStock': currentStock, 'newStock': actualStock, 'difference': difference, 'note': 'تعديل إداري مباشر من المدير', 'type': difference < 0 ? 'loss' : 'gain', 'date': FieldValue.serverTimestamp(),
+                              });
+                              Navigator.pop(ctx);
+                              // 🌟 استخدام الدالة السريعة هنا أيضاً
+                              _showFastCenterMessage(context, true, 'تم تحديث الرصيد يدوياً بنجاح');
+                            }
+                          },
+                          child: const Text('تحديث الرصيد يدوياً', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
                         ),
-                      if (difference != 0) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: noteCtrl,
-                          decoration: InputDecoration(
-                            hintText: difference < 0 ? 'سبب العجز (مثال: تالف/مفقود)' : 'سبب الزيادة (مثال: خطأ إدخال سابق)',
-                            hintStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ]
+                      ),
                     ],
                   ),
                 ),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey))),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: brandOrange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                    onPressed: () {
-                      if (actualStockCtrl.text.isNotEmpty) {
-                        _processInventoryAdjustment(productId, productName, currentStock, actualStock, difference, noteCtrl.text);
-                        Navigator.pop(ctx);
-                      }
-                    },
-                    child: const Text('تسوية وحفظ', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
-                  )
-                ],
               ),
             );
           }
@@ -239,53 +548,8 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
     );
   }
 
-  // معالجة الجرد وحفظ التسوية في الفايربيز
-  Future<void> _processInventoryAdjustment(String productId, String name, int oldStock, int newStock, int diff, String note) async {
-    if (diff == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرصيد مطابق، لا يوجد تسوية مطلوبة.', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
-      return;
-    }
-
-    try {
-      WriteBatch batch = _firestore.batch();
-
-      // 1. تحديث رصيد المنتج الفعلي
-      DocumentReference productRef = _firestore.collection('products').doc(productId);
-      batch.update(productRef, {'stockQuantity': newStock});
-
-      // 2. تسجيل حركة تسوية في سجل الجرد
-      DocumentReference auditRef = _firestore.collection('inventory_audits').doc();
-      batch.set(auditRef, {
-        'productId': productId,
-        'productName': name,
-        'oldStock': oldStock,
-        'newStock': newStock,
-        'difference': diff, // لو سالب يبقى عجز، لو موجب يبقى زيادة
-        'note': note.isEmpty ? (diff < 0 ? 'عجز جرد' : 'زيادة جرد') : note,
-        'type': diff < 0 ? 'loss' : 'gain',
-        'date': FieldValue.serverTimestamp(),
-      });
-
-      // 3. التسميع المحاسبي (لو عجز، يُسجل كمصروف/خسارة بضاعة)
-      // (هنكملها بالتفصيل في الخطوة الجاية بس جهزناها هنا)
-
-      await batch.commit();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل التسوية وتحديث الرصيد بنجاح.', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
-
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
-    }
-  }
-
-
   // =====================================================================
-  // 2. التاب الثاني: تقييم رأس المال (Valuation) (مكان فارغ سيتم برمجته)
-  // =====================================================================
-  // =====================================================================
-  // 2. التاب الثاني: تقييم رأس المال (Valuation)
-  // =====================================================================
-  // =====================================================================
-  // 2. التاب الثاني: تقييم رأس المال (Valuation)
+  // 3. التاب الثالث: تقييم رأس المال
   // =====================================================================
   Widget _buildValuationTab() {
     return StreamBuilder<QuerySnapshot>(
@@ -294,97 +558,94 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
         if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('المخزن فارغ', style: TextStyle(fontFamily: 'Cairo')));
 
-        double totalCapital = 0.0;
-        int totalPhysicalItems = 0;
+        double totalGoodValue = 0.0;
+        double totalDamagedValue = 0.0;
+
         List<Map<String, dynamic>> valuedProducts = [];
 
-        // حسابات التقييم المالي
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
-          int stock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
-          double price = double.tryParse((data['price'] ?? 0).toString()) ?? 0.0;
+          int goodStock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
+          int damagedStock = int.tryParse((data['damagedQuantity'] ?? 0).toString()) ?? 0;
 
-          // شلنا شرط (المخزون أكبر من صفر) عشان نعرض كل الأصناف الـ 11
-          double itemTotalValue = stock > 0 ? (stock * price) : 0.0;
-          totalCapital += itemTotalValue;
+          double price = double.tryParse((data['price'] ?? data['costPrice'] ?? 0).toString()) ?? 0.0;
 
-          if (stock > 0) {
-            totalPhysicalItems += stock;
+          double goodValue = goodStock > 0 ? (goodStock * price) : 0.0;
+          double damagedValue = damagedStock > 0 ? (damagedStock * price) : 0.0;
+
+          totalGoodValue += goodValue;
+          totalDamagedValue += damagedValue;
+
+          if (goodStock > 0 || damagedStock > 0) {
+            valuedProducts.add({'name': data['name'] ?? 'غير معروف', 'goodStock': goodStock, 'damagedStock': damagedStock, 'price': price, 'totalValue': (goodValue + damagedValue)});
           }
-
-          valuedProducts.add({
-            'name': data['name'] ?? 'غير معروف',
-            'stock': stock,
-            'price': price,
-            'totalValue': itemTotalValue,
-          });
         }
 
-        // ترتيب المنتجات حسب القيمة الأعلى
         valuedProducts.sort((a, b) => b['totalValue'].compareTo(a['totalValue']));
+        double totalCapital = totalGoodValue + totalDamagedValue;
 
         return Column(
           children: [
-            // كارت إجمالي رأس المال
             Container(
               margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [primaryNavy, const Color(0xFF1B2A47)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                color: primaryNavy,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [BoxShadow(color: primaryNavy.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
               ),
               child: Column(
                 children: [
-                  const Text('إجمالي قيمة البضاعة في المخزن', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Text('${totalCapital.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  const Text('إجمالي قيمة البضاعة (سليم + تالف)', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 13)),
+                  Text('${_formatNumber(totalCapital)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
                   const Divider(color: Colors.white24, height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Column(
-                        children: [
-                          const Text('إجمالي القطع', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 12)),
-                          Text('$totalPhysicalItems قطعة', style: TextStyle(fontFamily: 'Cairo', color: brandOrange, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
+                      Expanded(
+                        child: Column(
+                          children: [
+                            const Text('قيمة السليم', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Text('${_formatNumber(totalGoodValue)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.greenAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
-                      Column(
-                        children: [
-                          const Text('عدد الأصناف', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 12)),
-                          Text('${valuedProducts.length} صنف', style: const TextStyle(fontFamily: 'Cairo', color: Colors.greenAccent, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
+                      Container(width: 1, height: 35, color: Colors.white24),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            const Text('قيمة التالف', style: TextStyle(fontFamily: 'Cairo', color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Text('${_formatNumber(totalDamagedValue)} ج.م', style: const TextStyle(fontFamily: 'Cairo', color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       )
                     ],
                   )
                 ],
               ),
             ),
-
-            // قائمة تفصيلية بالتقييم لكل منتج
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: valuedProducts.length,
                 itemBuilder: (context, index) {
                   final item = valuedProducts[index];
-                  bool isZeroStock = item['stock'] <= 0;
-
+                  bool hasDamage = item['damagedStock'] > 0;
                   return Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: isZeroStock ? Colors.red.shade200 : Colors.grey.shade200)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade200)),
                     child: ListTile(
-                      leading: CircleAvatar(
-                          backgroundColor: isZeroStock ? Colors.red.shade50 : Colors.green.shade50,
-                          child: Icon(isZeroStock ? Icons.warning_amber_rounded : Icons.monetization_on_rounded, color: isZeroStock ? Colors.red : Colors.green.shade700)
-                      ),
                       title: Text(item['name'], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Text(
-                          isZeroStock ? 'رصيد صفر (نفدت الكمية)' : '${item['stock']} قطعة × ${item['price']} ج.م',
-                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isZeroStock ? Colors.red : Colors.grey)
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('سليم: ${item['goodStock']} | السعر: ${_formatNumber(item['price'])}', style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
+                          if (hasDamage) Text('تالف بالمخزن: ${item['damagedStock']} قطعة', style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                      trailing: Text('${item['totalValue'].toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 14)),
+                      trailing: Text('${_formatNumber(item['totalValue'])} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 14)),
                     ),
                   );
                 },
@@ -397,34 +658,18 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
   }
 
   // =====================================================================
-  // 3. التاب الثالث: سجل التوالف والهالك (Spoilage)
+  // 4. التاب الرابع: السجل
   // =====================================================================
   Widget _buildSpoilageTab() {
     return StreamBuilder<QuerySnapshot>(
-      // بنجيب حركات الجرد اللي نوعها "عجز / loss"
-      stream: _firestore.collection('inventory_audits').where('type', isEqualTo: 'loss').snapshots(),
+      stream: _firestore.collection('inventory_audits').orderBy('date', descending: true).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: brandOrange));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline_rounded, size: 60, color: Colors.green.shade300),
-                const SizedBox(height: 12),
-                const Text('المخزن سليم، لا يوجد سجل توالف أو عجز.', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 16)),
-              ],
-            ),
-          );
+          return const Center(child: Text('لا يوجد سجل حركات حتى الآن.', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 16)));
         }
 
-        // سحب البيانات وترتيبها زمنياً (من الأحدث للأقدم) محلياً لتجنب مشاكل الـ Index في فايربيز
-        var docs = snapshot.data!.docs.toList();
-        docs.sort((a, b) {
-          Timestamp tA = (a.data() as Map<String, dynamic>)['date'] ?? Timestamp.now();
-          Timestamp tB = (b.data() as Map<String, dynamic>)['date'] ?? Timestamp.now();
-          return tB.compareTo(tA);
-        });
+        var docs = snapshot.data!.docs;
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -433,31 +678,35 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
             final data = docs[index].data() as Map<String, dynamic>;
             final String productName = data['productName'] ?? 'منتج غير معروف';
             final int difference = data['difference'] ?? 0;
-            final String note = data['note'] ?? 'عجز جرد';
+            final String note = data['note'] ?? '';
+            final String type = data['type'] ?? 'loss';
 
             DateTime date = DateTime.now();
             if (data['date'] != null) date = (data['date'] as Timestamp).toDate();
-            String formattedDate = '${date.day}/${date.month}/${date.year}';
+
+            String amPm = date.hour >= 12 ? 'م' : 'ص';
+            int hour12 = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+            String formattedDate = '${date.year}/${date.month}/${date.day} - $hour12:${date.minute.toString().padLeft(2, '0')} $amPm';
 
             return Card(
               elevation: 0,
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.red.shade100)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: type == 'loss' ? Colors.red.shade100 : Colors.green.shade100)),
               child: ListTile(
-                leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.delete_sweep_rounded, color: Colors.red)),
+                leading: CircleAvatar(backgroundColor: type == 'loss' ? Colors.red.shade50 : Colors.green.shade50, child: Icon(type == 'loss' ? Icons.trending_down : Icons.trending_up, color: type == 'loss' ? Colors.red : Colors.green)),
                 title: Text(productName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
-                    Text('السبب: $note', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade800)),
+                    Text('البيان: $note', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade800)),
                     Text('التاريخ: $formattedDate', style: const TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
                   ],
                 ),
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: Text('عجز: ${difference.abs()}', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.red)),
+                  decoration: BoxDecoration(color: type == 'loss' ? Colors.red.shade50 : Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: Text('${difference.abs()}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: type == 'loss' ? Colors.red : Colors.green)),
                 ),
               ),
             );

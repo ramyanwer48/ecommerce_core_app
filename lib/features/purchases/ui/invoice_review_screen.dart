@@ -93,10 +93,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           double parsedCost = _getSafeDouble(item['unitPrice'] ?? item['price']);
 
           return {
+            '_id': UniqueKey().toString(),
             'rawAiName': (item['productName'] ?? item['name'] ?? 'Unknown Item').toString(),
             'mappedId': null,
             'mappedName': (item['productName'] ?? item['name'] ?? 'Unknown Item').toString(),
             'isNewProduct': true,
+            'isAutoMatched': false, // 👈 فلاج جديد لمعرفة هل تم التعرف عليه تلقائياً
             'mainCategory': aiMainCat,
             'subCategory': aiSubCat,
             'qty': _getSafeInt(item['quantity'] ?? item['qty']),
@@ -111,6 +113,52 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       }
     } else {
       _extractedItems = [_getDefaultItem()];
+    }
+
+    // 🚀 تشغيل محرك المطابقة التلقائية فوراً
+    _autoMatchProductsWithInventory();
+  }
+
+  // 🧠 دالة السحر: المطابقة التلقائية مع المخزون
+  Future<void> _autoMatchProductsWithInventory() async {
+    try {
+      var snapshot = await FirebaseFirestore.instance.collection('products').get();
+      var existingProducts = snapshot.docs;
+
+      if (!mounted) return;
+
+      setState(() {
+        for (int i = 0; i < _extractedItems.length; i++) {
+          // تنظيف اسم الذكاء الاصطناعي للبحث الدقيق
+          String aiName = _extractedItems[i]['rawAiName'].toString().toLowerCase().trim();
+
+          for (var doc in existingProducts) {
+            var data = doc.data();
+            String dbName = (data['name'] ?? '').toString().toLowerCase().trim();
+
+            // مطابقة تامة أو لو اسم الداتابيز بيحتوي على اسم الذكاء الاصطناعي (أو العكس)
+            if (aiName == dbName || dbName == aiName) {
+              _extractedItems[i]['isNewProduct'] = false;
+              _extractedItems[i]['isAutoMatched'] = true; // 👈 تفعيل علامة الذكاء
+              _extractedItems[i]['mappedId'] = doc.id;
+              _extractedItems[i]['mappedName'] = data['name'];
+
+              // سحب التصنيف وسعر البيع من المخزون وتعبئته أوتوماتيكياً
+              String dbMain = data['category'] ?? _extractedItems[i]['mainCategory'];
+              String dbSub = data['subCategory'] ?? _extractedItems[i]['subCategory'];
+              _extractedItems[i]['mainCategory'] = dbMain;
+              _extractedItems[i]['subCategory'] = dbSub;
+
+              if (data['price'] != null) {
+                _extractedItems[i]['sellingPrice'] = _getSafeDouble(data['price']);
+              }
+              break; // تم إيجاد الصنف، انتقل للصنف التالي في الفاتورة
+            }
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Auto-match error: $e");
     }
   }
 
@@ -142,10 +190,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   Map<String, dynamic> _getDefaultItem() {
     return {
+      '_id': UniqueKey().toString(),
       'rawAiName': 'New Item',
       'mappedId': null,
       'mappedName': 'New Item',
       'isNewProduct': true,
+      'isAutoMatched': false,
       'mainCategory': _localTaxonomy.keys.isNotEmpty ? _localTaxonomy.keys.first : 'General',
       'subCategory': _localTaxonomy.values.isNotEmpty ? _localTaxonomy.values.first.first : 'General',
       'qty': 1,
@@ -241,7 +291,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                   onPressed: () async {
                     String newCat = catController.text.trim();
                     if (newCat.isNotEmpty) {
-                      FocusManager.instance.primaryFocus?.unfocus(); // الضربة القاضية للكيبورد
+                      FocusManager.instance.primaryFocus?.unfocus();
                       Navigator.pop(ctx);
                       Future.delayed(const Duration(milliseconds: 150), () {
                         if (mounted) {
@@ -302,7 +352,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                   onPressed: () async {
                     String newSubCat = catController.text.trim();
                     if (newSubCat.isNotEmpty) {
-                      FocusManager.instance.primaryFocus?.unfocus(); // الضربة القاضية للكيبورد
+                      FocusManager.instance.primaryFocus?.unfocus();
                       Navigator.pop(ctx);
                       Future.delayed(const Duration(milliseconds: 150), () {
                         if (mounted) {
@@ -394,13 +444,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
 
     if (selectedImageUrls != null && selectedImageUrls.isNotEmpty && mounted) {
-      // 👈👈 السد المنيع: تأخير نص ثانية لمنع فلاتر من دمج عملية إغلاق الشاشة المنبثقة مع تحديث الواجهة
       Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) {
           setState(() {
             _extractedItems[index]['imageUrls'] = selectedImageUrls;
           });
-          FocusManager.instance.primaryFocus?.unfocus(); // تأكيد أخير
+          FocusManager.instance.primaryFocus?.unfocus();
           ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('تم إرفاق صور جوجل للمنتج!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green)
           );
@@ -489,6 +538,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                     if(mounted){
                                       setState(() {
                                         _extractedItems[index]['isNewProduct'] = false;
+                                        _extractedItems[index]['isAutoMatched'] = false; // ربط يدوي
                                         _extractedItems[index]['mappedId'] = docs[i].id;
                                         _extractedItems[index]['mappedName'] = data['name'];
                                         String dbMain = data['category'] ?? _localTaxonomy.keys.first;
@@ -652,11 +702,13 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                   itemBuilder: (context, index) {
                     final item = _extractedItems[index];
                     bool isNew = item['isNewProduct'];
+                    bool isAutoMatched = item['isAutoMatched'] ?? false;
                     bool isItemComplete = item['mappedName'] != null && item['mappedName'].toString().isNotEmpty && item['mainCategory'] != null && item['subCategory'] != null;
-                    Color cardBorderColor = isItemComplete ? successGreen : alertRed;
+                    Color cardBorderColor = isItemComplete ? (isNew ? appSecondaryColor : successGreen) : alertRed;
                     List<String> images = item['imageUrls'] ?? [];
 
                     return Card(
+                      key: ValueKey(item['_id']),
                       color: Colors.white, margin: const EdgeInsets.only(bottom: 16), elevation: 3,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cardBorderColor, width: 2)),
                       child: Padding(
@@ -686,8 +738,10 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.check_circle, size: 16, color: successGreen), const SizedBox(width: 6), Text('مربوط بصنف مسجل', style: TextStyle(fontSize: 12, color: successGreen, fontWeight: FontWeight.bold, fontFamily: 'Cairo')), const SizedBox(width: 8),
-                                        InkWell(onTap: () { FocusManager.instance.primaryFocus?.unfocus(); setState(() { item['isNewProduct'] = true; item['mappedId'] = null; item['mappedName'] = item['rawAiName']; }); }, child: const Icon(Icons.close, size: 18, color: Colors.red))
+                                        Icon(isAutoMatched ? Icons.auto_awesome : Icons.check_circle, size: 16, color: successGreen), const SizedBox(width: 6),
+                                        // 👈 التنبيه الاحترافي
+                                        Text(isAutoMatched ? 'تم التعرف تلقائياً 🤖' : 'مربوط بصنف مسجل', style: TextStyle(fontSize: 12, color: successGreen, fontWeight: FontWeight.bold, fontFamily: 'Cairo')), const SizedBox(width: 8),
+                                        InkWell(onTap: () { FocusManager.instance.primaryFocus?.unfocus(); setState(() { item['isNewProduct'] = true; item['isAutoMatched'] = false; item['mappedId'] = null; item['mappedName'] = item['rawAiName']; }); }, child: const Icon(Icons.close, size: 18, color: Colors.red))
                                       ],
                                     ),
                                   ),

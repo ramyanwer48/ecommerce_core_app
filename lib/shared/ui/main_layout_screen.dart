@@ -15,7 +15,6 @@ import '../../features/admin/ui/admin_orders_screen.dart';
 import '../../features/admin/logic/admin_orders_cubit.dart';
 import '../../features/cart/logic/cart_cubit.dart';
 import '../../features/cart/logic/cart_state.dart';
-// 🚀 تم إضافة استدعاء شاشة الفاتورة بالذكاء الاصطناعي هنا
 import '../../features/purchases/ui/ai_purchase_screen.dart';
 
 class MainLayoutScreen extends StatefulWidget {
@@ -31,10 +30,14 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
 
   final Color appSecondaryColor = const Color(0xFFFF9F0A);
 
+  // 🌟 [السر هنا] مفاتيح ملاحة مستقلة لكل تاب عشان الشريط يفضل ثابت
+  final List<GlobalKey<NavigatorState>> _adminNavKeys = List.generate(5, (_) => GlobalKey<NavigatorState>());
+  final List<GlobalKey<NavigatorState>> _customerNavKeys = List.generate(4, (_) => GlobalKey<NavigatorState>());
+
   @override
   void initState() {
     super.initState();
-    _checkUserRole(); // يعمل في الخلفية بدون ما يوقف فتح الشاشة
+    _checkUserRole();
   }
 
   Future<void> _checkUserRole() async {
@@ -44,7 +47,7 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (doc.exists && doc.data()?['role'] == 'admin') {
           if (mounted) {
-            setState(() => _isAdmin = true); // يغير الأزرار اللي تحت بس لو طلع أدمن
+            setState(() => _isAdmin = true);
           }
         }
       } catch (e) {
@@ -53,7 +56,6 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     }
   }
 
-  // 🚀 شاشات العميل العادي (السلة لسه موجودة له تحت)
   final List<Widget> _customerScreens = [
     const HomeScreen(),
     const OrdersScreen(),
@@ -61,10 +63,9 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
     const ProfileScreen(),
   ];
 
-  // 🚀 شاشات المدير (تم استبدال السلة بشاشة إدخال الفواتير بالـ AI)
   final List<Widget> _adminScreens = [
     const HomeScreen(),
-    const AiPurchaseScreen(), // 👈 هنا تم استبدال CartScreen
+    const AiPurchaseScreen(),
     const AdminDashboardScreen(),
     const ManageProductsScreen(),
     BlocProvider(
@@ -75,10 +76,28 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
 
   void _onItemTapped(int index) {
     HapticFeedback.selectionClick();
-    setState(() => _currentIndex = index);
+    if (_currentIndex == index) {
+      // 🌟 [ميزة احترافية] لو داس على التاب وهو جواه أصلاً، يرجعه لأول شاشة في التاب ده
+      final currentNavKey = _isAdmin ? _adminNavKeys[index] : _customerNavKeys[index];
+      currentNavKey.currentState?.popUntil((route) => route.isFirst);
+    } else {
+      setState(() => _currentIndex = index);
+    }
   }
 
-  // 🚀 أداة السلة بالأرقام (محتفظين بيها للعميل العادي)
+  // 🌟 دالة بناء (شاشة مصغرة) لكل تاب عشان نحافظ على شريطه السفلي
+  Widget _buildOffstageNavigator(int index, Widget screen, GlobalKey<NavigatorState> key) {
+    return Offstage(
+      offstage: _currentIndex != index,
+      child: Navigator(
+        key: key,
+        onGenerateRoute: (routeSettings) {
+          return MaterialPageRoute(builder: (context) => screen);
+        },
+      ),
+    );
+  }
+
   Widget _buildCartIconWithBadge(bool isActive) {
     return BlocBuilder<CartCubit, CartState>(
       builder: (context, state) {
@@ -111,36 +130,64 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        body: IndexedStack(index: _currentIndex, children: _isAdmin ? _adminScreens : _customerScreens),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: _onItemTapped,
-          backgroundColor: Colors.white,
-          selectedItemColor: appSecondaryColor,
-          unselectedItemColor: Colors.grey.shade400,
-          selectedLabelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 11),
-          unselectedLabelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.normal, fontSize: 10),
-          type: BottomNavigationBarType.fixed,
-          items: _isAdmin
-              ? [
-            // 🚀 أزرار المدير بعد التعديل
-            const BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
-            const BottomNavigationBarItem(icon: Icon(Icons.document_scanner_rounded), label: 'فاتورة AI ✨'), // 👈 الزرار الجديد
-            const BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'اللوحة'),
-            const BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'المخزون'),
-            const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'الطلبات'),
-          ]
-              : [
-            // 🚀 أزرار العميل العادي
-            const BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'الرئيسية'),
-            const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'طلباتي'),
-            BottomNavigationBarItem(icon: _buildCartIconWithBadge(_currentIndex == 2), label: 'السلة'),
-            const BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
-          ],
+    final currentNavKeys = _isAdmin ? _adminNavKeys : _customerNavKeys;
+    final currentScreens = _isAdmin ? _adminScreens : _customerScreens;
+
+    // 🌟 PopScope: للتحكم في زرار الرجوع بتاع الأندرويد
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+
+        final currentNavigator = currentNavKeys[_currentIndex].currentState;
+
+        // لو فاتح كارت فرعي (زي الجرد)، ارجع خطوة جواه الأول
+        if (currentNavigator != null && currentNavigator.canPop()) {
+          currentNavigator.pop();
+        } else {
+          // لو في الشاشة الرئيسية للتاب، ارجع لتاب (المتجر)
+          if (_currentIndex != 0) {
+            setState(() => _currentIndex = 0);
+          } else {
+            // لو في تاب المتجر ومفيش شاشات مفتوحة، اقفل التطبيق
+            SystemNavigator.pop();
+          }
+        }
+      },
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          // 🌟 استخدام Stack لتركيب الشاشات فوق بعضها والاحتفاظ بمسار كل واحدة
+          body: Stack(
+            children: List.generate(currentScreens.length, (index) {
+              return _buildOffstageNavigator(index, currentScreens[index], currentNavKeys[index]);
+            }),
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: _onItemTapped,
+            backgroundColor: Colors.white,
+            selectedItemColor: appSecondaryColor,
+            unselectedItemColor: Colors.grey.shade400,
+            selectedLabelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 11),
+            unselectedLabelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.normal, fontSize: 10),
+            type: BottomNavigationBarType.fixed,
+            items: _isAdmin
+                ? [
+              const BottomNavigationBarItem(icon: Icon(Icons.storefront_rounded), label: 'المتجر'),
+              const BottomNavigationBarItem(icon: Icon(Icons.document_scanner_rounded), label: 'فاتورة AI ✨'),
+              const BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'اللوحة'),
+              const BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'المخزون'),
+              const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'الطلبات'),
+            ]
+                : [
+              const BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'الرئيسية'),
+              const BottomNavigationBarItem(icon: Icon(Icons.local_shipping_rounded), label: 'طلباتي'),
+              BottomNavigationBarItem(icon: _buildCartIconWithBadge(_currentIndex == 2), label: 'السلة'),
+              const BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
+            ],
+          ),
         ),
       ),
     );

@@ -46,6 +46,7 @@ class PurchaseService {
         'batchId': batchId,
         'quantity': totalPieces,
         'costPrice': costPerPiece,
+        'supplier': supplierName, // 👈 إضافة اسم المورد للدفعة عشان الـ FIFO والمرتجعات
         'dateAdded': firestoreInvoiceDate, // استخدام تاريخ الفاتورة للدفعة
       };
 
@@ -63,43 +64,63 @@ class PurchaseService {
         'subCategory': subCategory,
       });
 
-      bool isNewProduct = item['isNewProduct'] ?? true;
-      String? mappedId = item['mappedId'];
-
       // 👈 قراءة مصفوفة الصور اللي جاية من شاشة مراجعة الذكاء الاصطناعي (بحث جوجل)
       List<String> imageUrls = [];
       if (item['imageUrls'] != null && item['imageUrls'] is List) {
         imageUrls = List<String>.from(item['imageUrls']);
       }
 
-      if (!isNewProduct && mappedId != null && mappedId.isNotEmpty) {
-        // 🔗 صنف مسجل سابقاً: إضافة دفعة جديدة (FIFO) وزيادة رصيد المخزن الإجمالي
+      String? mappedId = item['mappedId'];
+
+      // 🔍 السحر هنا: البحث الذكي عن المنتج في قاعدة البيانات لو مفيش mappedId
+      if (mappedId == null || mappedId.trim().isEmpty) {
+        var querySnap = await _firestore.collection('products')
+            .where('name', isEqualTo: name)
+            .limit(1)
+            .get();
+
+        if (querySnap.docs.isNotEmpty) {
+          mappedId = querySnap.docs.first.id; // تم إيجاد المنتج
+        }
+      }
+
+      if (mappedId != null && mappedId.isNotEmpty) {
+        // 🔗 صنف مسجل سابقاً: تحديثه وإضافة دفعة جديدة (FIFO)
         DocumentReference productRef = _firestore.collection('products').doc(mappedId);
 
-        batch.update(productRef, {
-          'batches': FieldValue.arrayUnion([newBatchData]),
-          'stockQuantity': FieldValue.increment(totalPieces),
+        Map<String, dynamic> updateData = {
+          'batches': FieldValue.arrayUnion([newBatchData]), // إضافة الدفعة
+          'stockQuantity': FieldValue.increment(totalPieces), // زيادة المخزون
           'inStock': true,
-        });
+          'price': sellingPrice, // 🚀 تحديث سعر البيع بناءً على التكلفة الجديدة
+        };
+
+        // لو المنتج متسجل قبل كده بس من غير صورة، والفاتورة دي جابتله صورة، حدثها
+        if (imageUrls.isNotEmpty) {
+          updateData['imageUrl'] = imageUrls.first;
+          updateData['imageUrls'] = FieldValue.arrayUnion(imageUrls);
+        }
+
+        batch.update(productRef, updateData);
       } else {
         // ✨ صنف جديد كلياً: إنشاء مستند جديد في مجموعة products
         DocumentReference newProductRef = _firestore.collection('products').doc();
         Map<String, dynamic> newProductData = {
           'name': name,
           'description': 'Added via purchase invoice #$invoiceNumber from supplier: $supplierName',
-          'price': sellingPrice,
+          'price': sellingPrice, // السعر اللي حددناه
           'costPrice': costPerPiece,
           'category': mainCategory,
           'subCategory': subCategory,
 
-          // 👈 حفظ الصور: الصورة الأولى كواجهة، والمصفوفة بالكامل لدعم أكثر من صورة
+          // حفظ الصور
           'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : '',
           'imageUrls': imageUrls,
-          'images': [], // موجودة للاحتياط لو في أكواد قديمة بتعتمد عليها
+          'images': [],
 
           'variations': [],
           'inStock': totalPieces > 0,
-          'isActive': false,
+          'isActive': false, // بينزل مخفي لحد ما تفعله
           'stockQuantity': totalPieces,
           'batches': [newBatchData],
         };
@@ -110,11 +131,10 @@ class PurchaseService {
     // 💰 1. تسجيل القيد المحاسبي المزدوج في ledger_entries
     DocumentReference ledgerRef = _firestore.collection('ledger_entries').doc();
 
-    // استخراج رقم صحيح لرقم الفاتورة لتوافق الحقل الرقمي في قاعدة البيانات
     int numericInvoiceNo = int.tryParse(invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1000;
 
     Map<String, dynamic> ledgerEntryData = {
-      'date': firestoreInvoiceDate, // تسجيل القيد بتاريخ الفاتورة
+      'date': firestoreInvoiceDate,
       'orderId': invoiceNumber,
       'orderNumber': numericInvoiceNo,
       'totalDebit': totalInvoiceAmount,
@@ -140,7 +160,7 @@ class PurchaseService {
       'invoiceId': purchaseInvoiceRef.id,
       'invoiceNumber': invoiceNumber,
       'supplierName': supplierName,
-      'date': firestoreInvoiceDate, // أرشفة الفاتورة بتاريخها الفعلي
+      'date': firestoreInvoiceDate,
       'totalAmount': totalInvoiceAmount,
       'itemCount': items.length,
       'items': archivedItems,
@@ -148,7 +168,7 @@ class PurchaseService {
     };
     batch.set(purchaseInvoiceRef, purchaseInvoiceData);
 
-    // 🚀 تنفيذ العملية بالكامل في فايربيز دفعة واحدة (Atomic Batch Commit)
+    // 🚀 تنفيذ العملية بالكامل دفعة واحدة
     await batch.commit();
   }
 }

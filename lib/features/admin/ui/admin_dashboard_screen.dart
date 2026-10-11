@@ -1,12 +1,36 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/routing/routes.dart';
+import '../../../core/di/dependency_injection.dart';
+
+// 👇 استدعاءات الشاشات والـ Cubits المطلوبة
+import 'storekeeper_audit_screen.dart';
+import 'add_product_screen.dart';
+import 'manage_products_screen.dart';
+import 'manage_categories_screen.dart';
+import 'admin_orders_screen.dart';
+import 'admin_coupons_screen.dart';
+import 'admin_banner_screen.dart';
+import 'manual_purchase_screen.dart';
+import 'purchases_history_screen.dart';
+import 'sales_invoices_screen.dart';
+import 'pos_screen.dart';
+import 'inventory_audit_screen.dart';
+import 'treasury_screen.dart';
+import 'shipping_companies_screen.dart';
+import 'waybills_screen.dart';
+import '../../purchases/ui/ai_purchase_screen.dart';
+import '../../partners/ui/partners_screen.dart';
+import '../../partners/ui/customers_screen.dart';
+import '../../partners/ui/partners_management_screen.dart';
+import '../../admin/logic/admin_orders_cubit.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -44,6 +68,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (pickedFile == null) return;
 
+    if (!mounted) return;
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
     try {
@@ -63,8 +88,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة بنجاح', style: TextStyle(fontFamily: 'Cairo'))));
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e', style: const TextStyle(fontFamily: 'Cairo'))));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e', style: const TextStyle(fontFamily: 'Cairo'))));
+      }
     }
   }
 
@@ -408,6 +435,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D1B2A), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                               onPressed: () async {
                                 if (selectedUserEmail == null) {
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى اختيار إيميل أولاً', style: TextStyle(fontFamily: 'Cairo'))));
                                   return;
                                 }
@@ -418,6 +446,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   'updatedAt': FieldValue.serverTimestamp(),
                                 }, SetOptions(merge: true));
                                 setSheetState(() {});
+                                if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعيين الصلاحيات بنجاح', style: TextStyle(fontFamily: 'Cairo'))));
                               },
                               child: const Text('حفظ وتطبيق الصلاحيات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
@@ -469,18 +498,77 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _showLowStockSheet(BuildContext context, List<Map<String, dynamic>> lowStockItems) {
-    showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) => Directionality(textDirection: TextDirection.rtl, child: Container(height: MediaQuery.of(context).size.height * 0.65, padding: const EdgeInsets.all(20), decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: Container(width: 40, height: 5, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(3)))), Row(children: [const Icon(Icons.warning_rounded, color: Colors.red, size: 28), const SizedBox(width: 8), const Text('تنبيه نواقص المخزون', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')), const Spacer(), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)), child: Text('${lowStockItems.length} منتج', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontFamily: 'Cairo')))]), const Divider(height: 30), Expanded(child: ListView.separated(itemCount: lowStockItems.length, separatorBuilder: (context, index) => const Divider(), itemBuilder: (context, index) { final item = lowStockItems[index]; final name = item['name'] ?? 'منتج غير معروف'; final stock = item['stockQuantity'] ?? 0; return ListTile(contentPadding: EdgeInsets.zero, leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.inventory_2_outlined, color: Colors.red, size: 20)), title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)), trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)), child: Text('باقي: $stock', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')))); } ))]))));
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.65,
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(3)),
+                ),
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.warning_rounded, color: Colors.red, size: 28),
+                  const SizedBox(width: 8),
+                  const Text('تنبيه نواقص المخزون', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
+                    child: Text('${lowStockItems.length} منتج', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ),
+                ],
+              ),
+              const Divider(height: 30),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: lowStockItems.length,
+                  separatorBuilder: (context, index) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final item = lowStockItems[index];
+                    final name = item['name'] ?? 'منتج غير معروف';
+                    final stock = item['stockQuantity'] ?? 0;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.inventory_2_outlined, color: Colors.red, size: 20)),
+                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+                        child: Text('باقي: $stock', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  // 🚀 أداة مساعدة لرسم الأيقونات بحجم "أكبر سِنة" ومريحة للضغط
   Widget _buildHeaderIcon(IconData icon, Color bgColor, Color iconColor, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24), // تكبير مساحة التفاعل
+      borderRadius: BorderRadius.circular(24),
       child: Container(
-        padding: const EdgeInsets.all(10), // تكبير البادينج سِنة
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
-        child: Icon(icon, color: iconColor, size: 22), // 🚀 تكبير الأيقونة من 18 لـ 22
+        child: Icon(icon, color: iconColor, size: 22),
       ),
     );
   }
@@ -498,7 +586,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: bgColor,
         body: Column(
           children: [
-            // 🚀 الهيدر الاحترافي المضغوط بعد شيل الإيميل وتكبير الأيقونات
             Container(
               padding: EdgeInsets.only(
                   top: MediaQuery.of(context).padding.top + 8,
@@ -587,13 +674,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           children: [
                             Text(displayName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
                             const SizedBox(height: 2),
-                            // 🚀 تم إزالة الإيميل ووضع المسمى الوظيفي للحفاظ على الشياكة والمساحة
                             Text('المدير العام', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.orange.shade400)),
                           ],
                         ),
                       ),
                       Wrap(
-                        spacing: 10, // مسافة أوسع شوية بين الأيقونات
+                        spacing: 10,
                         children: [
                           _buildHeaderIcon(Icons.person_rounded, Colors.white.withOpacity(0.1), Colors.white, () { HapticFeedback.lightImpact(); _showUserProfileData(); }),
                           _buildHeaderIcon(Icons.settings_rounded, Colors.white.withOpacity(0.1), Colors.white, () { HapticFeedback.lightImpact(); _showSystemSettingsSheet(); }),
@@ -685,64 +771,99 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       },
                     ),
                     const SizedBox(height: 32),
+
                     _buildSectionTitle('إدارة المشتريات والموردين', Icons.shopping_cart_checkout_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'فاتورة مشتريات ✨', subtitle: 'إدخال بالذكاء الاصطناعي', icon: Icons.document_scanner_rounded, color: Colors.deepPurple, onTap: () => context.push(Routes.aiPurchase)),
-                        _buildActionCard(title: 'فاتورة مشتريات', subtitle: 'إدخال يدوي', icon: Icons.edit_document, color: Colors.blue.shade700, onTap: () => context.push(Routes.manualPurchase)),
-                        _buildActionCard(title: 'سجل المشتريات', subtitle: 'فواتير شراء البضاعة', icon: Icons.history_rounded, color: Colors.indigo, onTap: () => context.push(Routes.purchasesHistory)),
-                        _buildActionCard(title: 'حسابات الموردين', subtitle: 'أرصدة ومديونيات', icon: Icons.store_mall_directory_rounded, color: Colors.brown.shade600, onTap: () => context.push(Routes.partners)),
+                        _buildActionCard(title: 'فاتورة مشتريات ✨', subtitle: 'إدخال بالذكاء الاصطناعي', icon: Icons.document_scanner_rounded, color: Colors.deepPurple, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiPurchaseScreen()))),
+                        _buildActionCard(title: 'فاتورة مشتريات', subtitle: 'إدخال يدوي', icon: Icons.edit_document, color: Colors.blue.shade700, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualPurchaseScreen()))),
+                        _buildActionCard(title: 'سجل المشتريات', subtitle: 'فواتير شراء البضاعة', icon: Icons.history_rounded, color: Colors.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchasesHistoryScreen()))),
+                        _buildActionCard(title: 'حسابات الموردين', subtitle: 'أرصدة ومديونيات', icon: Icons.store_mall_directory_rounded, color: Colors.brown.shade600, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PartnersScreen()))),
                       ],
                     ),
                     const SizedBox(height: 24),
+
                     _buildSectionTitle('المبيعات والعملاء', Icons.point_of_sale_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'المبيعات المباشرة', subtitle: 'مبيعات المقر/الكاشير', icon: Icons.storefront_rounded, color: Colors.green.shade600, onTap: () => context.push(Routes.pos)),
-                        _buildActionCard(title: 'طلبات المتجر', subtitle: 'أوردرات الأونلاين', icon: Icons.language_rounded, color: Colors.orange.shade700, onTap: () => context.push(Routes.adminOrders)),
-                        _buildActionCard(title: 'فواتير المبيعات', subtitle: 'السجل المجمع (المقر والأونلاين)', icon: Icons.receipt_long_rounded, color: Colors.teal.shade600, onTap: () => context.push(Routes.salesInvoices)),
-                        _buildActionCard(title: 'حسابات العملاء', subtitle: 'المدينون وأرصدتهم', icon: Icons.groups_rounded, color: Colors.blueGrey, onTap: () => context.push(Routes.customers)),
+                        _buildActionCard(title: 'المبيعات المباشرة', subtitle: 'مبيعات المقر/الكاشير', icon: Icons.storefront_rounded, color: Colors.green.shade600, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PosScreen()))),
+
+                        _buildActionCard(
+                          title: 'طلبات المتجر',
+                          subtitle: 'أوردرات الأونلاين',
+                          icon: Icons.language_rounded,
+                          color: Colors.orange.shade700,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BlocProvider(
+                                create: (context) => getIt<AdminOrdersCubit>()..fetchAllOrders(),
+                                child: const AdminOrdersScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        _buildActionCard(title: 'فواتير المبيعات', subtitle: 'السجل المجمع (المقر والأونلاين)', icon: Icons.receipt_long_rounded, color: Colors.teal.shade600, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesInvoicesScreen()))),
+                        _buildActionCard(title: 'حسابات العملاء', subtitle: 'المدينون وأرصدتهم', icon: Icons.groups_rounded, color: Colors.blueGrey, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen()))),
                       ],
                     ),
                     const SizedBox(height: 24),
+
                     _buildSectionTitle('المخزن والمنتجات', Icons.inventory_2_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'إدارة المنتجات', subtitle: 'إضافة وتسعير', icon: Icons.format_list_bulleted_rounded, color: Colors.amber.shade700, onTap: () => context.push(Routes.manageProducts)),
-                        _buildActionCard(title: 'التصنيفات والأقسام', subtitle: 'إدارة الهيكلة', icon: Icons.category_rounded, color: Colors.purple.shade600, onTap: () => context.push(Routes.manageCategories)),
-                        _buildActionCard(title: 'جرد المخزن', subtitle: 'تقارير وتوالف', icon: Icons.fact_check_rounded, color: Colors.grey.shade700, onTap: () => context.push(Routes.inventoryAudit)),
+                        _buildActionCard(title: 'إدارة المنتجات', subtitle: 'إضافة وتسعير', icon: Icons.format_list_bulleted_rounded, color: Colors.amber.shade700, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageProductsScreen()))),
+                        _buildActionCard(title: 'التصنيفات والأقسام', subtitle: 'إدارة الهيكلة', icon: Icons.category_rounded, color: Colors.purple.shade600, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageCategoriesScreen()))),
+                        _buildActionCard(title: 'إدارة الجرد', subtitle: 'اعتمادات وتوالف', icon: Icons.fact_check_rounded, color: Colors.grey.shade800, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InventoryAuditScreen()))),
+                        _buildActionCard(title: 'جرد فعلي', subtitle: 'تجربة جرد الموظف 👁️', icon: Icons.qr_code_scanner, color: Colors.pink.shade400, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StorekeeperAuditScreen()))),
                       ],
                     ),
                     const SizedBox(height: 24),
+
                     _buildSectionTitle('إدارة الشحن والتوصيل', Icons.local_shipping_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'شركات الشحن', subtitle: 'حسابات ومستحقات', icon: Icons.directions_car_rounded, color: Colors.lightBlue.shade700, onTap: () => context.push(Routes.shippingCompanies)),
-                        _buildActionCard(title: 'بوالص الشحن', subtitle: 'إسناد وطباعة البوليصة', icon: Icons.receipt_long_rounded, color: Colors.deepPurple.shade600, onTap: () => context.push(Routes.waybills)),
+                        _buildActionCard(title: 'شركات الشحن', subtitle: 'حسابات ومستحقات', icon: Icons.directions_car_rounded, color: Colors.lightBlue.shade700, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ShippingCompaniesScreen()))),
+                        _buildActionCard(title: 'بوالص الشحن', subtitle: 'إسناد وطباعة البوليصة', icon: Icons.receipt_long_rounded, color: Colors.deepPurple.shade600, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WaybillsScreen()))),
                       ],
                     ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('الخزينة والماليات', Icons.account_balance_rounded),
+
+                    _buildSectionTitle('الخزينة والماليات والشركاء', Icons.account_balance_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'المركز المالي', subtitle: 'الخزينة والأرباح', icon: Icons.account_balance_wallet_rounded, color: Colors.green.shade800, onTap: () => context.push(Routes.treasury)),
+                        _buildActionCard(title: 'المركز المالي', subtitle: 'الخزينة والأرباح', icon: Icons.account_balance_wallet_rounded, color: Colors.green.shade800, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TreasuryScreen()))),
+
+                        _buildActionCard(
+                          title: 'إدارة الشركاء والأرباح',
+                          subtitle: 'رأس المال والنسب والتشغيل',
+                          icon: Icons.handshake_rounded,
+                          color: const Color(0xFF0D1B2A),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PartnersManagementScreen()),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
+
                     _buildSectionTitle('واجهة المتجر والعروض', Icons.storefront_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
                       children: [
-                        _buildActionCard(title: 'الإعلانات والبانرات', subtitle: 'واجهة التطبيق', icon: Icons.view_carousel_rounded, color: Colors.pink.shade500, onTap: () => context.push(Routes.adminBanner)),
-                        _buildActionCard(title: 'كوبونات الخصم', subtitle: 'إدارة التخفيضات', icon: Icons.local_offer_rounded, color: Colors.redAccent, onTap: () => context.push(Routes.manageCoupons)),
+                        _buildActionCard(title: 'الإعلانات والبانرات', subtitle: 'واجهة التطبيق', icon: Icons.view_carousel_rounded, color: Colors.pink.shade500, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminBannerScreen()))),
+                        _buildActionCard(title: 'كوبونات الخصم', subtitle: 'إدارة التخفيضات', icon: Icons.local_offer_rounded, color: Colors.redAccent, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminCouponsScreen()))),
                       ],
                     ),
                     const SizedBox(height: 24),
+
                     _buildSectionTitle('الإدارة والصلاحيات والمطابقة', Icons.admin_panel_settings_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.2,
