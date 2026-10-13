@@ -2,34 +2,47 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PurchaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const String _suppliersCollection = 'suppliers';
 
-  /// 📦 دالة ترحيل الفاتورة المعتمدة (تحديث المخزون FIFO، تسجيل القيود، وأرشفة الفاتورة)
+  /// دالة ترحيل الفاتورة المعتمدة (تحديث المخزون، تحديث رصيد المورد في جدول الموردين، تسجيل القيود، وأرشفة الفاتورة)
   Future<void> processApprovedInvoice({
     required String supplierName,
     required String invoiceNumber,
-    required DateTime invoiceDate, // 👈 استقبال تاريخ الفاتورة الفعلي
+    required DateTime invoiceDate,
     required List<Map<String, dynamic>> items,
   }) async {
     WriteBatch batch = _firestore.batch();
     double totalInvoiceAmount = 0.0;
     List<Map<String, dynamic>> archivedItems = [];
 
+    String cleanSupplierName = supplierName.trim().isEmpty
+        ? 'مورد عام'
+        : supplierName.trim();
+
     // تحويل التاريخ لصيغة فايربيز لاستخدامه في كل الحركات
     Timestamp firestoreInvoiceDate = Timestamp.fromDate(invoiceDate);
 
     for (var item in items) {
-      String name = item['mappedName'] ?? item['rawAiName'] ?? 'Unknown Product';
+      String name =
+          item['mappedName'] ?? item['rawAiName'] ?? 'Unknown Product';
 
       // قراءة الكمية والسعر ومعامل التحويل بأمان تام
-      int rawQty = item['qty'] is int ? item['qty'] : int.tryParse(item['qty'].toString()) ?? 1;
-      double unitPrice = item['price'] is double ? item['price'] : double.tryParse(item['price'].toString()) ?? 0.0;
-      int conversionFactor = item['conversionFactor'] is int ? item['conversionFactor'] : int.tryParse(item['conversionFactor'].toString()) ?? 1;
+      int rawQty = item['qty'] is int
+          ? item['qty']
+          : int.tryParse(item['qty'].toString()) ?? 1;
+      double unitPrice = item['price'] is double
+          ? item['price']
+          : double.tryParse(item['price'].toString()) ?? 0.0;
+      int conversionFactor = item['conversionFactor'] is int
+          ? item['conversionFactor']
+          : int.tryParse(item['conversionFactor'].toString()) ?? 1;
       if (conversionFactor <= 0) conversionFactor = 1;
 
       // قراءة سعر البيع المحدد من الشاشة
       double sellingPrice = item['sellingPrice'] is double
           ? item['sellingPrice']
-          : double.tryParse(item['sellingPrice']?.toString() ?? '') ?? (unitPrice * 1.25);
+          : double.tryParse(item['sellingPrice']?.toString() ?? '') ??
+          (unitPrice * 1.25);
 
       String mainCategory = item['mainCategory'] ?? 'Computers & Systems';
       String subCategory = item['subCategory'] ?? 'Laptops';
@@ -37,17 +50,18 @@ class PurchaseService {
       // الحسابات الفعلية للقطع والتكلفة للقطعة الواحدة
       int totalPieces = rawQty * conversionFactor;
       double costPerPiece = unitPrice / conversionFactor;
-      double itemTotalCost = rawQty * unitPrice; // إجمالي تكلفة السطر
+      double itemTotalCost = rawQty * unitPrice;
       totalInvoiceAmount += itemTotalCost;
 
-      // إنشاء معرف فريد للدفعة الجديدة (Batch)
-      String batchId = 'batch_${invoiceNumber}_${DateTime.now().millisecondsSinceEpoch}';
+      // إنشاء معرف فريد للدفعة الجديدة
+      String batchId =
+          'batch_${invoiceNumber}_${DateTime.now().millisecondsSinceEpoch}';
       Map<String, dynamic> newBatchData = {
         'batchId': batchId,
         'quantity': totalPieces,
         'costPrice': costPerPiece,
-        'supplier': supplierName, // 👈 إضافة اسم المورد للدفعة عشان الـ FIFO والمرتجعات
-        'dateAdded': firestoreInvoiceDate, // استخدام تاريخ الفاتورة للدفعة
+        'supplier': cleanSupplierName,
+        'dateAdded': firestoreInvoiceDate,
       };
 
       // تجميع بيانات الصنف لأرشفة الفاتورة للطباعة
@@ -64,7 +78,7 @@ class PurchaseService {
         'subCategory': subCategory,
       });
 
-      // 👈 قراءة مصفوفة الصور اللي جاية من شاشة مراجعة الذكاء الاصطناعي (بحث جوجل)
+      // قراءة مصفوفة الصور القادمة من شاشة مراجعة الذكاء الاصطناعي
       List<String> imageUrls = [];
       if (item['imageUrls'] != null && item['imageUrls'] is List) {
         imageUrls = List<String>.from(item['imageUrls']);
@@ -72,30 +86,31 @@ class PurchaseService {
 
       String? mappedId = item['mappedId'];
 
-      // 🔍 السحر هنا: البحث الذكي عن المنتج في قاعدة البيانات لو مفيش mappedId
+      // البحث الذكي عن المنتج في قاعدة البيانات في حال عدم وجود معرف مسبق
       if (mappedId == null || mappedId.trim().isEmpty) {
-        var querySnap = await _firestore.collection('products')
+        var querySnap = await _firestore
+            .collection('products')
             .where('name', isEqualTo: name)
             .limit(1)
             .get();
 
         if (querySnap.docs.isNotEmpty) {
-          mappedId = querySnap.docs.first.id; // تم إيجاد المنتج
+          mappedId = querySnap.docs.first.id;
         }
       }
 
       if (mappedId != null && mappedId.isNotEmpty) {
-        // 🔗 صنف مسجل سابقاً: تحديثه وإضافة دفعة جديدة (FIFO)
-        DocumentReference productRef = _firestore.collection('products').doc(mappedId);
+        // صنف مسجل سابقاً: تحديثه وإضافة دفعة جديدة
+        DocumentReference productRef =
+        _firestore.collection('products').doc(mappedId);
 
         Map<String, dynamic> updateData = {
-          'batches': FieldValue.arrayUnion([newBatchData]), // إضافة الدفعة
-          'stockQuantity': FieldValue.increment(totalPieces), // زيادة المخزون
+          'batches': FieldValue.arrayUnion([newBatchData]),
+          'stockQuantity': FieldValue.increment(totalPieces),
           'inStock': true,
-          'price': sellingPrice, // 🚀 تحديث سعر البيع بناءً على التكلفة الجديدة
+          'price': sellingPrice,
         };
 
-        // لو المنتج متسجل قبل كده بس من غير صورة، والفاتورة دي جابتله صورة، حدثها
         if (imageUrls.isNotEmpty) {
           updateData['imageUrl'] = imageUrls.first;
           updateData['imageUrls'] = FieldValue.arrayUnion(imageUrls);
@@ -103,24 +118,23 @@ class PurchaseService {
 
         batch.update(productRef, updateData);
       } else {
-        // ✨ صنف جديد كلياً: إنشاء مستند جديد في مجموعة products
-        DocumentReference newProductRef = _firestore.collection('products').doc();
+        // صنف جديد كلياً: إنشاء مستند جديد في جدول المنتجات
+        DocumentReference newProductRef =
+        _firestore.collection('products').doc();
         Map<String, dynamic> newProductData = {
           'name': name,
-          'description': 'Added via purchase invoice #$invoiceNumber from supplier: $supplierName',
-          'price': sellingPrice, // السعر اللي حددناه
+          'description':
+          'Added via purchase invoice #$invoiceNumber from supplier: $cleanSupplierName',
+          'price': sellingPrice,
           'costPrice': costPerPiece,
           'category': mainCategory,
           'subCategory': subCategory,
-
-          // حفظ الصور
           'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : '',
           'imageUrls': imageUrls,
           'images': [],
-
           'variations': [],
           'inStock': totalPieces > 0,
-          'isActive': false, // بينزل مخفي لحد ما تفعله
+          'isActive': false,
           'stockQuantity': totalPieces,
           'batches': [newBatchData],
         };
@@ -128,15 +142,46 @@ class PurchaseService {
       }
     }
 
-    // 💰 1. تسجيل القيد المحاسبي المزدوج في ledger_entries
+    // 1. ربط وتحديث رصيد المورد في جدول الموردين الجديد (أو إنشاؤه تلقائياً إن كان جديداً)
+    String supplierId = '';
+    var supplierSnap = await _firestore
+        .collection(_suppliersCollection)
+        .where('name', isEqualTo: cleanSupplierName)
+        .limit(1)
+        .get();
+
+    if (supplierSnap.docs.isNotEmpty) {
+      DocumentReference existingSupplierRef = supplierSnap.docs.first.reference;
+      supplierId = existingSupplierRef.id;
+      batch.update(existingSupplierRef, {
+        'balance': FieldValue.increment(-totalInvoiceAmount),
+      });
+    } else {
+      DocumentReference newSupplierRef =
+      _firestore.collection(_suppliersCollection).doc();
+      supplierId = newSupplierRef.id;
+      batch.set(newSupplierRef, {
+        'id': supplierId,
+        'name': cleanSupplierName,
+        'phone': '',
+        'type': 'supplier',
+        'balance': -totalInvoiceAmount,
+        'createdAt': firestoreInvoiceDate,
+      });
+    }
+
+    // 2. تسجيل القيد المحاسبي المزدوج في دفتر الأستاذ العام
     DocumentReference ledgerRef = _firestore.collection('ledger_entries').doc();
 
-    int numericInvoiceNo = int.tryParse(invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1000;
+    int numericInvoiceNo =
+        int.tryParse(invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1000;
 
     Map<String, dynamic> ledgerEntryData = {
       'date': firestoreInvoiceDate,
       'orderId': invoiceNumber,
       'orderNumber': numericInvoiceNo,
+      'supplierId': supplierId,
+      'supplierName': cleanSupplierName,
       'totalDebit': totalInvoiceAmount,
       'totalCredit': totalInvoiceAmount,
       'entries': [
@@ -146,20 +191,22 @@ class PurchaseService {
           'credit': 0.0,
         },
         {
-          'account': 'المورد: $supplierName',
+          'account': 'المورد: $cleanSupplierName',
           'debit': 0.0,
           'credit': totalInvoiceAmount,
         }
-      ]
+      ],
     };
     batch.set(ledgerRef, ledgerEntryData);
 
-    // 📑 2. أرشفة الفاتورة الأصلية في purchases للمراجعة والطباعة
-    DocumentReference purchaseInvoiceRef = _firestore.collection('purchases').doc();
+    // 3. أرشفة الفاتورة الأصلية في جدول المشتريات للمراجعة والطباعة
+    DocumentReference purchaseInvoiceRef =
+    _firestore.collection('purchases').doc();
     Map<String, dynamic> purchaseInvoiceData = {
       'invoiceId': purchaseInvoiceRef.id,
       'invoiceNumber': invoiceNumber,
-      'supplierName': supplierName,
+      'supplierId': supplierId,
+      'supplierName': cleanSupplierName,
       'date': firestoreInvoiceDate,
       'totalAmount': totalInvoiceAmount,
       'itemCount': items.length,
@@ -168,7 +215,7 @@ class PurchaseService {
     };
     batch.set(purchaseInvoiceRef, purchaseInvoiceData);
 
-    // 🚀 تنفيذ العملية بالكامل دفعة واحدة
+    // تنفيذ العملية بالكامل دفعة واحدة
     await batch.commit();
   }
 }

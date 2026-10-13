@@ -8,12 +8,19 @@ class PartnerModel {
   final String name;
   final String type; // 'customer', 'supplier', 'partner', 'shipping'
   final String phone;
+  // --- الحقول الجديدة الخاصة بالشركاء ---
+  final double managementRatio; // نسبة الإدارة (مثلاً 10.0 يعني 10%)
+  final double operationRatio; // نسبة التشغيل (مثلاً 5.0 يعني 5%)
+  final DateTime? joinDate; // تاريخ بدء الشراكة / أول إيداع
 
   PartnerModel({
     required this.id,
     required this.name,
     required this.type,
     required this.phone,
+    this.managementRatio = 0.0,
+    this.operationRatio = 0.0,
+    this.joinDate,
   });
 
   factory PartnerModel.fromMap(Map<String, dynamic> map, String documentId) {
@@ -22,6 +29,9 @@ class PartnerModel {
       name: map['name'] ?? '',
       type: map['type'] ?? 'customer',
       phone: map['phone'] ?? '',
+      managementRatio: (map['managementRatio'] ?? 0.0).toDouble(),
+      operationRatio: (map['operationRatio'] ?? 0.0).toDouble(),
+      joinDate: (map['joinDate'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -30,6 +40,9 @@ class PartnerModel {
       'name': name,
       'type': type,
       'phone': phone,
+      'managementRatio': managementRatio,
+      'operationRatio': operationRatio,
+      'joinDate': joinDate != null ? Timestamp.fromDate(joinDate!) : null,
     };
   }
 }
@@ -161,12 +174,15 @@ class InvoiceModel {
 // ---------------------------------------------------------
 class LedgerEntryModel {
   final String id;
-  final String accountId; // رقم حساب المورد/العميل أو الخزينة
-  final double debit; // مدين (عليه)
-  final double credit; // دائن (له)
+  final String accountId; // رقم حساب المورد/العميل أو الخزينة أو الشريك
+  final double debit; // مدين (عليه / أخذ)
+  final double credit; // دائن (له / أعطى)
   final String referenceId; // رقم الفاتورة أو الحركة
   final String description;
   final DateTime timestamp;
+  // --- الحقل الجديد لتمييز نوع الحركة ---
+  // الأنواع المقترحة: 'invoice', 'payment', 'capital_deposit', 'capital_withdrawal', 'profit_distribution'
+  final String transactionType;
 
   LedgerEntryModel({
     required this.id,
@@ -176,6 +192,7 @@ class LedgerEntryModel {
     required this.referenceId,
     required this.description,
     required this.timestamp,
+    this.transactionType = 'general',
   });
 
   factory LedgerEntryModel.fromMap(Map<String, dynamic> map, String documentId) {
@@ -187,6 +204,7 @@ class LedgerEntryModel {
       referenceId: map['referenceId'] ?? '',
       description: map['description'] ?? '',
       timestamp: (map['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      transactionType: map['transactionType'] ?? 'general',
     );
   }
 
@@ -198,6 +216,7 @@ class LedgerEntryModel {
       'referenceId': referenceId,
       'description': description,
       'timestamp': FieldValue.serverTimestamp(),
+      'transactionType': transactionType,
     };
   }
 }

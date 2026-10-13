@@ -27,7 +27,7 @@ import 'treasury_screen.dart';
 import 'shipping_companies_screen.dart';
 import 'waybills_screen.dart';
 import '../../purchases/ui/ai_purchase_screen.dart';
-import '../../partners/ui/partners_screen.dart';
+import '../../partners/ui/supplier_screen.dart';
 import '../../partners/ui/customers_screen.dart';
 import '../../partners/ui/partners_management_screen.dart';
 import '../../admin/logic/admin_orders_cubit.dart';

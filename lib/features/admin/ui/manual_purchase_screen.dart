@@ -6,8 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../purchases/services/purchase_service.dart';
-
-// 🚀 مسار نافذة بحث صور جوجل
 import '../../admin/ui/widgets/google_image_picker_dialog.dart';
 
 class ManualPurchaseScreen extends StatefulWidget {
@@ -18,6 +16,8 @@ class ManualPurchaseScreen extends StatefulWidget {
 }
 
 class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
+  static const String _suppliersCollection = 'suppliers';
+
   final TextEditingController _supplierController = TextEditingController();
   final TextEditingController _invoiceNumberController = TextEditingController();
   late TextEditingController _dateController;
@@ -67,10 +67,27 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
     setState(() {});
   }
 
-  // 🚀 السحر هنا: دالة الإشعارات (Snackbars) الجديدة اللي شكلها محترم ومختصر
+  // 🧹 دالة تفريغ الفورم بالكامل وتجهيزه لفاتورة جديدة فوراً
+  void _clearForm() {
+    setState(() {
+      _supplierController.clear();
+      _invoiceNumberController.clear();
+      _selectedDate = DateTime.now();
+      _dateController.text = "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
+
+      for (var item in _invoiceItems) {
+        item['qtyController']?.dispose();
+        item['conversionFactorController']?.dispose();
+        item['priceController']?.dispose();
+        item['sellingPriceController']?.dispose();
+      }
+      _invoiceItems.clear();
+    });
+  }
+
   void _showCustomSnackBar(String message, bool isSuccess) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar(); // يخفي أي إشعار قديم الأول
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -89,7 +106,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
             ),
           ],
         ),
-        backgroundColor: isSuccess ? const Color(0xFF10B981) : Colors.red.shade600, // أخضر فخم أو أحمر
+        backgroundColor: isSuccess ? const Color(0xFF10B981) : Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: const EdgeInsets.only(bottom: 20, right: 20, left: 20),
@@ -101,19 +118,74 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
 
   void _showLoadingDialog(String msg) {
     showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: brandOrange),
-                  const SizedBox(height: 16),
-                  Text(msg, textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy))
-                ]
-            )
-        )
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: brandOrange),
+            const SizedBox(height: 16),
+            Text(msg, textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// نافذة اختيار مورد مسجل من جدول الموردين الجديد
+  void _showSupplierPickerModal() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+            const SizedBox(height: 16),
+            Text('اختر من الموردين المسجلين', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
+            const Divider(),
+            Flexible(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection(_suppliersCollection).snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: brandOrange));
+                  var docs = snapshot.data!.docs;
+                  if (docs.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: Text('لا يوجد موردون مسجلون حالياً', style: TextStyle(fontFamily: 'Cairo')),
+                    );
+                  }
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      var data = docs[index].data() as Map<String, dynamic>;
+                      String sName = (data['name'] ?? '').toString();
+                      return ListTile(
+                        leading: Icon(Icons.storefront, color: brandOrange),
+                        title: Text(sName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          setState(() => _supplierController.text = sName);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
     );
   }
 
@@ -212,10 +284,10 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                               Navigator.pop(context);
                               onAdded(val);
                             }
-                          } catch(e) {
+                          } catch (e) {
                             if (mounted) {
                               Navigator.pop(context);
-                              _showCustomSnackBar('فشل إضافة القسم', false); // إشعار شيك
+                              _showCustomSnackBar('فشل إضافة القسم', false);
                             }
                           }
                         }
@@ -314,127 +386,131 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
 
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) {
-          List<Map<String, dynamic>> tempSelectedProducts = [];
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        List<Map<String, dynamic>> tempSelectedProducts = [];
 
-          return StatefulBuilder(
-              builder: (context, setSheetState) {
-                return Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: Container(
-                    height: MediaQuery.of(context).size.height * 0.85,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                    ),
-                    child: Column(
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.85,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const SizedBox(height: 16),
-                        Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-                        const SizedBox(height: 12),
-
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const SizedBox(width: 40),
-                            Text('تحديد الأصناف للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                            IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(context)),
-                          ],
-                        ),
-                        const Divider(height: 10),
-
-                        Expanded(
-                          child: StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance.collection('products').snapshots(),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                                var products = snapshot.data!.docs;
-
-                                if (products.isEmpty) {
-                                  return const Center(child: Text('لا توجد منتجات مسجلة.', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)));
-                                }
-
-                                return ListView.builder(
-                                  itemCount: products.length,
-                                  itemBuilder: (context, index) {
-                                    final doc = products[index];
-                                    final data = doc.data() as Map<String, dynamic>;
-
-                                    bool isAlreadyInInvoice = _invoiceItems.any((item) => item['mappedId'] == doc.id);
-                                    bool isSelectedHere = tempSelectedProducts.any((item) => item['mappedId'] == doc.id);
-                                    bool isChecked = isAlreadyInInvoice || isSelectedHere;
-
-                                    return CheckboxListTile(
-                                      activeColor: brandOrange,
-                                      checkColor: Colors.white,
-                                      title: Text(data['name'] ?? '', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isAlreadyInInvoice ? Colors.grey : Colors.black)),
-                                      subtitle: Text('السعر الحالي: ${data['costPrice'] ?? 0} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade600)),
-                                      value: isChecked,
-                                      onChanged: isAlreadyInInvoice ? null : (bool? value) {
-                                        setSheetState(() {
-                                          if (value == true) {
-                                            tempSelectedProducts.add({
-                                              'mappedId': doc.id,
-                                              'mappedName': data['name'],
-                                              'category': data['category'] ?? 'الكل',
-                                              'subCategory': data['subCategory'] ?? 'الكل',
-                                              'lastCostPrice': data['costPrice'] ?? 0.0,
-                                              'lastSellingPrice': data['price'] ?? 0.0,
-                                              'imageUrls': data['imageUrls'] != null ? List<String>.from(data['imageUrls']) : (data['imageUrl'] != null && data['imageUrl'].toString().isNotEmpty ? [data['imageUrl']] : <String>[]),
-                                            });
-                                          } else {
-                                            tempSelectedProducts.removeWhere((item) => item['mappedId'] == doc.id);
-                                          }
-                                        });
-                                      },
-                                    );
-                                  },
-                                );
-                              }
-                          ),
-                        ),
-
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: primaryNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                              onPressed: () {
-                                setState(() {
-                                  for (var prod in tempSelectedProducts) {
-                                    _invoiceItems.insert(0, {
-                                      'mappedName': prod['mappedName'],
-                                      'rawAiName': prod['mappedName'],
-                                      'mappedId': prod['mappedId'],
-                                      'isNewProduct': false,
-                                      'mainCategory': prod['category'],
-                                      'subCategory': prod['subCategory'],
-                                      'imageUrls': prod['imageUrls'],
-                                      'conversionFactorController': TextEditingController(text: '1')..addListener(_updateTotal),
-                                      'qtyController': TextEditingController(text: '1')..addListener(_updateTotal),
-                                      'priceController': TextEditingController(text: prod['lastCostPrice'].toString())..addListener(_updateTotal),
-                                      'sellingPriceController': TextEditingController(text: prod['lastSellingPrice'].toString()),
-                                    });
-                                  }
-                                });
-                                Navigator.pop(context);
-                              },
-                              child: Text('إضافة (${tempSelectedProducts.length}) منتج للفاتورة', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
-                            ),
-                          ),
-                        ),
+                        const SizedBox(width: 40),
+                        Text('تحديد الأصناف للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
+                        IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(context)),
                       ],
                     ),
-                  ),
-                );
-              }
-          );
-        }
+                    const Divider(height: 10),
+
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('products').snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                          var products = snapshot.data!.docs;
+
+                          if (products.isEmpty) {
+                            return const Center(child: Text('لا توجد منتجات مسجلة.', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)));
+                          }
+
+                          return ListView.builder(
+                            itemCount: products.length,
+                            itemBuilder: (context, index) {
+                              final doc = products[index];
+                              final data = doc.data() as Map<String, dynamic>;
+
+                              bool isAlreadyInInvoice = _invoiceItems.any((item) => item['mappedId'] == doc.id);
+                              bool isSelectedHere = tempSelectedProducts.any((item) => item['mappedId'] == doc.id);
+                              bool isChecked = isAlreadyInInvoice || isSelectedHere;
+
+                              return CheckboxListTile(
+                                activeColor: brandOrange,
+                                checkColor: Colors.white,
+                                title: Text(data['name'] ?? '', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isAlreadyInInvoice ? Colors.grey : Colors.black)),
+                                subtitle: Text('السعر الحالي: ${data['costPrice'] ?? 0} ج.م', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey.shade600)),
+                                value: isChecked,
+                                onChanged: isAlreadyInInvoice
+                                    ? null
+                                    : (bool? value) {
+                                  setSheetState(() {
+                                    if (value == true) {
+                                      tempSelectedProducts.add({
+                                        'mappedId': doc.id,
+                                        'mappedName': data['name'],
+                                        'category': data['category'] ?? 'الكل',
+                                        'subCategory': data['subCategory'] ?? 'الكل',
+                                        'lastCostPrice': data['costPrice'] ?? 0.0,
+                                        'lastSellingPrice': data['price'] ?? 0.0,
+                                        'imageUrls': data['imageUrls'] != null
+                                            ? List<String>.from(data['imageUrls'])
+                                            : (data['imageUrl'] != null && data['imageUrl'].toString().isNotEmpty ? [data['imageUrl']] : <String>[]),
+                                      });
+                                    } else {
+                                      tempSelectedProducts.removeWhere((item) => item['mappedId'] == doc.id);
+                                    }
+                                  });
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: primaryNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                          onPressed: () {
+                            setState(() {
+                              for (var prod in tempSelectedProducts) {
+                                _invoiceItems.insert(0, {
+                                  'mappedName': prod['mappedName'],
+                                  'rawAiName': prod['mappedName'],
+                                  'mappedId': prod['mappedId'],
+                                  'isNewProduct': false,
+                                  'mainCategory': prod['category'],
+                                  'subCategory': prod['subCategory'],
+                                  'imageUrls': prod['imageUrls'],
+                                  'conversionFactorController': TextEditingController(text: '1')..addListener(_updateTotal),
+                                  'qtyController': TextEditingController(text: '1')..addListener(_updateTotal),
+                                  'priceController': TextEditingController(text: prod['lastCostPrice'].toString())..addListener(_updateTotal),
+                                  'sellingPriceController': TextEditingController(text: prod['lastSellingPrice'].toString()),
+                                });
+                              }
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: Text('إضافة (${tempSelectedProducts.length}) منتج للفاتورة', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -484,32 +560,52 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                     const SizedBox(height: 16),
 
                     StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance.collection('categories').snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) return const SizedBox.shrink();
-                          final docs = snapshot.data!.docs;
-                          List<String> mainCategories = docs.map((doc) => doc.id).toList();
+                      stream: FirebaseFirestore.instance.collection('categories').snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox.shrink();
+                        final docs = snapshot.data!.docs;
+                        List<String> mainCategories = docs.map((doc) => doc.id).toList();
 
-                          var docItem = docs.where((d) => d.id == selectedCategory).firstOrNull;
-                          if (docItem != null) {
-                            final docData = docItem.data() as Map<String, dynamic>;
-                            currentSubCategories = List<String>.from(docData['subCategories'] ?? []);
-                          } else {
-                            currentSubCategories = [];
-                          }
+                        var docItem = docs.where((d) => d.id == selectedCategory).firstOrNull;
+                        if (docItem != null) {
+                          final docData = docItem.data() as Map<String, dynamic>;
+                          currentSubCategories = List<String>.from(docData['subCategories'] ?? []);
+                        } else {
+                          currentSubCategories = [];
+                        }
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('تصنيف المنتج:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: primaryNavy)),
-                              const SizedBox(height: 8),
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('تصنيف المنتج:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13, color: primaryNavy)),
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () {
+                                _showCategorySheet('القسم الأساسي', mainCategories, selectedCategory, false, null, (val) {
+                                  setSheetState(() {
+                                    selectedCategory = val;
+                                    selectedSubCategory = 'الكل';
+                                  });
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                decoration: BoxDecoration(color: bgSoftColor, borderRadius: BorderRadius.circular(12)),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(selectedCategory, style: TextStyle(fontFamily: 'Cairo', color: primaryNavy, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Icon(Icons.keyboard_arrow_down, color: primaryNavy),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (currentSubCategories.isNotEmpty) ...[
+                              const SizedBox(height: 12),
                               InkWell(
                                 onTap: () {
-                                  _showCategorySheet('القسم الأساسي', mainCategories, selectedCategory, false, null, (val) {
-                                    setSheetState(() {
-                                      selectedCategory = val;
-                                      selectedSubCategory = 'الكل';
-                                    });
+                                  _showCategorySheet('القسم الفرعي', currentSubCategories, selectedSubCategory, true, selectedCategory, (val) {
+                                    setSheetState(() => selectedSubCategory = val);
                                   });
                                 },
                                 child: Container(
@@ -518,36 +614,16 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Expanded(child: Text(selectedCategory, style: TextStyle(fontFamily: 'Cairo', color: primaryNavy, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text(selectedSubCategory, style: TextStyle(fontFamily: 'Cairo', color: primaryNavy, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                                       Icon(Icons.keyboard_arrow_down, color: primaryNavy),
                                     ],
                                   ),
                                 ),
                               ),
-                              if (currentSubCategories.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                InkWell(
-                                  onTap: () {
-                                    _showCategorySheet('القسم الفرعي', currentSubCategories, selectedSubCategory, true, selectedCategory, (val) {
-                                      setSheetState(() => selectedSubCategory = val);
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                    decoration: BoxDecoration(color: bgSoftColor, borderRadius: BorderRadius.circular(12)),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(child: Text(selectedSubCategory, style: TextStyle(fontFamily: 'Cairo', color: primaryNavy, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                        Icon(Icons.keyboard_arrow_down, color: primaryNavy),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ],
-                          );
-                        }
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
@@ -604,24 +680,30 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
               Text('إضافة صورة لـ: $productName', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
               const Divider(thickness: 1, height: 30),
               ListTile(
-                  leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.travel_explore, color: brandOrange, size: 24)),
-                  title: const Text('بحث من جوجل 🌐', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Future.delayed(const Duration(milliseconds: 150), () {
-                      _pickFromGoogleSearch(index, productName);
-                    });
-                  }
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.travel_explore, color: brandOrange, size: 24)),
+                title: const Text('بحث من جوجل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Future.delayed(const Duration(milliseconds: 150), () {
+                    _pickFromGoogleSearch(index, productName);
+                  });
+                },
               ),
               ListTile(
-                  leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.photo_library, color: Colors.blue, size: 24)),
-                  title: const Text('اختيار من المعرض 🖼️', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                  onTap: () { Navigator.pop(ctx); _pickAndUploadImage(ImageSource.gallery, index); }
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.photo_library, color: Colors.blue, size: 24)),
+                title: const Text('اختيار من المعرض', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadImage(ImageSource.gallery, index);
+                },
               ),
               ListTile(
-                  leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.camera_alt, color: Colors.teal, size: 24)),
-                  title: const Text('التقاط كاميرا 📸', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                  onTap: () { Navigator.pop(ctx); _pickAndUploadImage(ImageSource.camera, index); }
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.teal.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.camera_alt, color: Colors.teal, size: 24)),
+                title: const Text('التقاط كاميرا', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndUploadImage(ImageSource.camera, index);
+                },
               ),
             ],
           ),
@@ -634,9 +716,9 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
 
     final List<String>? selectedImageUrls = await showDialog<List<String>>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => GoogleImagePickerDialog(productName: productName)
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => GoogleImagePickerDialog(productName: productName),
     );
 
     FocusManager.instance.primaryFocus?.unfocus();
@@ -648,7 +730,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
             _invoiceItems[index]['imageUrls'] = selectedImageUrls;
           });
           FocusManager.instance.primaryFocus?.unfocus();
-          _showCustomSnackBar('تم ربط الصورة بنجاح', true); // 👈 إشعار الفخامة
+          _showCustomSnackBar('تم ربط الصورة بنجاح', true);
         }
       });
     }
@@ -671,12 +753,12 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
           _invoiceItems[index]['imageUrls'] = currentUrls;
         });
         Navigator.pop(context);
-        _showCustomSnackBar('تم رفع الصورة بنجاح', true); // 👈 إشعار الفخامة
+        _showCustomSnackBar('تم رفع الصورة بنجاح', true);
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        _showCustomSnackBar('فشل الرفع: تأكد من الصلاحيات والإنترنت', false); // 👈 إشعار الخطأ الشيك
+        _showCustomSnackBar('فشل الرفع: تأكد من الصلاحيات والإنترنت', false);
       }
     }
   }
@@ -735,10 +817,8 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
       );
 
       if (mounted) {
-        _showCustomSnackBar('تم ترحيل الفاتورة وتحديث المخزون', true);
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) context.pop();
-        });
+        _showCustomSnackBar('تم ترحيل الفاتورة وتحديث المخزون وحساب المورد بنجاح', true);
+        _clearForm(); // 👈 تفريغ الفورم تماماً وتجهيزه لفاتورة جديدة دون مغادرة الشاشة
       }
     } catch (e) {
       if (mounted) {
@@ -824,17 +904,62 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('بيانات الفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 16),
-                      TextFormField(controller: _supplierController, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14), decoration: InputDecoration(labelText: 'اسم المورد / الشركة', labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'), prefixIcon: Icon(Icons.store_rounded, color: primaryNavy), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: bgSoftColor)),
+                      TextFormField(
+                        controller: _supplierController,
+                        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14),
+                        decoration: InputDecoration(
+                          labelText: 'اسم المورد / الشركة',
+                          labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'),
+                          prefixIcon: Icon(Icons.store_rounded, color: primaryNavy),
+                          suffixIcon: IconButton(
+                            tooltip: 'اختر من الموردين المسجلين',
+                            icon: Icon(Icons.arrow_drop_down_circle_outlined, color: brandOrange),
+                            onPressed: _showSupplierPickerModal,
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          filled: true,
+                          fillColor: bgSoftColor,
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      TextFormField(controller: _invoiceNumberController, keyboardType: TextInputType.text, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14), decoration: InputDecoration(labelText: 'رقم الفاتورة (مطلوب)', labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'), prefixIcon: const Icon(Icons.numbers_rounded, color: Colors.grey), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: bgSoftColor)),
+                      TextFormField(
+                        controller: _invoiceNumberController,
+                        keyboardType: TextInputType.text,
+                        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14),
+                        decoration: InputDecoration(
+                          labelText: 'رقم الفاتورة (مطلوب)',
+                          labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'),
+                          prefixIcon: const Icon(Icons.numbers_rounded, color: Colors.grey),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          filled: true,
+                          fillColor: bgSoftColor,
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      TextFormField(controller: _dateController, readOnly: true, onTap: () => _selectDate(context), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14), decoration: InputDecoration(labelText: 'التاريخ', labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'), prefixIcon: Icon(Icons.calendar_month_rounded, color: brandOrange), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), filled: true, fillColor: bgSoftColor)),
+                      TextFormField(
+                        controller: _dateController,
+                        readOnly: true,
+                        onTap: () => _selectDate(context),
+                        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14),
+                        decoration: InputDecoration(
+                          labelText: 'التاريخ',
+                          labelStyle: const TextStyle(fontSize: 13, color: Colors.grey, fontFamily: 'Cairo'),
+                          prefixIcon: Icon(Icons.calendar_month_rounded, color: brandOrange),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          filled: true,
+                          fillColor: bgSoftColor,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -848,7 +973,13 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                         onPressed: _openMultiSelectProductsDialog,
                         icon: const Icon(Icons.checklist_rtl_rounded, size: 20),
                         label: const Text('تحديد الأصناف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                        style: ElevatedButton.styleFrom(backgroundColor: brandOrange, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), padding: const EdgeInsets.symmetric(vertical: 12), elevation: 0),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: brandOrange,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -858,7 +989,13 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                         onPressed: _openAddNewProductDialog,
                         icon: const Icon(Icons.add_rounded, size: 20),
                         label: const Text('جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                        style: ElevatedButton.styleFrom(backgroundColor: primaryNavy.withOpacity(0.1), foregroundColor: primaryNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), padding: const EdgeInsets.symmetric(vertical: 12), elevation: 0),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryNavy.withOpacity(0.1),
+                          foregroundColor: primaryNavy,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                        ),
                       ),
                     ),
                   ],
@@ -905,7 +1042,8 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                               GestureDetector(
                                 onTap: () => _showImageOptionsBottomSheet(index, item['mappedName']),
                                 child: Container(
-                                  width: 55, height: 55,
+                                  width: 55,
+                                  height: 55,
                                   decoration: BoxDecoration(
                                     color: bgSoftColor,
                                     borderRadius: BorderRadius.circular(10),
@@ -930,18 +1068,23 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                                       style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: primaryNavy, height: 1.2),
                                     ),
                                     if (item['isNewProduct'])
-                                      Container(margin: const EdgeInsets.only(top: 6), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text('جديد', style: TextStyle(color: brandOrange, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))),
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                                        child: Text('جديد', style: TextStyle(color: brandOrange, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                      ),
                                   ],
                                 ),
                               ),
                               IconButton(
-                                  icon: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 22),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () {
-                                    FocusManager.instance.primaryFocus?.unfocus();
-                                    setState(() => _invoiceItems.removeAt(index));
-                                  }
+                                icon: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 22),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  FocusManager.instance.primaryFocus?.unfocus();
+                                  setState(() => _invoiceItems.removeAt(index));
+                                },
                               ),
                             ],
                           ),

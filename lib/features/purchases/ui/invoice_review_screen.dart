@@ -22,6 +22,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
   final Color alertRed = Colors.red.shade600;
   final Color successGreen = const Color(0xFF10B981);
 
+  static const String _suppliersCollection = 'suppliers';
+
   late TextEditingController _supplierController;
   late TextEditingController _invoiceNoController;
   late TextEditingController _dateController;
@@ -98,7 +100,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
             'mappedId': null,
             'mappedName': (item['productName'] ?? item['name'] ?? 'Unknown Item').toString(),
             'isNewProduct': true,
-            'isAutoMatched': false, // 👈 فلاج جديد لمعرفة هل تم التعرف عليه تلقائياً
+            'isAutoMatched': false,
             'mainCategory': aiMainCat,
             'subCategory': aiSubCat,
             'qty': _getSafeInt(item['quantity'] ?? item['qty']),
@@ -115,11 +117,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       _extractedItems = [_getDefaultItem()];
     }
 
-    // 🚀 تشغيل محرك المطابقة التلقائية فوراً
     _autoMatchProductsWithInventory();
   }
 
-  // 🧠 دالة السحر: المطابقة التلقائية مع المخزون
   Future<void> _autoMatchProductsWithInventory() async {
     try {
       var snapshot = await FirebaseFirestore.instance.collection('products').get();
@@ -129,21 +129,18 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
       setState(() {
         for (int i = 0; i < _extractedItems.length; i++) {
-          // تنظيف اسم الذكاء الاصطناعي للبحث الدقيق
           String aiName = _extractedItems[i]['rawAiName'].toString().toLowerCase().trim();
 
           for (var doc in existingProducts) {
             var data = doc.data();
             String dbName = (data['name'] ?? '').toString().toLowerCase().trim();
 
-            // مطابقة تامة أو لو اسم الداتابيز بيحتوي على اسم الذكاء الاصطناعي (أو العكس)
-            if (aiName == dbName || dbName == aiName) {
+            if (aiName == dbName) {
               _extractedItems[i]['isNewProduct'] = false;
-              _extractedItems[i]['isAutoMatched'] = true; // 👈 تفعيل علامة الذكاء
+              _extractedItems[i]['isAutoMatched'] = true;
               _extractedItems[i]['mappedId'] = doc.id;
               _extractedItems[i]['mappedName'] = data['name'];
 
-              // سحب التصنيف وسعر البيع من المخزون وتعبئته أوتوماتيكياً
               String dbMain = data['category'] ?? _extractedItems[i]['mainCategory'];
               String dbSub = data['subCategory'] ?? _extractedItems[i]['subCategory'];
               _extractedItems[i]['mainCategory'] = dbMain;
@@ -152,7 +149,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               if (data['price'] != null) {
                 _extractedItems[i]['sellingPrice'] = _getSafeDouble(data['price']);
               }
-              break; // تم إيجاد الصنف، انتقل للصنف التالي في الفاتورة
+              break;
             }
           }
         }
@@ -186,6 +183,61 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     } catch (e) {
       setState(() => _isLoadingCategories = false);
     }
+  }
+
+  /// نافذة اختيار مورد مسجل من جدول الموردين الجديد
+  void _showSupplierPickerModal() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+            const SizedBox(height: 16),
+            Text('اختر من الموردين المسجلين', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor)),
+            const Divider(),
+            Flexible(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection(_suppliersCollection).snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: appSecondaryColor));
+                  var docs = snapshot.data!.docs;
+                  if (docs.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(24.0),
+                      child: Text('لا يوجد موردون مسجلون حالياً', style: TextStyle(fontFamily: 'Cairo')),
+                    );
+                  }
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      var data = docs[index].data() as Map<String, dynamic>;
+                      String sName = (data['name'] ?? '').toString();
+                      return ListTile(
+                        leading: Icon(Icons.storefront, color: appSecondaryColor),
+                        title: Text(sName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        onTap: () {
+                          setState(() => _supplierController.text = sName);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic> _getDefaultItem() {
@@ -249,9 +301,10 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
   bool get _isAllItemsReady {
     if (_extractedItems.isEmpty) return false;
     return _extractedItems.every((item) =>
-    item['mappedName'] != null && item['mappedName'].toString().isNotEmpty &&
-        item['mainCategory'] != null && item['subCategory'] != null
-    );
+    item['mappedName'] != null &&
+        item['mappedName'].toString().isNotEmpty &&
+        item['mainCategory'] != null &&
+        item['subCategory'] != null);
   }
 
   void _addNewMainCategory(Map<String, dynamic> currentItem) {
@@ -274,13 +327,15 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               Text('تصنيف أساسي جديد', style: TextStyle(fontFamily: 'Cairo', color: appPrimaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 16),
               TextField(
-                controller: catController, autofocus: true,
+                controller: catController,
+                autofocus: true,
                 style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
                 decoration: InputDecoration(
-                    hintText: 'اكتب اسم التصنيف هنا...',
-                    isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2))
+                  hintText: 'اكتب اسم التصنيف هنا...',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -302,7 +357,11 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                           });
                         }
                       });
-                      try { await FirebaseFirestore.instance.collection('categories').doc(newCat).set({'name': newCat, 'subCategories': ['General']}, SetOptions(merge: true)); } catch (e) { debugPrint("خطأ: $e"); }
+                      try {
+                        await FirebaseFirestore.instance.collection('categories').doc(newCat).set({'name': newCat, 'subCategories': ['General']}, SetOptions(merge: true));
+                      } catch (e) {
+                        debugPrint("خطأ: $e");
+                      }
                     }
                   },
                   child: const Text('حفظ سريع', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
@@ -335,13 +394,15 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               Text('فرعي جديد لـ ($mainCategory)', style: TextStyle(fontFamily: 'Cairo', color: appPrimaryColor, fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               TextField(
-                controller: catController, autofocus: true,
+                controller: catController,
+                autofocus: true,
                 style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
                 decoration: InputDecoration(
-                    hintText: 'اكتب اسم التصنيف هنا...',
-                    isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2))
+                  hintText: 'اكتب اسم التصنيف هنا...',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -357,8 +418,11 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                       Future.delayed(const Duration(milliseconds: 150), () {
                         if (mounted) {
                           setState(() {
-                            if (_localTaxonomy[mainCategory] != null) { _localTaxonomy[mainCategory]!.add(newSubCat); }
-                            else { _localTaxonomy[mainCategory] = [newSubCat]; }
+                            if (_localTaxonomy[mainCategory] != null) {
+                              _localTaxonomy[mainCategory]!.add(newSubCat);
+                            } else {
+                              _localTaxonomy[mainCategory] = [newSubCat];
+                            }
                             currentItem['subCategory'] = newSubCat;
                           });
                         }
@@ -409,7 +473,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                       FocusManager.instance.primaryFocus?.unfocus();
                       Navigator.pop(ctx);
                       Future.delayed(const Duration(milliseconds: 150), () {
-                        if(mounted){
+                        if (mounted) {
                           setState(() {
                             if (isMain) {
                               item['mainCategory'] = options[index];
@@ -436,9 +500,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
 
     final List<String>? selectedImageUrls = await showDialog<List<String>>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => GoogleImagePickerDialog(productName: productName)
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => GoogleImagePickerDialog(productName: productName),
     );
 
     FocusManager.instance.primaryFocus?.unfocus();
@@ -451,7 +515,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           });
           FocusManager.instance.primaryFocus?.unfocus();
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تم إرفاق صور جوجل للمنتج!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green)
+            const SnackBar(content: Text('تم إرفاق صور جوجل للمنتج!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
           );
         }
       });
@@ -474,7 +538,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
             const Divider(thickness: 2, height: 30),
             ListTile(
               leading: Icon(Icons.travel_explore, color: appSecondaryColor, size: 30),
-              title: const Text('بحث من جوجل 🌐', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+              title: const Text('بحث من جوجل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               onTap: () {
                 FocusManager.instance.primaryFocus?.unfocus();
                 Navigator.pop(ctx);
@@ -509,7 +573,11 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     decoration: InputDecoration(labelText: 'ابحث عن المنتج...', prefixIcon: Icon(Icons.search, color: appSecondaryColor), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                    onChanged: (val) { setModalState(() { currentQuery = val.toLowerCase(); }); },
+                    onChanged: (val) {
+                      setModalState(() {
+                        currentQuery = val.toLowerCase();
+                      });
+                    },
                   ),
                   const Divider(height: 30, thickness: 2),
                   Expanded(
@@ -535,22 +603,28 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                   FocusManager.instance.primaryFocus?.unfocus();
                                   Navigator.pop(ctx);
                                   Future.delayed(const Duration(milliseconds: 150), () {
-                                    if(mounted){
+                                    if (mounted) {
                                       setState(() {
                                         _extractedItems[index]['isNewProduct'] = false;
-                                        _extractedItems[index]['isAutoMatched'] = false; // ربط يدوي
+                                        _extractedItems[index]['isAutoMatched'] = false;
                                         _extractedItems[index]['mappedId'] = docs[i].id;
                                         _extractedItems[index]['mappedName'] = data['name'];
                                         String dbMain = data['category'] ?? _localTaxonomy.keys.first;
                                         String dbSub = data['subCategory'] ?? 'General';
-                                        if (!_localTaxonomy.containsKey(dbMain)) { _localTaxonomy[dbMain] = [dbSub]; }
-                                        else if (!_localTaxonomy[dbMain]!.contains(dbSub)) { _localTaxonomy[dbMain]!.add(dbSub); }
+                                        if (!_localTaxonomy.containsKey(dbMain)) {
+                                          _localTaxonomy[dbMain] = [dbSub];
+                                        } else if (!_localTaxonomy[dbMain]!.contains(dbSub)) {
+                                          _localTaxonomy[dbMain]!.add(dbSub);
+                                        }
                                         _extractedItems[index]['mainCategory'] = dbMain;
                                         _extractedItems[index]['subCategory'] = dbSub;
-                                        if (data['price'] != null) { _extractedItems[index]['sellingPrice'] = _getSafeDouble(data['price']); }
+                                        if (data['price'] != null) {
+                                          _extractedItems[index]['sellingPrice'] = _getSafeDouble(data['price']);
+                                        }
                                       });
                                     }
-                                  });
+                                  },
+                                  );
                                 },
                               ),
                             );
@@ -569,8 +643,14 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
   }
 
   Future<void> _approveAndSaveInvoice() async {
-    if (_extractedItems.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('الفاتورة فارغة!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: alertRed)); return; }
-    if (!_isAllItemsReady) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('تأكد من إكمال بيانات التصنيف لجميع الأصناف!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: alertRed)); return; }
+    if (_extractedItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('الفاتورة فارغة!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: alertRed));
+      return;
+    }
+    if (!_isAllItemsReady) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('تأكد من إكمال بيانات التصنيف لجميع الأصناف!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: alertRed));
+      return;
+    }
 
     FocusManager.instance.primaryFocus?.unfocus();
     HapticFeedback.heavyImpact();
@@ -590,8 +670,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('تم ترحيل الفاتورة بنجاح! 🎉', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: appSecondaryColor), textAlign: TextAlign.center),
-            content: const Text('تم تحديث المخزون، إنشاء القيد المحاسبي، وأرشفة الفاتورة كمسودة.', style: TextStyle(fontFamily: 'Cairo'), textAlign: TextAlign.center),
+            title: Text('تم ترحيل الفاتورة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: appSecondaryColor), textAlign: TextAlign.center),
+            content: const Text('تم تحديث المخزون، تحديث حساب المورد، وإنشاء القيد المحاسبي بنجاح.', style: TextStyle(fontFamily: 'Cairo'), textAlign: TextAlign.center),
             actionsAlignment: MainAxisAlignment.center,
             actions: [
               ElevatedButton(
@@ -613,12 +693,21 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     }
   }
 
-  void _addNewItemManually() { setState(() => _extractedItems.add(_getDefaultItem())); HapticFeedback.lightImpact(); }
-  void _removeItem(int index) { setState(() => _extractedItems.removeAt(index)); HapticFeedback.lightImpact(); }
+  void _addNewItemManually() {
+    setState(() => _extractedItems.add(_getDefaultItem()));
+    HapticFeedback.lightImpact();
+  }
+
+  void _removeItem(int index) {
+    setState(() => _extractedItems.removeAt(index));
+    HapticFeedback.lightImpact();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingCategories) { return Scaffold(backgroundColor: appBackgroundColor, body: Center(child: CircularProgressIndicator(color: appSecondaryColor))); }
+    if (_isLoadingCategories) {
+      return Scaffold(backgroundColor: appBackgroundColor, body: Center(child: CircularProgressIndicator(color: appSecondaryColor)));
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -633,7 +722,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Card(
-                  elevation: 4, shadowColor: appPrimaryColor.withOpacity(0.2), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 4,
+                  shadowColor: appPrimaryColor.withOpacity(0.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -648,12 +739,17 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                           minLines: 1,
                           style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12),
                           decoration: InputDecoration(
-                              labelText: 'اسم المورد',
-                              labelStyle: TextStyle(color: appSecondaryColor, fontSize: 12),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                              isDense: true
+                            labelText: 'اسم المورد',
+                            labelStyle: TextStyle(color: appSecondaryColor, fontSize: 12),
+                            suffixIcon: IconButton(
+                              tooltip: 'اختر من الموردين المسجلين',
+                              icon: Icon(Icons.storefront, color: appSecondaryColor, size: 20),
+                              onPressed: _showSupplierPickerModal,
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                            isDense: true,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -661,26 +757,30 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                           children: [
                             Expanded(
                               child: TextField(
-                                controller: _invoiceNoController, textAlign: TextAlign.center,
+                                controller: _invoiceNoController,
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
                                 decoration: InputDecoration(
-                                    labelText: 'رقم الفاتورة', labelStyle: TextStyle(color: appSecondaryColor, fontSize: 13),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                                    isDense: true
+                                  labelText: 'رقم الفاتورة',
+                                  labelStyle: TextStyle(color: appSecondaryColor, fontSize: 13),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                                  isDense: true,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: TextField(
-                                controller: _dateController, textAlign: TextAlign.center,
+                                controller: _dateController,
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13),
                                 readOnly: true,
                                 onTap: () => _selectDate(context),
                                 decoration: InputDecoration(
-                                  labelText: 'تاريخ الفاتورة', labelStyle: TextStyle(color: appSecondaryColor, fontSize: 13),
+                                  labelText: 'تاريخ الفاتورة',
+                                  labelStyle: TextStyle(color: appSecondaryColor, fontSize: 13),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                                   suffixIcon: Icon(Icons.calendar_month, color: appSecondaryColor, size: 18),
@@ -698,7 +798,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                 const SizedBox(height: 16),
 
                 ListView.builder(
-                  shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: _extractedItems.length,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _extractedItems.length,
                   itemBuilder: (context, index) {
                     final item = _extractedItems[index];
                     bool isNew = item['isNewProduct'];
@@ -709,7 +811,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
                     return Card(
                       key: ValueKey(item['_id']),
-                      color: Colors.white, margin: const EdgeInsets.only(bottom: 16), elevation: 3,
+                      color: Colors.white,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      elevation: 3,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cardBorderColor, width: 2)),
                       child: Padding(
                         padding: const EdgeInsets.all(14.0),
@@ -729,19 +833,33 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 if (isNew)
                                   OutlinedButton.icon(
                                     style: OutlinedButton.styleFrom(foregroundColor: appSecondaryColor, side: BorderSide(color: appSecondaryColor, width: 1.5), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), minimumSize: const Size(0, 32), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                                    icon: const Icon(Icons.link, size: 16), label: const Text('صنف مسجل', style: TextStyle(fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                    icon: const Icon(Icons.link, size: 16),
+                                    label: const Text('صنف مسجل', style: TextStyle(fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                                     onPressed: () => _showProductSearchModal(index),
                                   )
                                 else
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: successGreen.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(color: successGreen.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(isAutoMatched ? Icons.auto_awesome : Icons.check_circle, size: 16, color: successGreen), const SizedBox(width: 6),
-                                        // 👈 التنبيه الاحترافي
-                                        Text(isAutoMatched ? 'تم التعرف تلقائياً 🤖' : 'مربوط بصنف مسجل', style: TextStyle(fontSize: 12, color: successGreen, fontWeight: FontWeight.bold, fontFamily: 'Cairo')), const SizedBox(width: 8),
-                                        InkWell(onTap: () { FocusManager.instance.primaryFocus?.unfocus(); setState(() { item['isNewProduct'] = true; item['isAutoMatched'] = false; item['mappedId'] = null; item['mappedName'] = item['rawAiName']; }); }, child: const Icon(Icons.close, size: 18, color: Colors.red))
+                                        Icon(isAutoMatched ? Icons.auto_awesome : Icons.check_circle, size: 16, color: successGreen),
+                                        const SizedBox(width: 6),
+                                        Text(isAutoMatched ? 'تم التعرف تلقائياً' : 'مربوط بصنف مسجل', style: TextStyle(fontSize: 12, color: successGreen, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          onTap: () {
+                                            FocusManager.instance.primaryFocus?.unfocus();
+                                            setState(() {
+                                              item['isNewProduct'] = true;
+                                              item['isAutoMatched'] = false;
+                                              item['mappedId'] = null;
+                                              item['mappedName'] = item['rawAiName'];
+                                            });
+                                          },
+                                          child: const Icon(Icons.close, size: 18, color: Colors.red),
+                                        )
                                       ],
                                     ),
                                   ),
@@ -755,7 +873,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 GestureDetector(
                                   onTap: isNew ? () => _showImagePickerOptions(index) : null,
                                   child: Container(
-                                    width: 70, height: 70, decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10), border: Border.all(color: isNew ? appSecondaryColor : Colors.grey.shade300, width: 1.5)),
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10), border: Border.all(color: isNew ? appSecondaryColor : Colors.grey.shade300, width: 1.5)),
                                     child: images.isNotEmpty
                                         ? ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(images.first, fit: BoxFit.cover))
                                         : Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.image_search, color: isNew ? appSecondaryColor : Colors.grey, size: 24), const SizedBox(height: 4), Text('صورة', style: TextStyle(fontSize: 10, color: isNew ? appSecondaryColor : Colors.grey, fontFamily: 'Cairo'))]),
@@ -764,7 +884,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['mappedName'], textAlign: TextAlign.center,
+                                    initialValue: item['mappedName'],
+                                    textAlign: TextAlign.center,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                     decoration: InputDecoration(
                                       labelText: isNew ? 'اسم الصنف الجديد' : 'الصنف (مقفل)',
@@ -776,7 +897,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                       isDense: true,
                                       contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                                     ),
-                                    readOnly: !isNew, onChanged: (val) => setState(() => item['mappedName'] = val),
+                                    readOnly: !isNew,
+                                    onChanged: (val) => setState(() => item['mappedName'] = val),
                                   ),
                                 ),
                               ],
@@ -787,7 +909,10 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               children: [
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['price'].toString(), keyboardType: TextInputType.number, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    initialValue: item['price'].toString(),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     decoration: InputDecoration(labelText: 'سعر الشراء', prefixText: 'EGP ', isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))),
                                     onChanged: (val) => setState(() => item['price'] = double.tryParse(val) ?? 0.0),
                                   ),
@@ -795,7 +920,10 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['sellingPrice'].toString(), keyboardType: TextInputType.number, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: appSecondaryColor),
+                                    initialValue: item['sellingPrice'].toString(),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: appSecondaryColor),
                                     decoration: InputDecoration(labelText: 'سعر البيع المقترح', prefixText: 'EGP ', isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))),
                                     onChanged: (val) => setState(() => item['sellingPrice'] = double.tryParse(val) ?? 0.0),
                                   ),
@@ -808,11 +936,16 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               children: [
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['qty'].toString(), keyboardType: TextInputType.number, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
+                                    initialValue: item['qty'].toString(),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
                                     decoration: InputDecoration(
-                                        labelText: 'الكمية الواردة',
-                                        labelStyle: const TextStyle(fontSize: 12),
-                                        isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))
+                                      labelText: 'الكمية الواردة',
+                                      labelStyle: const TextStyle(fontSize: 12),
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                                     ),
                                     onChanged: (val) => setState(() => item['qty'] = int.tryParse(val) ?? 1),
                                   ),
@@ -820,12 +953,17 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['conversionFactor'].toString(), keyboardType: TextInputType.number, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13),
+                                    initialValue: item['conversionFactor'].toString(),
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 13),
                                     decoration: InputDecoration(
-                                        labelText: 'الكرتونة (كام قطعة؟)',
-                                        labelStyle: const TextStyle(fontSize: 12),
-                                        hintText: 'مثال: 12',
-                                        isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))
+                                      labelText: 'الكرتونة (كام قطعة؟)',
+                                      labelStyle: const TextStyle(fontSize: 12),
+                                      hintText: 'مثال: 12',
+                                      isDense: true,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                                     ),
                                     onChanged: (val) => item['conversionFactor'] = int.tryParse(val) ?? 1,
                                   ),
@@ -835,7 +973,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                             const SizedBox(height: 12),
 
                             Container(
-                              padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: appPrimaryColor.withOpacity(0.02), border: Border.all(color: appSecondaryColor.withOpacity(0.4)), borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: appPrimaryColor.withOpacity(0.02), border: Border.all(color: appSecondaryColor.withOpacity(0.4)), borderRadius: BorderRadius.circular(10)),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -907,9 +1046,13 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: OutlinedButton.icon(
-                    onPressed: () { FocusManager.instance.primaryFocus?.unfocus(); _addNewItemManually(); },
+                    onPressed: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      _addNewItemManually();
+                    },
                     style: OutlinedButton.styleFrom(foregroundColor: appPrimaryColor, side: BorderSide(color: appPrimaryColor, width: 2), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    icon: const Icon(Icons.add), label: const Text('إضافة صنف جديد للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة صنف جديد للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
 

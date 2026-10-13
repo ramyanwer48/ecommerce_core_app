@@ -19,6 +19,12 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
 
+  double _parseSafeDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
   Stream<QuerySnapshot> _getPurchasesStream() {
     Query query = FirebaseFirestore.instance
         .collection('purchases')
@@ -63,20 +69,20 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
             scaffoldBackgroundColor: Colors.white,
             dialogBackgroundColor: Colors.white,
             colorScheme: ColorScheme.light(
-              primary: brandOrange, // لون تحديد الأيام
-              onPrimary: Colors.white, // لون النص داخل الأيام المحددة
-              surface: Colors.white, // خلفية الكالندر
-              onSurface: primaryNavy, // لون أرقام الأيام العادية
+              primary: brandOrange,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: primaryNavy,
             ),
             appBarTheme: AppBarTheme(
               backgroundColor: Colors.white,
-              foregroundColor: primaryNavy, // لون النص والأيقونات في الأعلى
+              foregroundColor: primaryNavy,
               elevation: 0,
               iconTheme: IconThemeData(color: primaryNavy),
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: brandOrange, // لون الأزرار السفلية (تأكيد / إلغاء)
+                foregroundColor: brandOrange,
                 textStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
@@ -101,131 +107,140 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
     List<dynamic> items = data['items'] ?? [];
 
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) {
-          return Directionality(
-            textDirection: TextDirection.rtl,
-            child: Container(
-              height: MediaQuery.of(context).size.height * 0.85,
-              padding: const EdgeInsets.only(top: 16),
-              decoration: const BoxDecoration(color: Color(0xFFF5F7FA), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-              child: Column(
-                children: [
-                  Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-                  const SizedBox(height: 16),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('فاتورة رقم: ${data['invoiceNumber']}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                            Text(_formatDate(data['date'] as Timestamp?), style: const TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 12)),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
-                          child: Text('معتمدة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.green.shade700, fontSize: 12)),
-                        )
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 30),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: brandOrange.withOpacity(0.5))),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Text('المورد', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-                                Text(
-                                  data['supplierName'] ?? 'غير معروف',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryNavy.withOpacity(0.1))),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Text('الإجمالي', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-                                Text('${_formatMoney((data['totalAmount'] ?? 0).toDouble())} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: Align(alignment: Alignment.centerRight, child: Text('الأصناف الواردة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)))),
-                  const SizedBox(height: 8),
-
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index] as Map<String, dynamic>;
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(item['productName'] ?? 'صنف غير معروف', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('الكمية: ${item['quantity']} (الكرتونة: ${item['conversionFactor']})', style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-                                    Text('سعر الوحدة: ${_formatMoney((item['costPerPiece'] ?? 0).toDouble())} ج', style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.teal)),
-                                  ],
-                                ),
-                                const Divider(height: 16),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('إجمالي السطر:', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold, color: primaryNavy)),
-                                    Text('${_formatMoney((item['totalCost'] ?? 0).toDouble())} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange)),
-                                  ],
-                                )
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            padding: const EdgeInsets.only(top: 16),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F7FA),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-          );
-        }
+            child: Column(
+              children: [
+                Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 16),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('فاتورة رقم: ${data['invoiceNumber']}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
+                          Text(_formatDate(data['date'] as Timestamp?), style: const TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontSize: 12)),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                        child: Text('معتمدة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.green.shade700, fontSize: 12)),
+                      )
+                    ],
+                  ),
+                ),
+                const Divider(height: 30),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: brandOrange.withOpacity(0.5))),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text('المورد', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+                              Text(
+                                data['supplierName'] ?? 'غير معروف',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: primaryNavy.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: primaryNavy.withOpacity(0.1))),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text('الإجمالي', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+                              Text('${_formatMoney(_parseSafeDouble(data['totalAmount']))} ج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('الأصناف الواردة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index] as Map<String, dynamic>;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item['productName'] ?? 'صنف غير معروف', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('الكمية: ${item['quantity']} (الكرتونة: ${item['conversionFactor']})', style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+                                  Text('سعر الوحدة: ${_formatMoney(_parseSafeDouble(item['costPerPiece']))} ج', style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.teal)),
+                                ],
+                              ),
+                              const Divider(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('إجمالي السطر:', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold, color: primaryNavy)),
+                                  Text('${_formatMoney(_parseSafeDouble(item['totalCost']))} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: brandOrange)),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -275,7 +290,6 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                   ),
                   const SizedBox(width: 12),
 
-                  // زر إلغاء الفلتر (X) - يظهر فقط إذا كان هناك فلتر نشط
                   if (hasFilter) ...[
                     InkWell(
                       onTap: () {
@@ -299,7 +313,6 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                     const SizedBox(width: 8),
                   ],
 
-                  // زر فتح الكالندر (Date Range)
                   InkWell(
                     onTap: _pickDateRange,
                     borderRadius: BorderRadius.circular(12),
@@ -349,7 +362,7 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                   // حساب إجمالي قيمة الفواتير المعروضة
                   double totalSum = docs.fold(0, (sum, doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    return sum + (data['totalAmount'] ?? 0).toDouble();
+                    return sum + _parseSafeDouble(data['totalAmount']);
                   });
 
                   return Column(
@@ -411,9 +424,9 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                                data['supplierName'] ?? 'مورد غير معروف',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: brandOrange)
+                                              data['supplierName'] ?? 'مورد غير معروف',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: brandOrange),
                                             ),
                                           ),
                                         ],
@@ -434,7 +447,7 @@ class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> {
                                               ),
                                             ],
                                           ),
-                                          Text('${_formatMoney((data['totalAmount'] ?? 0).toDouble())} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
+                                          Text('${_formatMoney(_parseSafeDouble(data['totalAmount']))} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: primaryNavy)),
                                         ],
                                       )
                                     ],

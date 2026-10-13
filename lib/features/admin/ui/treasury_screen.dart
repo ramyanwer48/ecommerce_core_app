@@ -29,24 +29,30 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  double _parseSafeDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
   void _showCustomSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(isError ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(child: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14))),
-            ],
-          ),
-          backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-          duration: const Duration(seconds: 3),
-          elevation: 6,
-        )
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(isError ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14))),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red.shade800 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
+        duration: const Duration(seconds: 3),
+        elevation: 6,
+      ),
     );
   }
 
@@ -87,100 +93,115 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Directionality(
-              textDirection: TextDirection.rtl,
-              child: Container(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
-                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle), child: const Icon(Icons.money_off_rounded, color: Colors.red, size: 20)),
-                              const SizedBox(width: 12),
-                              Text('تسجيل مصروف جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 16)),
-                            ],
-                          ),
-                          IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
-                        ],
-                      ),
-                      const Divider(),
-                      const SizedBox(height: 10),
-
-                      TextField(
-                        controller: amountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red),
-                        textAlign: TextAlign.center,
-                        decoration: InputDecoration(
-                          labelText: 'المبلغ (ج.م)',
-                          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 2)),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: const Icon(Icons.attach_money),
+        builder: (context, setSheetState) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Container(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle), child: const Icon(Icons.money_off_rounded, color: Colors.red, size: 20)),
+                            const SizedBox(width: 12),
+                            Text('تسجيل مصروف جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: primaryNavy, fontSize: 16)),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: noteCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'بند المصروف والبيان',
-                          hintText: 'مثال: كهرباء، بوفيه، رواتب...',
-                          labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 2)),
-                          prefixIcon: const Icon(Icons.notes),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+                        IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                    const Divider(),
+                    const SizedBox(height: 10),
 
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        onPressed: isSaving ? null : () async {
-                          double amount = double.tryParse(amountCtrl.text) ?? 0.0;
-                          String note = noteCtrl.text.trim();
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        labelText: 'المبلغ (ج.م)',
+                        labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 2)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.attach_money),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'بند المصروف والبيان',
+                        hintText: 'مثال: كهرباء، بوفيه، رواتب...',
+                        labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red, width: 2)),
+                        prefixIcon: const Icon(Icons.notes),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
-                          if (amount <= 0 || note.isEmpty) {
-                            _showCustomSnackBar('يرجى إدخال المبلغ والبيان', isError: true);
-                            return;
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                        double amount = double.tryParse(amountCtrl.text) ?? 0.0;
+                        String note = noteCtrl.text.trim();
+
+                        if (amount <= 0 || note.isEmpty) {
+                          _showCustomSnackBar('يرجى إدخال المبلغ والبيان', isError: true);
+                          return;
+                        }
+
+                        setSheetState(() => isSaving = true);
+                        try {
+                          WriteBatch batch = _firestore.batch();
+                          DocumentReference ledgerRef = _firestore.collection('ledger_entries').doc();
+                          DocumentReference expenseRef = _firestore.collection('expenses').doc(ledgerRef.id);
+
+                          Map<String, dynamic> expenseData = {
+                            'id': ledgerRef.id,
+                            'type': 'expense',
+                            'transactionType': 'expense',
+                            'amount': amount,
+                            'date': FieldValue.serverTimestamp(),
+                            'timestamp': FieldValue.serverTimestamp(),
+                            'note': note,
+                            'description': note,
+                            'partnerName': 'مصروفات تشغيلية',
+                          };
+
+                          batch.set(ledgerRef, expenseData);
+                          batch.set(expenseRef, expenseData);
+                          await batch.commit();
+
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            _showCustomSnackBar('تم تسجيل المصروف وخصمه من الخزينة بنجاح');
                           }
-
-                          setSheetState(() => isSaving = true);
-                          try {
-                            await _firestore.collection('ledger_entries').add({
-                              'type': 'expense',
-                              'amount': amount,
-                              'date': FieldValue.serverTimestamp(),
-                              'note': note,
-                              'partnerName': 'مصروفات تشغيلية',
-                            });
-                            if (ctx.mounted) {
-                              Navigator.pop(ctx);
-                              _showCustomSnackBar('تم تسجيل المصروف وخصمه من الخزينة بنجاح');
-                            }
-                          } catch (e) {
-                            setSheetState(() => isSaving = false);
-                            _showCustomSnackBar('حدث خطأ أثناء الحفظ', isError: true);
-                          }
-                        },
-                        child: isSaving
-                            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('حفظ وخصم من الخزينة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+                        } catch (e) {
+                          setSheetState(() => isSaving = false);
+                          _showCustomSnackBar('حدث خطأ أثناء الحفظ', isError: true);
+                        }
+                      },
+                      child: isSaving
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('حفظ وخصم من الخزينة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-            );
-          }
+            ),
+          );
+        },
       ),
     );
   }
@@ -208,7 +229,8 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 ),
                 if (_selectedDateRange != null)
                   Positioned(
-                    top: 10, right: 10,
+                    top: 10,
+                    right: 10,
                     child: Container(width: 8, height: 8, decoration: BoxDecoration(color: brandOrange, shape: BoxShape.circle)),
                   )
               ],
@@ -232,7 +254,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
           stream: _firestore.collection('orders').where('status', isNotEqualTo: 'Cancelled').snapshots(),
           builder: (context, ordersSnap) {
             return StreamBuilder<QuerySnapshot>(
-              stream: _firestore.collection('ledger_entries').orderBy('date', descending: true).snapshots(),
+              stream: _firestore.collection('ledger_entries').snapshots(),
               builder: (context, ledgerSnap) {
                 if (ordersSnap.connectionState == ConnectionState.waiting || ledgerSnap.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator(color: brandOrange));
@@ -243,8 +265,8 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 for (var doc in ordersSnap.data?.docs ?? []) {
                   var data = doc.data() as Map<String, dynamic>;
                   if (_isWithinDateRange(data['createdAt'] ?? data['orderDate'])) {
-                    totalRevenues += double.tryParse((data['totalPrice'] ?? data['totalAmount'] ?? 0).toString()) ?? 0;
-                    totalCOGS += double.tryParse((data['totalCostPrice'] ?? 0).toString()) ?? 0;
+                    totalRevenues += _parseSafeDouble(data['totalPrice'] ?? data['totalAmount']);
+                    totalCOGS += _parseSafeDouble(data['totalCostPrice']);
                   }
                 }
 
@@ -254,13 +276,27 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 List<QueryDocumentSnapshot> allMovements = [];
                 List<QueryDocumentSnapshot> expenseMovements = [];
 
-                for (var doc in ledgerSnap.data?.docs ?? []) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  String type = data['type'] ?? '';
-                  double amount = double.tryParse((data['amount'] ?? 0).toString()) ?? 0.0;
+                var ledgerDocs = ledgerSnap.data?.docs.toList() ?? [];
+                ledgerDocs.sort((a, b) {
+                  var dA = a.data() as Map<String, dynamic>;
+                  var dB = b.data() as Map<String, dynamic>;
+                  Timestamp? tA = (dA['date'] ?? dA['timestamp'] ?? dA['createdAt']) as Timestamp?;
+                  Timestamp? tB = (dB['date'] ?? dB['timestamp'] ?? dB['createdAt']) as Timestamp?;
+                  if (tA == null && tB == null) return 0;
+                  if (tA == null) return 1;
+                  if (tB == null) return -1;
+                  return tB.compareTo(tA);
+                });
 
-                  if (_isWithinDateRange(data['date'] ?? data['createdAt'])) {
-                    if (type != 'sale' && type != 'purchase') {
+                for (var doc in ledgerDocs) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  String type = (data['type'] ?? '').toString();
+                  double amount = _parseSafeDouble(data['amount']);
+                  Timestamp? docDate = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;
+
+                  if (_isWithinDateRange(docDate)) {
+                    bool isCashMovement = type == 'receipt' || type == 'income' || type == 'expense' || type == 'payment';
+                    if (isCashMovement && amount > 0) {
                       allMovements.add(doc);
                     }
                     if (type == 'expense' || type == 'payment') {
@@ -280,7 +316,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
 
                 return Column(
                   children: [
-                    // شريط التبويبات فوق خالص
                     Container(
                       color: Colors.white,
                       child: TabBar(
@@ -317,7 +352,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 1. تبويب الأرباح والخسائر (البطل هنا: صافي الربح الفعلي)
+  // 1. تبويب الأرباح والخسائر
   Widget _buildProfitAndLossTab(double rev, double cogs, double gross, double exp, double net) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -328,9 +363,9 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             padding: const EdgeInsets.all(20),
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-                gradient: LinearGradient(colors: net >= 0 ? [Colors.green.shade700, Colors.green.shade500] : [Colors.red.shade800, Colors.red.shade600]),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 5))]
+              gradient: LinearGradient(colors: net >= 0 ? [Colors.green.shade700, Colors.green.shade500] : [Colors.red.shade800, Colors.red.shade600]),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 5))],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -366,7 +401,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 2. تبويب السيولة النقدية (البطل هنا: رصيد الخزينة الحالي بلون مميز كحلي/أزرق بترولي)
+  // 2. تبويب السيولة النقدية
   Widget _buildCashFlowTab(double cashIn, double cashOut, double net, List<QueryDocumentSnapshot> movements, double totalExpenses) {
     return Column(
       children: [
@@ -375,15 +410,14 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
           color: Colors.white,
           child: Column(
             children: [
-              // 🚀 رصيد الخزينة الحالي في القمة وبلون مميز (Blue Grey / Slate)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF1B3B4B), Color(0xFF1D3557)], begin: Alignment.topLeft, end: Alignment.bottomRight), // لون كحلي بترولي فخم // لون كحلي بترولي فخم
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 5))]
+                  gradient: const LinearGradient(colors: [Color(0xFF1B3B4B), Color(0xFF1D3557)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 5))],
                 ),
                 child: Column(
                   children: [
@@ -425,13 +459,14 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             itemBuilder: (context, index) {
               final data = movements[index].data() as Map<String, dynamic>;
               String type = data['type'] ?? '';
-              double amount = double.tryParse((data['amount'] ?? 0).toString()) ?? 0.0;
-              String note = data['note'] ?? 'بدون بيان';
+              double amount = _parseSafeDouble(data['amount']);
+              String note = data['note'] ?? data['description'] ?? 'بدون بيان';
               String partner = data['partnerName'] ?? '';
               bool isIncome = (type == 'receipt' || type == 'income');
 
               DateTime date = DateTime.now();
-              if (data['date'] != null) date = (data['date'] as Timestamp).toDate();
+              Timestamp? ts = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;
+              if (ts != null) date = ts.toDate();
               String dateStr = DateFormat('yyyy/MM/dd | hh:mm a').format(date);
 
               return Card(
@@ -439,10 +474,16 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 margin: const EdgeInsets.only(bottom: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
                 child: ListTile(
-                  leading: CircleAvatar(backgroundColor: isIncome ? Colors.green.shade50 : Colors.red.shade50, child: Icon(isIncome ? Icons.arrow_downward : Icons.arrow_upward, color: isIncome ? Colors.green : Colors.red, size: 20)),
+                  leading: CircleAvatar(
+                    backgroundColor: isIncome ? Colors.green.shade50 : Colors.red.shade50,
+                    child: Icon(isIncome ? Icons.arrow_downward : Icons.arrow_upward, color: isIncome ? Colors.green : Colors.red, size: 20),
+                  ),
                   title: Text(note, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text('$partner • $dateStr', style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
-                  trailing: Text('${isIncome ? '+' : '-'}${amount.toStringAsFixed(2)}', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isIncome ? Colors.green : Colors.red, fontSize: 14)),
+                  subtitle: Text('$partner - $dateStr', style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
+                  trailing: Text(
+                    '${isIncome ? '+' : '-'}${amount.toStringAsFixed(2)}',
+                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isIncome ? Colors.green : Colors.red, fontSize: 14),
+                  ),
                 ),
               );
             },
@@ -452,7 +493,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 3. تبويب سجل المصروفات (البطل هنا: إجمالي المصروفات في القمة بلون أحمر هادئ فخم)
+  // 3. تبويب سجل المصروفات
   Widget _buildExpensesTab(List<QueryDocumentSnapshot> expenses, double totalExpenses) {
     return Column(
       children: [
@@ -461,10 +502,10 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
           padding: const EdgeInsets.all(20),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.red.shade200, width: 1.5),
-              boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))]
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.red.shade200, width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
           ),
           child: Column(
             children: [
@@ -490,9 +531,9 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             itemBuilder: (context, index) {
               var doc = expenses[index];
               var data = doc.data() as Map<String, dynamic>;
-              double amount = double.tryParse((data['amount'] ?? 0).toString()) ?? 0;
-              String note = data['note'] ?? 'مصروف غير محدد';
-              Timestamp? dateTs = data['date'];
+              double amount = _parseSafeDouble(data['amount']);
+              String note = data['note'] ?? data['description'] ?? 'مصروف غير محدد';
+              Timestamp? dateTs = (data['date'] ?? data['timestamp']) as Timestamp?;
               String dateStr = dateTs != null ? DateFormat('yyyy/MM/dd | hh:mm a').format(dateTs.toDate()) : '';
 
               return Card(
@@ -511,26 +552,29 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                         icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                         onPressed: () {
                           showDialog(
-                              context: context,
-                              builder: (ctx) => Directionality(
-                                textDirection: TextDirection.rtl,
-                                child: AlertDialog(
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  title: const Text('إلغاء المصروف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                  content: const Text('هل أنت متأكد من حذف هذا المصروف؟\nسيتم إعادة المبلغ لعهدة الخزينة.', style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('رجوع', style: TextStyle(fontFamily: 'Cairo'))),
-                                    TextButton(
-                                        onPressed: () {
-                                          _firestore.collection('ledger_entries').doc(doc.id).delete();
-                                          Navigator.pop(ctx);
-                                          _showCustomSnackBar('تم حذف المصروف ورد المبلغ للخزينة بنجاح');
-                                        },
-                                        child: const Text('حذف واسترداد', style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold))
-                                    ),
-                                  ],
-                                ),
-                              )
+                            context: context,
+                            builder: (ctx) => Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: AlertDialog(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                title: const Text('إلغاء المصروف', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                content: const Text('هل أنت متأكد من حذف هذا المصروف؟\nسيتم إعادة المبلغ لعهدة الخزينة.', style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('رجوع', style: TextStyle(fontFamily: 'Cairo'))),
+                                  TextButton(
+                                    onPressed: () async {
+                                      WriteBatch batch = _firestore.batch();
+                                      batch.delete(_firestore.collection('ledger_entries').doc(doc.id));
+                                      batch.delete(_firestore.collection('expenses').doc(doc.id));
+                                      await batch.commit();
+                                      if (ctx.mounted) Navigator.pop(ctx);
+                                      _showCustomSnackBar('تم حذف المصروف ورد المبلغ للخزينة بنجاح');
+                                    },
+                                    child: const Text('حذف واسترداد', style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           );
                         },
                       )

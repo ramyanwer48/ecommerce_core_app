@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import '../logic/partners_profit_cubit.dart';
 import '../logic/partners_profit_state.dart';
+import '../../../core/widgets/custom_date_range_filter.dart';
+import '../../../core/models/erp_models.dart';
 
 class PartnersManagementScreen extends StatefulWidget {
   const PartnersManagementScreen({super.key});
@@ -14,111 +16,506 @@ class PartnersManagementScreen extends StatefulWidget {
 }
 
 class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
-  // قائمة الشركاء
-  final List<Map<String, dynamic>> _localPartners = [
-    {
-      'name': 'رامي',
-      'capital': 100000.0,
-      'isManagementActive': true,
-      'managementShare': 15.0,
-      'imagePath': null,
-    },
-    {
-      'name': 'عبدالله',
-      'capital': 100000.0,
-      'isManagementActive': true,
-      'managementShare': 15.0,
-      'imagePath': null,
-    }
-  ];
+  final PartnersProfitCubit _profitCubit = PartnersProfitCubit();
+
+  // الكوليكشن المستقل للشركاء المؤسسين والكوليكشن الموحد للأستاذ العام
+  static const String _shareholdersCollection = 'shareholders';
+  static const String _ledgerEntriesCollection = 'ledger_entries';
+
   double _currentManagementPool = 30.0;
+
+  double _totalSalesAmount = 0.0;
+  double _totalExpensesAmount = 0.0;
   double _fetchedNetOperatingProfit = 0.0;
-  bool _isLoadingProfit = true;
+
+  bool _isLoadingData = true;
+  bool _needsMigration = false;
+
+  List<PartnerModel> _firebasePartners = [];
+  List<LedgerEntryModel> _firebaseLedgers = [];
+
+  final Map<String, double> _partnerDirectCapital = {};
+  Map<String, dynamic> _calculatedResultsMap = {};
+  final Map<String, String?> _localImages = {};
+
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
 
   @override
   void initState() {
     super.initState();
-    _calculateRealNetProfitFromFirebase();
+    final now = DateTime.now();
+    _filterStartDate = DateTime(now.year, now.month, 1);
+    _filterEndDate = DateTime(now.year, now.month + 1, 0);
+
+    _fetchAllDataFromFirebase();
   }
 
-  // جلب الحسابات الفعلية للربح التشغيلي من Firebase
-  Future<void> _calculateRealNetProfitFromFirebase() async {
+  @override
+  void dispose() {
+    _profitCubit.close();
+    super.dispose();
+  }
+
+  DateTime _parseSafeDate(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
+  }
+
+  double _parseSafeDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0.0;
+  }
+
+  /// ترحيل وفصل الشركاء إلى (shareholders) والعملاء إلى (customers) والموردين إلى (suppliers) وحذف (partners) نهائياً
+  Future<void> _migrateAndCleanFirebaseStructure() async {
+    setState(() => _isLoadingData = true);
     try {
-      var ordersSnap = await FirebaseFirestore.instance.collection('orders').get();
-      double totalSales = 0;
-      for (var doc in ordersSnap.docs) {
-        var data = doc.data();
-        totalSales += double.tryParse((data['totalPrice'] ?? data['totalAmount'] ?? 0).toString()) ?? 0.0;
+      final firestore = FirebaseFirestore.instance;
+
+      // 1. قراءة أرصدة رؤوس الأموال من ledger_entries
+      var allLedgersSnap = await firestore.collection(_ledgerEntriesCollection).get();
+      Map<String, double> accountCapitalMap = {};
+      for (var doc in allLedgersSnap.docs) {
+        var d = doc.data();
+        String accId = (d['accountId'] ?? d['partnerId'] ?? '').toString();
+        double credit = _parseSafeDouble(d['credit'] ?? d['amount']);
+        double debit = _parseSafeDouble(d['debit']);
+        if (accId.isNotEmpty) {
+          accountCapitalMap[accId] = (accountCapitalMap[accId] ?? 0.0) + (credit - debit);
+        }
       }
 
-      var salesInvoicesSnap = await FirebaseFirestore.instance.collection('sales_invoices').get();
-      for (var doc in salesInvoicesSnap.docs) {
+      // 2. فحص كوليكشن partners وتوزيع كل مستند إلى مكانه الصحيح ثم حذفه من partners
+      var oldPartnersSnap = await firestore.collection('partners').get();
+      Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> uniqueShareholdersByName = {};
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> duplicatePartnerDocs = [];
+
+      for (var doc in oldPartnersSnap.docs) {
         var data = doc.data();
-        totalSales += double.tryParse((data['totalAmount'] ?? data['totalPrice'] ?? 0).toString()) ?? 0.0;
+        String type = (data['type'] ?? '').toString().trim().toLowerCase();
+        String name = (data['name'] ?? '').toString().trim();
+
+        if (type == 'customer') {
+          // نقل العميل إلى كوليكشن customers بنفس الـ ID وحذفه من partners
+          await firestore.collection('customers').doc(doc.id).set(data, SetOptions(merge: true));
+          await doc.reference.delete();
+        } else if (type == 'supplier') {
+          // نقل المورد إلى كوليكشن suppliers بنفس الـ ID وحذفه من partners
+          await firestore.collection('suppliers').doc(doc.id).set(data, SetOptions(merge: true));
+          await doc.reference.delete();
+        } else if (type == 'partner' || data.containsKey('managementRatio')) {
+          if (name == 'رامب' || name.isEmpty) {
+            await doc.reference.delete();
+            continue;
+          }
+
+          if (!uniqueShareholdersByName.containsKey(name)) {
+            uniqueShareholdersByName[name] = doc;
+          } else {
+            var existingDoc = uniqueShareholdersByName[name]!;
+            double existingCap = (accountCapitalMap[existingDoc.id] ?? 0.0) +
+                _parseSafeDouble(existingDoc.data()['capital']);
+            double currentCap = (accountCapitalMap[doc.id] ?? 0.0) +
+                _parseSafeDouble(doc.data()['capital']);
+
+            if (currentCap > existingCap) {
+              duplicatePartnerDocs.add(existingDoc);
+              uniqueShareholdersByName[name] = doc;
+            } else {
+              duplicatePartnerDocs.add(doc);
+            }
+          }
+        } else {
+          // أي مستند مؤرشف أو غير مصنف يتم حذفه لتنظيف الكوليكشن بالكامل
+          await doc.reference.delete();
+        }
       }
 
-      var purchasesSnap = await FirebaseFirestore.instance.collection('purchases').get();
-      double totalPurchases = 0;
-      for (var doc in purchasesSnap.docs) {
-        var data = doc.data();
-        totalPurchases += double.tryParse((data['totalAmount'] ?? data['totalCost'] ?? 0).toString()) ?? 0.0;
+      // 3. نقل الشركاء المؤسسين إلى كوليكشن shareholders المستقل وحذفهم من partners
+      for (var entry in uniqueShareholdersByName.entries) {
+        var doc = entry.value;
+        var data = Map<String, dynamic>.from(doc.data());
+        double cap = (accountCapitalMap[doc.id] ?? 0.0) > 0
+            ? accountCapitalMap[doc.id]!
+            : _parseSafeDouble(data['capital']);
+
+        data['type'] = 'partner';
+        data['capital'] = cap;
+        data['joinDate'] = data['joinDate'] ?? data['createdAt'] ?? FieldValue.serverTimestamp();
+
+        await firestore.collection(_shareholdersCollection).doc(doc.id).set(data);
+        await doc.reference.delete();
       }
 
-      var expensesSnap = await FirebaseFirestore.instance.collection('expenses').get();
-      double totalExpenses = 0;
-      for (var doc in expensesSnap.docs) {
-        var data = doc.data();
-        totalExpenses += double.tryParse((data['amount'] ?? 0).toString()) ?? 0.0;
+      // 4. حذف أي نسخ مكررة للشركاء من partners
+      for (var dupDoc in duplicatePartnerDocs) {
+        await dupDoc.reference.delete();
       }
 
-      setState(() {
-        _fetchedNetOperatingProfit = totalSales - (totalPurchases + totalExpenses);
-        _isLoadingProfit = false;
-      });
+      _showSuccessMessage('تم نقل الشركاء لـ (shareholders) والعملاء لـ (customers) والموردين لـ (suppliers) بنجاح!');
+      await _fetchAllDataFromFirebase();
     } catch (e) {
-      setState(() {
-        _isLoadingProfit = false;
-      });
-      debugPrint("Error calculating profit: $e");
+      setState(() => _isLoadingData = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ أثناء الترحيل: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  // اختيار وتغيير صورة الشريك
-  Future<void> _pickPartnerImage(int index) async {
+  Future<void> _fetchAllDataFromFirebase() async {
+    if (!mounted) return;
+    setState(() => _isLoadingData = true);
+
+    double totalSales = 0.0;
+    double totalPurchases = 0.0;
+    double totalExpenses = 0.0;
+    List<PartnerModel> fetchedPartners = [];
+    List<LedgerEntryModel> fetchedLedgers = [];
+    _partnerDirectCapital.clear();
+
+    final firestore = FirebaseFirestore.instance;
+
+    // 1. جلب المبيعات من الكوليكشنز المصرح بها في الـ Rules (orders و invoices)
+    try {
+      var ordersSnap = await firestore.collection('orders').get();
+      for (var doc in ordersSnap.docs) {
+        var data = doc.data();
+        totalSales += _parseSafeDouble(data['totalPrice'] ?? data['totalAmount']);
+      }
+    } catch (_) {}
+
+    try {
+      var invoicesSnap = await firestore.collection('invoices').get();
+      for (var doc in invoicesSnap.docs) {
+        var data = doc.data();
+        totalSales += _parseSafeDouble(data['totalAmount'] ?? data['totalPrice']);
+      }
+    } catch (_) {}
+
+    // 2. جلب المشتريات والمصروفات
+    try {
+      var purchasesSnap = await firestore.collection('purchases').get();
+      for (var doc in purchasesSnap.docs) {
+        var data = doc.data();
+        totalPurchases += _parseSafeDouble(data['totalAmount'] ?? data['totalCost']);
+      }
+    } catch (_) {}
+
+    try {
+      var expensesSnap = await firestore.collection('expenses').get();
+      for (var doc in expensesSnap.docs) {
+        var data = doc.data();
+        totalExpenses += _parseSafeDouble(data['amount']);
+      }
+    } catch (_) {}
+
+    // 3. فحص ما إذا كان كوليكشن partners القديم لا يزال يحتوي على أي مستندات (شركاء أو عملاء أو موردين)
+    bool hasUnmigratedEntities = false;
+    try {
+      var oldCheckSnap = await firestore.collection('partners').limit(1).get();
+      hasUnmigratedEntities = oldCheckSnap.docs.isNotEmpty;
+    } catch (_) {}
+
+    // 4. جلب الشركاء من كوليكشن shareholders المستقل
+    try {
+      var shareholdersSnap = await firestore.collection(_shareholdersCollection).get();
+      if (shareholdersSnap.docs.isNotEmpty) {
+        for (var doc in shareholdersSnap.docs) {
+          var data = doc.data();
+          PartnerModel partner = PartnerModel(
+            id: doc.id,
+            name: (data['name'] ?? 'شريك').toString(),
+            type: 'partner',
+            phone: (data['phone'] ?? '').toString(),
+            managementRatio: _parseSafeDouble(data['managementRatio']),
+            joinDate: _parseSafeDate(data['joinDate'] ?? data['createdAt']),
+          );
+          fetchedPartners.add(partner);
+
+          double directCap = _parseSafeDouble(data['capital'] ?? data['initialCapital']);
+          if (directCap > 0) {
+            _partnerDirectCapital[doc.id] = directCap;
+          }
+        }
+      } else if (hasUnmigratedEntities) {
+        // عرض مؤقت للشركاء قبل الضغط على زر الترحيل
+        var oldSnap = await firestore.collection('partners').get();
+        for (var doc in oldSnap.docs) {
+          var data = doc.data();
+          String docType = (data['type'] ?? '').toString().trim().toLowerCase();
+          if (docType == 'partner' || data.containsKey('managementRatio')) {
+            fetchedPartners.add(
+              PartnerModel(
+                id: doc.id,
+                name: (data['name'] ?? 'شريك').toString(),
+                type: 'partner',
+                phone: (data['phone'] ?? '').toString(),
+                managementRatio: _parseSafeDouble(data['managementRatio']),
+                joinDate: _parseSafeDate(data['joinDate'] ?? data['createdAt']),
+              ),
+            );
+            double directCap = _parseSafeDouble(data['capital']);
+            if (directCap > 0) {
+              _partnerDirectCapital[doc.id] = directCap;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Shareholders fetch error: $e");
+    }
+
+    // 5. جلب القيود المالية من ledger_entries فقط
+    try {
+      var ledgersSnap = await firestore.collection(_ledgerEntriesCollection).get();
+      for (var doc in ledgersSnap.docs) {
+        var data = doc.data();
+        String txType = (data['transactionType'] ?? data['type'] ?? '').toString();
+        String accId = (data['accountId'] ?? data['partnerId'] ?? '').toString();
+
+        if (txType == 'capital_deposit' || txType == 'capital_withdrawal' || accId.isNotEmpty) {
+          fetchedLedgers.add(
+            LedgerEntryModel(
+              id: doc.id,
+              accountId: accId,
+              debit: _parseSafeDouble(data['debit']),
+              credit: _parseSafeDouble(data['credit'] ?? data['amount']),
+              referenceId: (data['referenceId'] ?? '').toString(),
+              description: (data['description'] ?? '').toString(),
+              timestamp: _parseSafeDate(data['timestamp'] ?? data['date'] ?? data['createdAt']),
+              transactionType: txType.isEmpty ? 'capital_deposit' : txType,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Ledger entries fetch error: $e");
+    }
+
+    // 6. ضمان وجود قيد في الذاكرة لكل شريك لحسابات الـ Cubit
+    for (var partner in fetchedPartners) {
+      bool hasLedger = fetchedLedgers.any((l) => l.accountId == partner.id);
+      if (!hasLedger) {
+        double fallbackCap = _partnerDirectCapital[partner.id] ?? 0.0;
+        fetchedLedgers.add(
+          LedgerEntryModel(
+            id: 'fallback_${partner.id}',
+            accountId: partner.id,
+            debit: 0.0,
+            credit: fallbackCap,
+            referenceId: 'initial_deposit',
+            description: 'رأس مال أساسي',
+            timestamp: partner.joinDate ?? DateTime(2020),
+            transactionType: 'capital_deposit',
+          ),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _totalSalesAmount = totalSales;
+        _totalExpensesAmount = totalPurchases + totalExpenses;
+        _fetchedNetOperatingProfit = _totalSalesAmount - _totalExpensesAmount;
+        _firebasePartners = fetchedPartners;
+        _firebaseLedgers = fetchedLedgers;
+        _needsMigration = hasUnmigratedEntities;
+        _isLoadingData = false;
+      });
+
+      _triggerCubitCalculation();
+    }
+  }
+
+  void _triggerCubitCalculation() {
+    if (_filterStartDate == null || _filterEndDate == null) return;
+
+    List<PartnerModel> processedPartners = _firebasePartners.map((p) {
+      double actualMgmtRatio = p.managementRatio > 0
+          ? (p.managementRatio / 100) * _currentManagementPool
+          : 0.0;
+      return PartnerModel(
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        phone: p.phone,
+        managementRatio: actualMgmtRatio,
+        joinDate: p.joinDate ?? DateTime(2020),
+      );
+    }).toList();
+
+    _profitCubit.calculateProfitsForPeriod(
+      startDate: _filterStartDate!,
+      endDate: _filterEndDate!,
+      totalSales: _totalSalesAmount,
+      totalExpenses: _totalExpensesAmount,
+      partners: processedPartners,
+      capitalLedgers: _firebaseLedgers,
+    );
+  }
+
+  /// إضافة شريك جديد مباشرة في كوليكشن shareholders المستقل
+  Future<void> _addPartnerToFirebase(String name, double capital, double mngRatio) async {
+    setState(() => _isLoadingData = true);
+    try {
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+
+      DocumentReference partnerRef = firestore.collection(_shareholdersCollection).doc();
+      PartnerModel newPartner = PartnerModel(
+        id: partnerRef.id,
+        name: name,
+        type: 'partner',
+        phone: '',
+        managementRatio: mngRatio,
+        joinDate: DateTime.now(),
+      );
+
+      Map<String, dynamic> partnerData = newPartner.toMap();
+      partnerData['capital'] = capital;
+      partnerData['type'] = 'partner';
+      batch.set(partnerRef, partnerData);
+
+      if (capital > 0) {
+        DocumentReference ledgerRef = firestore.collection(_ledgerEntriesCollection).doc();
+        LedgerEntryModel newLedger = LedgerEntryModel(
+          id: ledgerRef.id,
+          accountId: partnerRef.id,
+          debit: 0.0,
+          credit: capital,
+          referenceId: 'initial_deposit',
+          description: 'إيداع رأس مال مبدئي للشريك $name',
+          timestamp: DateTime.now(),
+          transactionType: 'capital_deposit',
+        );
+        batch.set(ledgerRef, newLedger.toMap());
+      }
+
+      await batch.commit();
+
+      _showSuccessMessage('تم إضافة الشريك ($name) في كوليكشن shareholders بنجاح');
+      await _fetchAllDataFromFirebase();
+    } catch (e) {
+      setState(() => _isLoadingData = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء الحفظ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _depositOrUpdateCapital(PartnerModel partner, double amount) async {
+    setState(() => _isLoadingData = true);
+    try {
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+
+      DocumentReference partnerRef =
+      firestore.collection(_shareholdersCollection).doc(partner.id);
+      batch.set(
+        partnerRef,
+        {'capital': FieldValue.increment(amount)},
+        SetOptions(merge: true),
+      );
+
+      DocumentReference ledgerRef = firestore.collection(_ledgerEntriesCollection).doc();
+      LedgerEntryModel newLedger = LedgerEntryModel(
+        id: ledgerRef.id,
+        accountId: partner.id,
+        debit: 0.0,
+        credit: amount,
+        referenceId: 'capital_topup',
+        description: 'إيداع رأس مال للشريك ${partner.name}',
+        timestamp: DateTime.now(),
+        transactionType: 'capital_deposit',
+      );
+      batch.set(ledgerRef, newLedger.toMap());
+
+      await batch.commit();
+
+      _showSuccessMessage('تم تسجيل إيداع رأس المال للشريك ${partner.name}');
+      await _fetchAllDataFromFirebase();
+    } catch (e) {
+      setState(() => _isLoadingData = false);
+    }
+  }
+
+  Future<void> _deletePartnerFromFirebase(String partnerId) async {
+    setState(() => _isLoadingData = true);
+    try {
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+
+      batch.delete(firestore.collection(_shareholdersCollection).doc(partnerId));
+      batch.delete(firestore.collection('partners').doc(partnerId));
+
+      var snap = await firestore
+          .collection(_ledgerEntriesCollection)
+          .where('accountId', isEqualTo: partnerId)
+          .get();
+      for (var doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+
+      _showSuccessMessage('تم إزالة الشريك وسجلاته المالية بنجاح');
+      await _fetchAllDataFromFirebase();
+    } catch (e) {
+      setState(() => _isLoadingData = false);
+    }
+  }
+
+  Future<void> _pickPartnerImage(String partnerId) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (pickedFile != null) {
       setState(() {
-        _localPartners[index]['imagePath'] = pickedFile.path;
+        _localImages[partnerId] = pickedFile.path;
       });
       _showSuccessMessage('تم تحديث صورة الشريك بنجاح');
     }
   }
 
-  // رسالة نجاح أنيقة وسريعة
   void _showSuccessMessage(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
             const Icon(Icons.check_circle_rounded, color: Colors.white),
             const SizedBox(width: 10),
-            Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
           ],
         ),
         backgroundColor: Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // نافذة تعديل نسب الإدارة والتشغيل العامة
-  void _showEditManagementPoolSheet(BuildContext context) {
-    final TextEditingController poolController = TextEditingController(text: _currentManagementPool.toString());
-
+  void _showDepositCapitalDialog(BuildContext context, PartnerModel partner) {
+    final TextEditingController amountController = TextEditingController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -126,7 +523,82 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: Container(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'إيداع رأس مال للشريك: ${partner.name}',
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF0D1B2A),
+                ),
+              ),
+              const Divider(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'مبلغ الإيداع (ج.م)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D1B2A),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () {
+                  double amount = double.tryParse(amountController.text) ?? 0.0;
+                  if (amount > 0) {
+                    Navigator.pop(ctx);
+                    _depositOrUpdateCapital(partner, amount);
+                  }
+                },
+                child: const Text(
+                  'تأكيد الإيداع',
+                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditManagementPoolSheet(BuildContext context) {
+    final TextEditingController poolController =
+    TextEditingController(text: _currentManagementPool.toString());
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -138,13 +610,21 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('تعديل نسب الإدارة والتشغيل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0D1B2A))),
+                  const Text(
+                    'تعديل نسب الإدارة والتشغيل',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF0D1B2A),
+                    ),
+                  ),
                   Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: Colors.black, width: 1.5),
                     ),
                     child: IconButton(
@@ -157,14 +637,16 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
               ),
               const Divider(),
               const SizedBox(height: 8),
-              const Text('حدد نسبة الإدارة والتشغيل الإجمالية المستقطعة من الربح التشغيلي:', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+              const Text(
+                'حدد نسبة الإدارة والتشغيل الإجمالية المستقطعة من الربح التشغيلي:',
+                style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: poolController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'النسبة المئوية (%)',
-                  labelStyle: const TextStyle(fontFamily: 'Cairo'),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
@@ -177,12 +659,17 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                 ),
                 onPressed: () {
                   setState(() {
-                    _currentManagementPool = double.tryParse(poolController.text) ?? _currentManagementPool;
+                    _currentManagementPool =
+                        double.tryParse(poolController.text) ?? _currentManagementPool;
                   });
                   Navigator.pop(ctx);
+                  _triggerCubitCalculation();
                   _showSuccessMessage('تم تحديث نسبة الإدارة بنجاح');
                 },
-                child: const Text('حفظ التعديل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+                child: const Text(
+                  'حفظ التعديل',
+                  style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white),
+                ),
               ),
               const SizedBox(height: 20),
             ],
@@ -192,7 +679,6 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
     );
   }
 
-  // نافذة إضافة شريك جديد ورأس المال
   void _showAddPartnerDialog(BuildContext context) {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController capitalController = TextEditingController();
@@ -207,8 +693,16 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
         builder: (context, setSheetState) => Directionality(
           textDirection: TextDirection.rtl,
           child: Container(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
-            decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              left: 20,
+              right: 20,
+              top: 20,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -217,13 +711,21 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('إضافة شريك أو رأس مال جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D1B2A))),
+                      const Text(
+                        'إضافة شريك أو رأس مال جديد',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Color(0xFF0D1B2A),
+                        ),
+                      ),
                       Container(
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: Colors.black, width: 1.5),
                         ),
                         child: IconButton(
@@ -239,8 +741,7 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                   TextField(
                     controller: nameController,
                     decoration: InputDecoration(
-                      labelText: 'اسم الشريك (مثلاً: رامي، عبدالله...)',
-                      labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                      labelText: 'اسم الشريك (مثلاً: رامي، السيد...)',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
@@ -250,13 +751,15 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       labelText: 'مبلغ رأس المال (ج.م)',
-                      labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                   const SizedBox(height: 16),
                   SwitchListTile(
-                    title: const Text('يشارك في الإدارة والتشغيل؟', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold)),
+                    title: const Text(
+                      'يشارك في الإدارة والتشغيل؟',
+                      style: TextStyle(fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
                     value: isManagementActive,
                     activeColor: Colors.orange.shade700,
                     onChanged: (val) => setSheetState(() => isManagementActive = val),
@@ -268,7 +771,7 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
                         labelText: 'نسبة الإدارة والتشغيل الخاصة (%)',
-                        labelStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+                        hintText: 'مثال: 15 للإشارة إلى 15% من الإدارة',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
@@ -282,27 +785,33 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
                     ),
                     onPressed: () {
                       if (nameController.text.isNotEmpty && capitalController.text.isNotEmpty) {
-                        setState(() {
-                          _localPartners.add({
-                            'name': nameController.text,
-                            'capital': double.tryParse(capitalController.text) ?? 0.0,
-                            'isManagementActive': isManagementActive,
-                            'managementShare': isManagementActive ? (double.tryParse(managementShareController.text) ?? 0.0) : 0.0,
-                            'imagePath': null,
-                          });
-                        });
+                        double cap = double.tryParse(capitalController.text) ?? 0.0;
+                        double mngRatio = isManagementActive
+                            ? (double.tryParse(managementShareController.text) ?? 0.0)
+                            : 0.0;
                         Navigator.pop(ctx);
-                        _showSuccessMessage('تم إضافة الشريك ورأس المال بنجاح');
+                        _addPartnerToFirebase(nameController.text.trim(), cap, mngRatio);
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
+                          const SnackBar(
                             backgroundColor: Colors.red,
-                            content: const Text('يرجى إدخال الاسم ومبلغ رأس المال', style: TextStyle(fontFamily: 'Cairo', color: Colors.white)),
+                            content: Text(
+                              'يرجى إدخال الاسم ومبلغ رأس المال',
+                              style: TextStyle(fontFamily: 'Cairo', color: Colors.white),
+                            ),
                           ),
                         );
                       }
                     },
-                    child: const Text('حفظ وإضافة للنظام', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+                    child: const Text(
+                      'حفظ في قاعدة البيانات',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -321,8 +830,8 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
 
     bool isNegativeProfit = _fetchedNetOperatingProfit < 0;
 
-    return BlocProvider(
-      create: (context) => PartnersProfitCubit()..fetchPartnersAndProfits(totalSales: 0.0, totalExpenses: 0.0),
+    return BlocProvider.value(
+      value: _profitCubit,
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
@@ -330,10 +839,14 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
           appBar: AppBar(
             backgroundColor: primaryNavy,
             centerTitle: true,
-            // مسمى مختصر وواضح تماماً وبدون أي قطع وبخط مناسب ومقروء
             title: const Text(
-              'إدارة الشركاء والأرباح',
-              style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              'حسابات الشركاء والأرباح',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             automaticallyImplyLeading: false,
             actions: [
@@ -345,244 +858,438 @@ class _PartnersManagementScreenState extends State<PartnersManagementScreen> {
             leading: const SizedBox.shrink(),
             elevation: 0,
           ),
-          body: _isLoadingProfit
-              ? const Center(child: CircularProgressIndicator(color: primaryNavy))
-              : SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // كارت الملخص المالي
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: primaryNavy,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'إجمالي الربح التشغيلي الفعلي',
-                        style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.white70),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${_fetchedNetOperatingProfit.toStringAsFixed(_fetchedNetOperatingProfit.truncateToDouble() == _fetchedNetOperatingProfit ? 0 : 2)} ج.م',
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: isNegativeProfit ? Colors.redAccent : Colors.orangeAccent,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const Divider(color: Colors.white24, height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'نسبة الإدارة والتشغيل المستقطعة: $_currentManagementPool%',
-                            style: const TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.white70),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.settings_outlined, color: Colors.orangeAccent, size: 22),
-                            onPressed: () => _showEditManagementPoolSheet(context),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // زر "إضافة رأس المال" بشكل فخم وبارز
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
-                  ),
-                  onPressed: () => _showAddPartnerDialog(context),
-                  icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.white),
-                  label: const Text(
-                    'إضافة رأس مال وشريك جديد',
-                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // عنوان قسم الشركاء في المنتصف تماماً
-                const Center(
-                  child: Text(
-                    'قائمة الشركاء وتفاصيل الأرباح',
-                    style: TextStyle(fontFamily: 'Cairo', fontSize: 17, fontWeight: FontWeight.bold, color: primaryNavy),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // عرض الشركاء بكروت متميزة
-                _localPartners.isEmpty
-                    ? Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.handshake_outlined, size: 48, color: Colors.grey),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'لا توجد حصص رؤوس أموال مسجلة بعد',
-                        style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-                    : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _localPartners.length,
-                  itemBuilder: (context, index) {
-                    final partner = _localPartners[index];
-                    double capital = partner['capital'];
-                    bool hasManagement = partner['isManagementActive'];
-                    double mgmtSharePercent = partner['managementShare'];
-                    String? imagePath = partner['imagePath'];
-
-                    double totalCapital = _localPartners.fold(0.0, (sum, p) => sum + (p['capital'] as double));
-                    double netProfit = _fetchedNetOperatingProfit > 0 ? _fetchedNetOperatingProfit : 0.0;
-                    double managementPoolAmount = netProfit * (_currentManagementPool / 100);
-                    double remainingCapitalProfit = netProfit - managementPoolAmount;
-
-                    double capitalShareRatio = totalCapital > 0 ? (capital / totalCapital) : 0.0;
-                    double partnerCapitalProfit = remainingCapitalProfit * capitalShareRatio;
-                    double partnerManagementProfit = hasManagement ? (managementPoolAmount * (mgmtSharePercent / 100)) : 0.0;
-                    double partnerTotalProfit = partnerCapitalProfit + partnerManagementProfit;
-
-                    return Container(
+          body: _isLoadingData
+              ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+              : RefreshIndicator(
+            color: Colors.orange,
+            onRefresh: _fetchAllDataFromFirebase,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_needsMigration) ...[
+                    Container(
                       margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.orange.shade600, width: 1.8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.orange.withOpacity(0.06),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.shade400, width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'تنظيم قاعدة البيانات: اضغط بالأسفل لنقل الشركاء إلى (shareholders) والعملاء إلى (customers) والموردين إلى (suppliers) وإلغاء (partners).',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: primaryNavy,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade800,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: _migrateAndCleanFirebaseStructure,
+                            icon: const Icon(Icons.cleaning_services_rounded,
+                                color: Colors.white, size: 18),
+                            label: const Text(
+                              'ترحيل وتنظيف الفايربيز تلقائياً الآن',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                  ],
+
+                  // كارت الملخص المالي
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: primaryNavy,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => _pickPartnerImage(index),
-                                  child: Stack(
-                                    alignment: Alignment.bottomRight,
+                            const SizedBox(width: 32),
+                            const Text(
+                              'صافي الربح التشغيلي الفعلي',
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            CustomDateRangeFilter(
+                              onFilterChanged: (start, end) {
+                                setState(() {
+                                  _filterStartDate = start;
+                                  _filterEndDate = end;
+                                });
+                                _triggerCubitCalculation();
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '${_fetchedNetOperatingProfit.toStringAsFixed(2)} ج.م',
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: isNegativeProfit ? Colors.redAccent : Colors.orangeAccent,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const Divider(color: Colors.white24, height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'نسبة الإدارة والتشغيل: $_currentManagementPool%',
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.settings_outlined,
+                                color: Colors.orangeAccent,
+                                size: 22,
+                              ),
+                              onPressed: () => _showEditManagementPoolSheet(context),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
+                    ),
+                    onPressed: () => _showAddPartnerDialog(context),
+                    icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.white),
+                    label: const Text(
+                      'إضافة شريك جديد / إيداع',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  const Center(
+                    child: Text(
+                      'الشركاء وتفاصيل أرباح الفترة',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: primaryNavy,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  BlocConsumer<PartnersProfitCubit, PartnersProfitState>(
+                    listener: (context, state) {
+                      if (state is PartnersProfitLoaded) {
+                        setState(() {
+                          _calculatedResultsMap = {
+                            for (var r in state.calculatedResults) r.partner.id: r
+                          };
+                        });
+                      }
+                    },
+                    builder: (context, state) {
+                      if (state is PartnersProfitLoaded) {
+                        _calculatedResultsMap = {
+                          for (var r in state.calculatedResults) r.partner.id: r
+                        };
+                      }
+
+                      if (_firebasePartners.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: const Column(
+                            children: [
+                              Icon(Icons.handshake_outlined, size: 48, color: Colors.grey),
+                              SizedBox(height: 12),
+                              Text(
+                                'لا توجد بيانات شركاء في قاعدة البيانات',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _firebasePartners.length,
+                        itemBuilder: (context, index) {
+                          final partner = _firebasePartners[index];
+
+                          double ledgerCapital = _firebaseLedgers
+                              .where((l) => l.accountId == partner.id)
+                              .fold(0.0, (sum, l) => sum + (l.credit - l.debit));
+
+                          double capital = ledgerCapital > 0
+                              ? ledgerCapital
+                              : (_partnerDirectCapital[partner.id] ?? 0.0);
+
+                          final result = _calculatedResultsMap[partner.id];
+                          double managementProfit = result?.managementProfit ?? 0.0;
+                          double capitalProfit = result?.capitalProfit ?? 0.0;
+                          double totalProfit = result?.totalProfit ?? 0.0;
+
+                          bool hasManagement = partner.managementRatio > 0;
+                          double displayMgmtShare = partner.managementRatio;
+                          String? imagePath = _localImages[partner.id];
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.orange.shade600, width: 1.8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.orange.withOpacity(0.06),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
                                     children: [
-                                      CircleAvatar(
-                                        radius: 24,
-                                        backgroundColor: primaryNavy,
-                                        backgroundImage: imagePath != null ? FileImage(File(imagePath)) : null,
-                                        child: imagePath == null ? const Icon(Icons.person, color: Colors.white, size: 22) : null,
+                                      GestureDetector(
+                                        onTap: () => _pickPartnerImage(partner.id),
+                                        child: Stack(
+                                          alignment: Alignment.bottomRight,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 24,
+                                              backgroundColor: primaryNavy,
+                                              backgroundImage: imagePath != null
+                                                  ? FileImage(File(imagePath))
+                                                  : null,
+                                              child: imagePath == null
+                                                  ? const Icon(Icons.person,
+                                                  color: Colors.white, size: 22)
+                                                  : null,
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange.shade700,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(Icons.camera_alt,
+                                                  size: 10, color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(color: Colors.orange.shade700, shape: BoxShape.circle),
-                                        child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          partner.name,
+                                          style: const TextStyle(
+                                            fontFamily: 'Cairo',
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 17,
+                                            color: primaryNavy,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'إيداع رأس مال',
+                                        icon: Icon(Icons.account_balance_wallet_outlined,
+                                            color: Colors.orange.shade800, size: 20),
+                                        onPressed: () =>
+                                            _showDepositCapitalDialog(context, partner),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'حذف الشريك',
+                                        icon: const Icon(Icons.delete_outline,
+                                            color: Colors.red, size: 20),
+                                        onPressed: () =>
+                                            _deletePartnerFromFirebase(partner.id),
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  partner['name'],
-                                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 17, color: primaryNavy),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                  onPressed: () {
-                                    setState(() {
-                                      _localPartners.removeAt(index);
-                                    });
-                                    _showSuccessMessage('تم حذف الشريك بنجاح');
-                                  },
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 20),
-                            // رأس المال المدفوع
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('• رأس المال المدفوع:', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600)),
-                                Text('${capital.toStringAsFixed(0)} ج.م', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: primaryNavy)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // نسبة الإدارة والتشغيل
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('• نسبة الإدارة والتشغيل (${hasManagement ? "$mgmtSharePercent%" : "لا يوجد"}):', style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600)),
-                                Text('${partnerManagementProfit.toStringAsFixed(2)} ج.م', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.orange.shade800)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // نصيب أرباح رأس المال
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('• نصيب أرباح رأس المال:', style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600)),
-                                Text('${partnerCapitalProfit.toStringAsFixed(2)} ج.م', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueAccent)),
-                              ],
-                            ),
-                            const Divider(height: 20),
-                            // إجمالي الربح النهائي للشريك
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.green.shade300, width: 1.2),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('إجمالي ربح الشريك (نهاية الشهر):', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
-                                  Text(
-                                    '${partnerTotalProfit.toStringAsFixed(2)} ج.م',
-                                    style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 17, color: Colors.green.shade800),
+                                  const Divider(height: 20),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        '• إجمالي رأس المال المودع:',
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${capital.toStringAsFixed(0)} ج.م',
+                                        style: const TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: primaryNavy,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '• نسبة الإدارة والتشغيل (${hasManagement ? "${displayMgmtShare.toStringAsFixed(0)}%" : "لا يوجد"}):',
+                                        style: const TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${managementProfit.toStringAsFixed(2)} ج.م',
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        '• أرباح رأس المال (حسب الأيام):',
+                                        style: TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${capitalProfit.toStringAsFixed(2)} ج.م',
+                                        style: const TextStyle(
+                                          fontFamily: 'Cairo',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.blueAccent,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 20),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                          color: Colors.green.shade300, width: 1.2),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'إجمالي ربح الشريك للفترة:',
+                                          style: TextStyle(
+                                            fontFamily: 'Cairo',
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: Colors.green,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${totalProfit.toStringAsFixed(2)} ج.م',
+                                          style: TextStyle(
+                                            fontFamily: 'Cairo',
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 17,
+                                            color: Colors.green.shade800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),

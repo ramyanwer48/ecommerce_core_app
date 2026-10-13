@@ -35,14 +35,13 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
     return value.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
   }
 
-  // 🌟 الرسالة الجديدة: (أظرف، أسرع، في المنتصف، وتختفي تلقائياً)
+  // 🌟 الرسالة السريعة في المنتصف
   void _showFastCenterMessage(BuildContext context, bool isSuccess, String message) {
     showDialog(
       context: context,
-      barrierColor: Colors.black12, // لون خلفية خفيف جداً عشان متكونش مزعجة
+      barrierColor: Colors.black12,
       barrierDismissible: true,
       builder: (ctx) {
-        // إغلاق تلقائي بعد ثانية وربع للسرعة
         Future.delayed(const Duration(milliseconds: 1200), () {
           if (ctx.mounted && Navigator.canPop(ctx)) {
             Navigator.pop(ctx);
@@ -360,7 +359,55 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
     );
   }
 
+  // 🌟 دالة الاعتماد المحسنة مع نافذة التحذير الذكية للعجز أو التالف
   Future<void> _handleAuditAction(String requestId, String action, Map<String, dynamic> data) async {
+    final String productName = data['productName'] ?? 'غير معروف';
+    final int systemStock = data['systemStock'] ?? 0;
+    final int goodStock = data['actualGoodStock'] ?? 0;
+    final int damagedStock = data['damagedStock'] ?? 0;
+    final int totalActual = goodStock + damagedStock;
+    final int difference = totalActual - systemStock;
+
+    if (action == 'approved' && (difference < 0 || damagedStock > 0)) {
+      bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 28),
+                const SizedBox(width: 8),
+                const Text('تنبيه جرد مخزني', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            content: Text(
+              'أنت على وشك اعتماد جرد لـ "$productName":\n\n'
+                  '• رصيد السيستم: $systemStock\n'
+                  '• العد الفعلي (سليم + تالف): $totalActual\n'
+                  '• مقدار العجز/التالف: ${difference.abs()} قطـعة\n\n'
+                  'هل أنت متأكد من رغبتك في اعتماد هذا العجز وخصمه نهائياً؟',
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('مراجعة، إلغاء', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('نعم، متأكد واعتماد', style: TextStyle(fontFamily: 'Cairo', color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (confirm != true) return;
+    }
+
     try {
       WriteBatch batch = _firestore.batch();
       DocumentReference requestRef = _firestore.collection('pending_audits').doc(requestId);
@@ -368,10 +415,6 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
 
       if (action == 'approved') {
         final String productId = data['productId'];
-        final int goodStock = data['actualGoodStock'] ?? 0;
-        final int systemStock = data['systemStock'] ?? 0;
-        final int damagedStock = data['damagedStock'] ?? 0;
-        final int difference = (goodStock + damagedStock) - systemStock;
 
         DocumentReference productRef = _firestore.collection('products').doc(productId);
         batch.update(productRef, {
@@ -396,7 +439,6 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
 
       await batch.commit();
 
-      // 🌟 استدعاء الدالة الجديدة السريعة في المنتصف بدلاً من الـ SnackBar القديم
       if (mounted) {
         _showFastCenterMessage(
             context,
@@ -531,7 +573,6 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
                                 'productId': productId, 'productName': productName, 'oldStock': currentStock, 'newStock': actualStock, 'difference': difference, 'note': 'تعديل إداري مباشر من المدير', 'type': difference < 0 ? 'loss' : 'gain', 'date': FieldValue.serverTimestamp(),
                               });
                               Navigator.pop(ctx);
-                              // 🌟 استخدام الدالة السريعة هنا أيضاً
                               _showFastCenterMessage(context, true, 'تم تحديث الرصيد يدوياً بنجاح');
                             }
                           },
@@ -686,7 +727,7 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
 
             String amPm = date.hour >= 12 ? 'م' : 'ص';
             int hour12 = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
-            String formattedDate = '${date.year}/${date.month}/${date.day} - $hour12:${date.minute.toString().padLeft(2, '0')} $amPm';
+            String formattedDate = '${date.year}/${date.month}/${date.day} | $hour12:${date.minute.toString().padLeft(2, '0')} $amPm';
 
             return Card(
               elevation: 0,
