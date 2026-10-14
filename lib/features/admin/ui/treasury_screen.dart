@@ -256,93 +256,118 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('ledger_entries').snapshots(),
               builder: (context, ledgerSnap) {
-                if (ordersSnap.connectionState == ConnectionState.waiting || ledgerSnap.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator(color: brandOrange));
-                }
+                // 🌟 إضافة StreamBuilder لكولكشن المنتجات لحساب الهالك بناءً على صورتك
+                return StreamBuilder<QuerySnapshot>(
+                    stream: _firestore.collection('products').snapshots(),
+                    builder: (context, productsSnap) {
+                      if (ordersSnap.connectionState == ConnectionState.waiting ||
+                          ledgerSnap.connectionState == ConnectionState.waiting ||
+                          productsSnap.connectionState == ConnectionState.waiting) {
+                        return Center(child: CircularProgressIndicator(color: brandOrange));
+                      }
 
-                double totalRevenues = 0;
-                double totalCOGS = 0;
-                for (var doc in ordersSnap.data?.docs ?? []) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  if (_isWithinDateRange(data['createdAt'] ?? data['orderDate'])) {
-                    totalRevenues += _parseSafeDouble(data['totalPrice'] ?? data['totalAmount']);
-                    totalCOGS += _parseSafeDouble(data['totalCostPrice']);
-                  }
-                }
+                      // 1. حساب الإيرادات وتكلفة البضاعة المباعة
+                      double totalRevenues = 0;
+                      double totalCOGS = 0;
+                      for (var doc in ordersSnap.data?.docs ?? []) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        if (_isWithinDateRange(data['createdAt'] ?? data['orderDate'])) {
+                          totalRevenues += _parseSafeDouble(data['totalPrice'] ?? data['totalAmount']);
+                          totalCOGS += _parseSafeDouble(data['totalCostPrice']);
+                        }
+                      }
 
-                double totalCashIn = 0;
-                double totalCashOut = 0;
-                double totalExpenses = 0;
-                List<QueryDocumentSnapshot> allMovements = [];
-                List<QueryDocumentSnapshot> expenseMovements = [];
+                      // 2. حساب تكلفة الهالك (التوالف) من داخل كل منتج
+                      double totalWastage = 0;
+                      for (var doc in productsSnap.data?.docs ?? []) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        double damagedQty = _parseSafeDouble(data['damagedQuantity']);
+                        double costPrice = _parseSafeDouble(data['costPrice']);
 
-                var ledgerDocs = ledgerSnap.data?.docs.toList() ?? [];
-                ledgerDocs.sort((a, b) {
-                  var dA = a.data() as Map<String, dynamic>;
-                  var dB = b.data() as Map<String, dynamic>;
-                  Timestamp? tA = (dA['date'] ?? dA['timestamp'] ?? dA['createdAt']) as Timestamp?;
-                  Timestamp? tB = (dB['date'] ?? dB['timestamp'] ?? dB['createdAt']) as Timestamp?;
-                  if (tA == null && tB == null) return 0;
-                  if (tA == null) return 1;
-                  if (tB == null) return -1;
-                  return tB.compareTo(tA);
-                });
+                        // إذا كان هناك هالك مسجل للمنتج، نضيف قيمته للإجمالي
+                        if (damagedQty > 0) {
+                          totalWastage += (damagedQty * costPrice);
+                        }
+                      }
 
-                for (var doc in ledgerDocs) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  String type = (data['type'] ?? '').toString();
-                  double amount = _parseSafeDouble(data['amount']);
-                  Timestamp? docDate = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;
+                      // 3. حساب حركات الخزينة والمصروفات
+                      double totalCashIn = 0;
+                      double totalCashOut = 0;
+                      double totalExpenses = 0;
+                      List<QueryDocumentSnapshot> allMovements = [];
+                      List<QueryDocumentSnapshot> expenseMovements = [];
 
-                  if (_isWithinDateRange(docDate)) {
-                    bool isCashMovement = type == 'receipt' || type == 'income' || type == 'expense' || type == 'payment';
-                    if (isCashMovement && amount > 0) {
-                      allMovements.add(doc);
-                    }
-                    if (type == 'expense' || type == 'payment') {
-                      expenseMovements.add(doc);
-                      totalExpenses += amount;
-                      totalCashOut += amount;
-                    }
-                    if (type == 'receipt' || type == 'income') {
-                      totalCashIn += amount;
-                    }
-                  }
-                }
+                      var ledgerDocs = ledgerSnap.data?.docs.toList() ?? [];
+                      ledgerDocs.sort((a, b) {
+                        var dA = a.data() as Map<String, dynamic>;
+                        var dB = b.data() as Map<String, dynamic>;
+                        Timestamp? tA = (dA['date'] ?? dA['timestamp'] ?? dA['createdAt']) as Timestamp?;
+                        Timestamp? tB = (dB['date'] ?? dB['timestamp'] ?? dB['createdAt']) as Timestamp?;
+                        if (tA == null && tB == null) return 0;
+                        if (tA == null) return 1;
+                        if (tB == null) return -1;
+                        return tB.compareTo(tA);
+                      });
 
-                double grossProfit = totalRevenues - totalCOGS;
-                double netProfit = grossProfit - totalExpenses;
-                double currentLiquidity = totalCashIn - totalCashOut;
+                      for (var doc in ledgerDocs) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        String type = (data['type'] ?? '').toString();
+                        double amount = _parseSafeDouble(data['amount']);
+                        Timestamp? docDate = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;
 
-                return Column(
-                  children: [
-                    Container(
-                      color: Colors.white,
-                      child: TabBar(
-                        controller: _tabController,
-                        labelColor: brandOrange,
-                        unselectedLabelColor: Colors.grey.shade600,
-                        indicatorColor: brandOrange,
-                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                        tabs: const [
-                          Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('الأرباح والخسائر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
-                          Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('السيولة النقدية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
-                          Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('سجل المصروفات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
-                        ],
-                      ),
-                    ),
+                        if (_isWithinDateRange(docDate)) {
+                          bool isCashMovement = type == 'receipt' || type == 'income' || type == 'expense' || type == 'payment';
+                          if (isCashMovement && amount > 0) {
+                            allMovements.add(doc);
+                          }
+                          if (type == 'expense' || type == 'payment') {
+                            expenseMovements.add(doc);
+                            totalExpenses += amount;
+                            totalCashOut += amount;
+                          }
+                          if (type == 'receipt' || type == 'income') {
+                            totalCashIn += amount;
+                          }
+                        }
+                      }
 
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
+                      // 4. استخراج النتائج النهائية
+                      double grossProfit = totalRevenues - totalCOGS;
+                      // المعادلة الجديدة: (إجمالي الربح التجاري - المصروفات التشغيلية - قيمة الهالك المتراكم)
+                      double netProfit = grossProfit - totalExpenses - totalWastage;
+                      double currentLiquidity = totalCashIn - totalCashOut;
+
+                      return Column(
                         children: [
-                          _buildProfitAndLossTab(totalRevenues, totalCOGS, grossProfit, totalExpenses, netProfit),
-                          _buildCashFlowTab(totalCashIn, totalCashOut, currentLiquidity, allMovements, totalExpenses),
-                          _buildExpensesTab(expenseMovements, totalExpenses),
+                          Container(
+                            color: Colors.white,
+                            child: TabBar(
+                              controller: _tabController,
+                              labelColor: brandOrange,
+                              unselectedLabelColor: Colors.grey.shade600,
+                              indicatorColor: brandOrange,
+                              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              tabs: const [
+                                Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('الأرباح والخسائر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
+                                Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('السيولة النقدية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
+                                Tab(child: FittedBox(fit: BoxFit.scaleDown, child: Text('سجل المصروفات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)))),
+                              ],
+                            ),
+                          ),
+
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                _buildProfitAndLossTab(totalRevenues, totalCOGS, grossProfit, totalExpenses, totalWastage, netProfit),
+                                _buildCashFlowTab(totalCashIn, totalCashOut, currentLiquidity, allMovements, totalExpenses),
+                                _buildExpensesTab(expenseMovements, totalExpenses),
+                              ],
+                            ),
+                          ),
                         ],
-                      ),
-                    ),
-                  ],
+                      );
+                    }
                 );
               },
             );
@@ -353,7 +378,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
   }
 
   // 1. تبويب الأرباح والخسائر
-  Widget _buildProfitAndLossTab(double rev, double cogs, double gross, double exp, double net) {
+  Widget _buildProfitAndLossTab(double rev, double cogs, double gross, double exp, double wastage, double net) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -395,6 +420,8 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
           _buildFinancialCard('مجمل الربح (التجاري)', gross, Icons.pie_chart_outline, Colors.purple.shade600, 'الربح قبل خصم المصروفات (المبيعات - التكلفة)'),
           const SizedBox(height: 12),
           _buildFinancialCard('المصروفات التشغيلية', exp, Icons.money_off, Colors.red.shade600, 'رواتب، كهرباء، إيجارات، إلخ', isMinus: true),
+          const SizedBox(height: 12),
+          _buildFinancialCard('تكلفة الهالك (التوالف)', wastage, Icons.remove_shopping_cart_outlined, Colors.orange.shade700, 'إجمالي تكلفة البضاعة التالفة من المخزن', isMinus: true),
           const SizedBox(height: 80),
         ],
       ),

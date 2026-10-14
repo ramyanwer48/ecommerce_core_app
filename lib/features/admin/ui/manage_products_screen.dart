@@ -49,12 +49,12 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         await _firestore.collection('products').doc(docId).update({'imageUrl': FieldValue.delete()});
       }
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحذف بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
       }
     }
@@ -146,7 +146,9 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       if (singleFile != null) pickedFiles.add(singleFile);
     }
     if (pickedFiles.isEmpty || !mounted) return;
+
     _showLoadingDialog('جاري رفع الصور...');
+
     try {
       List<String> uploadedUrls = [];
       for (var pickedFile in pickedFiles) {
@@ -155,32 +157,64 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
         uploadedUrls.add(await snapshot.ref.getDownloadURL());
       }
       await _firestore.collection('products').doc(docId).update({'imageUrls': FieldValue.arrayUnion(uploadedUrls)});
-      if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإضافة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.green)); }
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإضافة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.green));
+      }
     } catch (e) {
-      if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الرفع: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red)); }
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل الرفع: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+      }
     }
   }
 
   Future<void> _pickFromGoogleSearch(String docId, String productName) async {
-    final List<String>? selectedImageUrls = await showDialog<List<String>>(context: context, barrierDismissible: false, builder: (context) => GoogleImagePickerDialog(productName: productName));
+    final List<String>? selectedImageUrls = await showDialog<List<String>>(
+        context: context,
+        barrierDismissible: false,
+        useRootNavigator: true,
+        builder: (context) => GoogleImagePickerDialog(productName: productName)
+    );
+
     if (selectedImageUrls != null && selectedImageUrls.isNotEmpty && mounted) {
       _showLoadingDialog('جاري الربط...');
+
       try {
         await _firestore.collection('products').doc(docId).update({'imageUrls': FieldValue.arrayUnion(selectedImageUrls)});
-        if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إضافة صور جوجل بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.green)); }
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إضافة صور جوجل بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.green));
+        }
       } catch (e) {
-        if (mounted) Navigator.pop(context);
+        if (mounted) Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
       }
     }
   }
 
   void _showLoadingDialog(String msg) {
-    showDialog(context: context, barrierDismissible: false, builder: (context) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), content: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(color: appSecondaryColor), const SizedBox(height: 16), Text(msg, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))])));
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        useRootNavigator: true, // 👈 التأكيد على رفعه للمسار الجذري
+        builder: (context) => AlertDialog( // 👈 إزالة PopScope
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: appSecondaryColor),
+                  const SizedBox(height: 16),
+                  Text(msg, textAlign: TextAlign.center, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold))
+                ]
+            )
+        )
+    );
   }
 
   void _showImageUpdateOptions(BuildContext context, String docId, String productName) {
     showModalBottomSheet(
-      context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -285,13 +319,21 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                         final String supplierName = supplierController.text.trim();
                         if (addedQty != null && addedQty > 0 && costPrice != null && costPrice >= 0) {
                           Navigator.pop(ctx);
+
                           _showLoadingDialog('جاري تسجيل الدفعة...');
+
                           try {
                             final newBatch = {'batchId': 'batch_manual_${DateTime.now().millisecondsSinceEpoch}', 'costPrice': costPrice, 'quantity': addedQty, 'supplier': supplierName.isNotEmpty ? supplierName : 'غير محدد', 'dateAdded': Timestamp.now()};
                             await _firestore.collection('products').doc(docId).update({'stockQuantity': FieldValue.increment(addedQty), 'batches': FieldValue.arrayUnion([newBatch])});
-                            if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الدفعة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.teal)); }
+                            if (mounted) {
+                              Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تسجيل الدفعة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.teal));
+                            }
                           } catch (e) {
-                            if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red)); }
+                            if (mounted) {
+                              Navigator.of(context, rootNavigator: true).pop(); // 👈 الإغلاق من الجذر
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
+                            }
                           }
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إدخال الكمية والسعر بشكل صحيح', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)), backgroundColor: Colors.redAccent));
@@ -407,9 +449,8 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))]
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center, // 👈 التوسيط العام لشريط الفلاتر
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // 👈 توسيط أزرار الفلتر (الكل، متاح، مخفي) في المنتصف
                     Center(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -426,7 +467,6 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // 👈 توسيط أقسام الفلتر في المنتصف
                     StreamBuilder<QuerySnapshot>(
                       stream: _firestore.collection('categories').snapshots(),
                       builder: (context, snapshot) {

@@ -18,7 +18,7 @@ class _PosScreenState extends State<PosScreen> {
   String _customerName = 'عميل نقدي (الشركة)';
   String _customerId = 'CASH_CUSTOMER';
   String _searchQuery = '';
-  bool _isLoading = false; // 🌟 متغير الحالة لمنع تعليق اللودنج نهائياً
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> _cartItems = [];
   final double _discount = 0.0;
@@ -128,8 +128,8 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _saveInvoice(BuildContext sheetContext, double paidAmount, String paymentType) async {
     if (_cartItems.isEmpty) return;
-    double remainingAmount = _total - paidAmount;
 
+    double remainingAmount = _total - paidAmount;
     double totalCostPrice = _cartItems.fold(0, (sum, item) => sum + (item['cost'] * item['qty']));
 
     if (remainingAmount > 0 && _customerId == 'CASH_CUSTOMER') {
@@ -146,7 +146,6 @@ class _PosScreenState extends State<PosScreen> {
       return;
     }
 
-    // 🌟 تفعيل حالة التحميل وإغلاق شاشة السلة مباشرة لضمان السلاسة
     setState(() => _isLoading = true);
     if (Navigator.canPop(sheetContext)) {
       Navigator.pop(sheetContext);
@@ -232,7 +231,6 @@ class _PosScreenState extends State<PosScreen> {
         _showCustomSnackBar('خطأ: $e', true);
       }
     } finally {
-      // 🛡️ إيقاف التحميل في جميع الظروف نهائياً
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -779,7 +777,15 @@ class _PosScreenState extends State<PosScreen> {
                           var doc = docs[index];
                           var data = doc.data() as Map<String, dynamic>;
                           String name = data['name'] ?? 'منتج';
-                          String imageUrl = data['imageUrl'] ?? '';
+
+                          // 🌟 التعديل الجذري والدقيق لجلب الصورة بنفس أسلوب شاشة المخزون
+                          String imageUrl = '';
+                          if (data['imageUrl'] != null && data['imageUrl'].toString().isNotEmpty) {
+                            imageUrl = data['imageUrl'].toString();
+                          } else if (data['imageUrls'] != null && data['imageUrls'] is List && (data['imageUrls'] as List).isNotEmpty) {
+                            imageUrl = data['imageUrls'][0].toString();
+                          }
+
                           double price = double.tryParse((data['price'] ?? 0).toString()) ?? 0.0;
                           int stock = int.tryParse((data['stockQuantity'] ?? 0).toString()) ?? 0;
 
@@ -871,7 +877,7 @@ class _PosScreenState extends State<PosScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Icon(Icons.delete_sweep_rounded, color: Colors.red.shade700, size: 28),
+                  child: Icon(Icons.cleaning_services_rounded, color: Colors.red.shade700, size: 28),
                 ),
               ),
               const SizedBox(width: 12),

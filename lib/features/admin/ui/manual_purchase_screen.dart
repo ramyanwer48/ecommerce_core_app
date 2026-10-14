@@ -305,81 +305,88 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
     );
   }
 
+  // 👈 هنا التعديل الذي أضفناه (Future.delayed) لحل مشكلة اهتزاز الشاشة
   void _showCategorySheet(String title, List<String> items, String? selectedItem, bool isSubCategory, String? parentCategory, Function(String) onSelect) {
     FocusManager.instance.primaryFocus?.unfocus();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 20),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const SizedBox(width: 40),
-                  Text(title, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                  IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(ctx)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final isSelected = item == selectedItem;
-                    return ListTile(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        onSelect(item);
-                        Navigator.pop(ctx);
-                      },
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      tileColor: isSelected ? brandOrange.withOpacity(0.1) : Colors.transparent,
-                      title: Text(item, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, color: isSelected ? brandOrange : Colors.black87)),
-                      trailing: isSelected ? Icon(Icons.check_circle_rounded, color: brandOrange) : null,
-                    );
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Container(
+            padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const SizedBox(width: 40),
+                    Text(title, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
+                    IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  // 👈 هنا أصلحنا الخطأ الإملائي الخاص بعلامة الضرب (كانت مفقودة)
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final isSelected = item == selectedItem;
+                      return ListTile(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          onSelect(item);
+                          Navigator.pop(ctx);
+                        },
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        tileColor: isSelected ? brandOrange.withOpacity(0.1) : Colors.transparent,
+                        title: Text(item, style: TextStyle(fontFamily: 'Cairo', fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, color: isSelected ? brandOrange : Colors.black87)),
+                        trailing: isSelected ? Icon(Icons.check_circle_rounded, color: brandOrange) : null,
+                      );
+                    },
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1),
+                ),
+                ListTile(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showAddCategorySheet(isSubCategory, parentCategory, onSelect);
                   },
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), shape: BoxShape.circle),
+                    child: Icon(Icons.add_rounded, color: brandOrange, size: 22),
+                  ),
+                  title: Text('إضافة قسم جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: brandOrange, fontSize: 15)),
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Divider(height: 1),
-              ),
-              ListTile(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showAddCategorySheet(isSubCategory, parentCategory, onSelect);
-                },
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                leading: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: brandOrange.withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(Icons.add_rounded, color: brandOrange, size: 22),
-                ),
-                title: Text('إضافة قسم جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: brandOrange, fontSize: 15)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   void _openMultiSelectProductsDialog() {
@@ -397,6 +404,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: Container(
+                // 👈 هنا أيضاً أصلحنا علامة الضرب المفقودة
                 height: MediaQuery.of(context).size.height * 0.85,
                 decoration: const BoxDecoration(
                   color: Colors.white,
@@ -818,7 +826,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
 
       if (mounted) {
         _showCustomSnackBar('تم ترحيل الفاتورة وتحديث المخزون وحساب المورد بنجاح', true);
-        _clearForm(); // 👈 تفريغ الفورم تماماً وتجهيزه لفاتورة جديدة دون مغادرة الشاشة
+        _clearForm();
       }
     } catch (e) {
       if (mounted) {
