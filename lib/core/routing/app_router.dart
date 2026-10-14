@@ -192,7 +192,7 @@ class AppRouter {
       ),
       GoRoute(
         path: Routes.partners,
-        builder: (context, state) => const PartnersScreen(),
+        builder: (context, state) => const SupplierScreen(),
       ),
       GoRoute(
         path: Routes.adminBanner,

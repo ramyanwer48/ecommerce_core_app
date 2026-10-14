@@ -213,10 +213,10 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           title: const Text('المركز المالي والخزينة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
           actions: [
             Stack(
@@ -242,6 +242,18 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 tooltip: 'إلغاء الفلتر',
               ),
             const SizedBox(width: 4),
+            // 🌟 سهم الرجوع النظيف في الجهة اليسرى يشير للخارج
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushReplacementNamed(context, '/admin');
+                }
+              },
+            ),
+            const SizedBox(width: 8),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -256,7 +268,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             return StreamBuilder<QuerySnapshot>(
               stream: _firestore.collection('ledger_entries').snapshots(),
               builder: (context, ledgerSnap) {
-                // 🌟 إضافة StreamBuilder لكولكشن المنتجات لحساب الهالك بناءً على صورتك
                 return StreamBuilder<QuerySnapshot>(
                     stream: _firestore.collection('products').snapshots(),
                     builder: (context, productsSnap) {
@@ -266,7 +277,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                         return Center(child: CircularProgressIndicator(color: brandOrange));
                       }
 
-                      // 1. حساب الإيرادات وتكلفة البضاعة المباعة
                       double totalRevenues = 0;
                       double totalCOGS = 0;
                       for (var doc in ordersSnap.data?.docs ?? []) {
@@ -277,20 +287,17 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                         }
                       }
 
-                      // 2. حساب تكلفة الهالك (التوالف) من داخل كل منتج
                       double totalWastage = 0;
                       for (var doc in productsSnap.data?.docs ?? []) {
                         var data = doc.data() as Map<String, dynamic>;
                         double damagedQty = _parseSafeDouble(data['damagedQuantity']);
                         double costPrice = _parseSafeDouble(data['costPrice']);
 
-                        // إذا كان هناك هالك مسجل للمنتج، نضيف قيمته للإجمالي
                         if (damagedQty > 0) {
                           totalWastage += (damagedQty * costPrice);
                         }
                       }
 
-                      // 3. حساب حركات الخزينة والمصروفات
                       double totalCashIn = 0;
                       double totalCashOut = 0;
                       double totalExpenses = 0;
@@ -331,9 +338,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                         }
                       }
 
-                      // 4. استخراج النتائج النهائية
                       double grossProfit = totalRevenues - totalCOGS;
-                      // المعادلة الجديدة: (إجمالي الربح التجاري - المصروفات التشغيلية - قيمة الهالك المتراكم)
                       double netProfit = grossProfit - totalExpenses - totalWastage;
                       double currentLiquidity = totalCashIn - totalCashOut;
 
@@ -377,7 +382,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 1. تبويب الأرباح والخسائر
   Widget _buildProfitAndLossTab(double rev, double cogs, double gross, double exp, double wastage, double net) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -417,7 +421,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
           const SizedBox(height: 12),
           _buildFinancialCard('تكلفة البضاعة المباعة', cogs, Icons.inventory_2_outlined, Colors.brown.shade600, 'سعر الشراء الأصلي للبضاعة المباعة', isMinus: true),
           const SizedBox(height: 12),
-          _buildFinancialCard('مجمل الربح (التجاري)', gross, Icons.pie_chart_outline, Colors.purple.shade600, 'الربح قبل خصم المصروفات (المبيعات - التكلفة)'),
+          _buildFinancialCard('مجمل الربح (التجاري)', gross, Icons.pie_chart_outline, Colors.purple.shade600, 'الربح قبل خصم المصروفات'),
           const SizedBox(height: 12),
           _buildFinancialCard('المصروفات التشغيلية', exp, Icons.money_off, Colors.red.shade600, 'رواتب، كهرباء، إيجارات، إلخ', isMinus: true),
           const SizedBox(height: 12),
@@ -428,7 +432,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 2. تبويب السيولة النقدية
   Widget _buildCashFlowTab(double cashIn, double cashOut, double net, List<QueryDocumentSnapshot> movements, double totalExpenses) {
     return Column(
       children: [
@@ -506,7 +509,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                     child: Icon(isIncome ? Icons.arrow_downward : Icons.arrow_upward, color: isIncome ? Colors.green : Colors.red, size: 20),
                   ),
                   title: Text(note, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text('$partner - $dateStr', style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
+                  subtitle: Text('$partner\n$dateStr', style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, color: Colors.grey)),
                   trailing: Text(
                     '${isIncome ? '+' : '-'}${amount.toStringAsFixed(2)}',
                     style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: isIncome ? Colors.green : Colors.red, fontSize: 14),
@@ -520,7 +523,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
     );
   }
 
-  // 3. تبويب سجل المصروفات
   Widget _buildExpensesTab(List<QueryDocumentSnapshot> expenses, double totalExpenses) {
     return Column(
       children: [

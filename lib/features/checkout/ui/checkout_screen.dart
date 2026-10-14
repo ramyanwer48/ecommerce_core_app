@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 👈 ضروري لجلب الـ userId
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/di/dependency_injection.dart';
 import '../../cart/logic/cart_cubit.dart';
@@ -23,6 +23,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _couponController = TextEditingController();
+  final TextEditingController _fullNameController = TextEditingController(); // 👈 حقل اسم المستلم
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _walletPhoneController = TextEditingController();
@@ -38,6 +39,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void dispose() {
     _couponController.dispose();
+    _fullNameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     _walletPhoneController.dispose();
@@ -54,6 +56,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     if (selectedAddress != null) {
       setState(() {
+        _fullNameController.text = selectedAddress.fullName; // 👈 تعبئة الاسم تلقائياً من العنوان المختار
         _phoneController.text = selectedAddress.phone;
         _addressController.text = selectedAddress.fullAddressText;
       });
@@ -76,7 +79,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       ),
       body: BlocConsumer<CheckoutCubit, CheckoutState>(
         listener: (context, state) async {
-          // 1. حالات الكوبون
           if (state is CheckoutCouponApplied) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('تم تفعيل الكوبون! 🎉', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
@@ -87,15 +89,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             );
           }
 
-          // 2. 🌟 حالة نجاح الأوردر ونظام الـ FIFO
           if (state is CheckoutOrderSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('تم تسجيل الطلب وخصم المخزون بنجاح! 🚀', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
             );
 
-            // 👇 تم تفعيل دالة تفريغ السلة هنا
             getIt<CartCubit>().clearCart();
-
             context.pushReplacement(Routes.orders);
           } else if (state is CheckoutOrderError) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +102,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             );
           }
 
-          // 3. حالات الدفع أونلاين
           if (state is CheckoutPaymobSuccess) {
             final bool? paymentResult = await Navigator.push(
               context,
@@ -118,12 +116,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ? checkoutCubit.subTotal - ((checkoutCubit.subTotal * checkoutCubit.appliedCoupon!.discountPercentage) / 100)
                   : checkoutCubit.subTotal;
 
-              // 👇 توجيه الطلب لنظام الـ FIFO بعد نجاح الدفع
+              // 🌟 إرسال الاسم المنفصل بوضوح في الـ shippingAddress للفيزا
               checkoutCubit.placeOrder(
                 userId: FirebaseAuth.instance.currentUser?.uid ?? 'guest',
                 cartItems: getIt<CartCubit>().cartItemsAsMap,
                 totalSellingAmount: finalTotal,
                 shippingAddress: {
+                  'fullName': _fullNameController.text.trim(),
                   'address': _addressController.text.trim(),
                   'phone': _phoneController.text.trim(),
                 },
@@ -148,12 +147,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ? checkoutCubit.subTotal - ((checkoutCubit.subTotal * checkoutCubit.appliedCoupon!.discountPercentage) / 100)
                   : checkoutCubit.subTotal;
 
-              // 👇 توجيه الطلب لنظام الـ FIFO بعد نجاح الدفع بالمحفظة
+              // 🌟 إرسال الاسم المنفصل بوضوح في الـ shippingAddress للمحفظة
               checkoutCubit.placeOrder(
                 userId: FirebaseAuth.instance.currentUser?.uid ?? 'guest',
                 cartItems: getIt<CartCubit>().cartItemsAsMap,
                 totalSellingAmount: finalTotal,
                 shippingAddress: {
+                  'fullName': _fullNameController.text.trim(),
                   'address': _addressController.text.trim(),
                   'phone': _phoneController.text.trim(),
                 },
@@ -280,6 +280,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        // 🌟 إضافة حقل اسم المستلم في الـ Checkout لضمان حفظه مستقلاً
+                        TextFormField(
+                          controller: _fullNameController,
+                          decoration: InputDecoration(
+                            labelText: 'اسم المستلم الكامل',
+                            prefixIcon: const Icon(Icons.person, color: Color(0xFF00D4FF)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          validator: (value) => value!.isEmpty ? 'برجاء إدخال اسم المستلم' : null,
+                        ),
+                        const SizedBox(height: 16),
                         TextFormField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
@@ -361,7 +372,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // 👇 زر تأكيد الطلب أصبح يعتمد على حالة CheckoutOrderLoading
                 Builder(
                   builder: (context) {
                     bool isLoading = state is CheckoutOrderLoading ||
@@ -389,12 +399,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               walletPhoneNumber: _walletPhoneController.text.trim(),
                             );
                           } else {
-                            // 👇 التنفيذ المباشر لنظام الـ FIFO عند اختيار الكاش
+                            // 🌟 إرسال الاسم المنفصل بوضوح في الـ shippingAddress للدفع كاش
                             cubit.placeOrder(
                               userId: FirebaseAuth.instance.currentUser?.uid ?? 'guest',
                               cartItems: getIt<CartCubit>().cartItemsAsMap,
                               totalSellingAmount: displayTotal,
                               shippingAddress: {
+                                'fullName': _fullNameController.text.trim(),
                                 'address': _addressController.text.trim(),
                                 'phone': _phoneController.text.trim(),
                               },

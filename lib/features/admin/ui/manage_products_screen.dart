@@ -398,17 +398,20 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
           centerTitle: true,
           elevation: 0,
           actions: [
-            if (Navigator.canPop(context))
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            if (Navigator.canPop(context)) const SizedBox(width: 8),
+            // 🌟 سهم الرجوع النظيف في أقصى الشمال واتجاهه للخارج بأمان تام
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  try {
+                    Navigator.pushReplacementNamed(context, '/admin');
+                  } catch (_) {}
+                }
+              },
+            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: GestureDetector(

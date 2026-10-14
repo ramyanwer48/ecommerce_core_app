@@ -185,7 +185,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     }
   }
 
-  /// نافذة اختيار مورد مسجل من جدول الموردين الجديد
   void _showSupplierPickerModal() {
     FocusManager.instance.primaryFocus?.unfocus();
     showModalBottomSheet(
@@ -565,7 +564,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               padding: EdgeInsets.only(top: 16, left: 16, right: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
-              height: MediaQuery.of(context).size.height * 0.8,
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -598,7 +597,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               child: ListTile(
                                 leading: Icon(Icons.inventory_2, color: appSecondaryColor),
                                 title: Text(data['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('${data['category']} - ${data['subCategory']} | رصيد: ${data['stockQuantity'] ?? 0}'),
+                                subtitle: Text('${data['category']} | ${data['subCategory']} | رصيد: ${data['stockQuantity'] ?? 0}'),
                                 onTap: () {
                                   FocusManager.instance.primaryFocus?.unfocus();
                                   Navigator.pop(ctx);
@@ -662,28 +661,52 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
         invoiceNumber: _invoiceNoController.text.trim(),
         invoiceDate: _selectedDate,
         items: _extractedItems,
+        source: 'ai', // تسجيل الفاتورة كـ AI
       );
 
       if (mounted) Navigator.pop(context);
       if (mounted) {
+        // 🌟 تعديل رسالة النجاح (Custom Dialog) لتتوافق مع الهوية
         showDialog(
           context: context,
-          builder: (dialogContext) => AlertDialog(
+          builder: (dialogContext) => Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('تم ترحيل الفاتورة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: appSecondaryColor), textAlign: TextAlign.center),
-            content: const Text('تم تحديث المخزون، تحديث حساب المورد، وإنشاء القيد المحاسبي بنجاح.', style: TextStyle(fontFamily: 'Cairo'), textAlign: TextAlign.center),
-            actionsAlignment: MainAxisAlignment.center,
-            actions: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: appSecondaryColor),
-                onPressed: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  Navigator.pop(dialogContext);
-                  context.pop();
-                },
-                child: const Text('العودة', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: successGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
+                    child: Icon(Icons.check_circle_rounded, color: successGreen, size: 60),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('تم ترحيل الفاتورة بنجاح!', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: appPrimaryColor), textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  const Text('تم تحديث المخزون، وتحديث حساب المورد، وإنشاء القيد المحاسبي بنجاح.', style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.black87), textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: appSecondaryColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        Navigator.pop(dialogContext);
+                        context.pop();
+                      },
+                      child: const Text('العودة للسجل', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       }
@@ -715,7 +738,25 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: Scaffold(
           backgroundColor: appBackgroundColor,
-          appBar: AppBar(title: const Text('مراجعة وتسكين الفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16)), centerTitle: true, backgroundColor: appPrimaryColor, foregroundColor: Colors.white, elevation: 0),
+          appBar: AppBar(
+            automaticallyImplyLeading: false, // 🌟 إيقاف السهم الافتراضي
+            title: const Text('مراجعة وتسكين الفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            centerTitle: true,
+            backgroundColor: appPrimaryColor,
+            elevation: 0,
+            actions: [
+              // 🌟 إضافة السهم الجديد الموحد على الشمال
+              if (Navigator.canPop(context))
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              if (Navigator.canPop(context)) const SizedBox(width: 8),
+            ],
+          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(12.0),
             child: Column(
@@ -723,7 +764,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               children: [
                 Card(
                   elevation: 4,
-                  shadowColor: appPrimaryColor.withOpacity(0.2),
+                  shadowColor: appPrimaryColor.withValues(alpha: 0.2),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -840,7 +881,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                 else
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(color: successGreen.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                                    decoration: BoxDecoration(color: successGreen.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -974,7 +1015,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
                             Container(
                               padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: appPrimaryColor.withOpacity(0.02), border: Border.all(color: appSecondaryColor.withOpacity(0.4)), borderRadius: BorderRadius.circular(10)),
+                              decoration: BoxDecoration(color: appPrimaryColor.withValues(alpha: 0.02), border: Border.all(color: appSecondaryColor.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(10)),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [

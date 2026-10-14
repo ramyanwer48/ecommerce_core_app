@@ -1,24 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../logic/admin_coupons_cubit.dart';
+import '../data/repos/admin_coupons_repo.dart';
 
 class AdminCouponsScreen extends StatelessWidget {
   const AdminCouponsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // استدعاء الكوبونات فور فتح الشاشة
-    context.read<AdminCouponsCubit>().fetchCoupons();
+    return BlocProvider(
+      create: (context) => AdminCouponsCubit(AdminCouponsRepo())..fetchCoupons(),
+      child: const _AdminCouponsView(),
+    );
+  }
+}
 
+class _AdminCouponsView extends StatelessWidget {
+  const _AdminCouponsView();
+
+  @override
+  Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          title: const Text('إدارة كوبونات الخصم', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          title: const Text('إدارة كوبونات الخصم', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           centerTitle: true,
           backgroundColor: const Color(0xFF000826),
           iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          actions: [
+            // 🌟 سهم الرجوع في أقصى الشمال واتجاهه للخارج بأمان تام
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  try {
+                    Navigator.pushReplacementNamed(context, '/admin');
+                  } catch (_) {}
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showAddCouponBottomSheet(context),
@@ -30,11 +58,11 @@ class AdminCouponsScreen extends StatelessWidget {
           listener: (context, state) {
             if (state is AdminCouponsActionSuccess) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message), backgroundColor: Colors.green),
+                SnackBar(content: Text(state.message, style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
               );
             } else if (state is AdminCouponsError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+                SnackBar(content: Text(state.error, style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
               );
             }
           },
@@ -49,7 +77,7 @@ class AdminCouponsScreen extends StatelessWidget {
                 return const Center(
                   child: Text(
                     'لا توجد كوبونات مضافة حتى الآن 🎟️',
-                    style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                   ),
                 );
               }
@@ -78,12 +106,11 @@ class AdminCouponsScreen extends StatelessWidget {
                       ),
                       subtitle: Text(
                         'نسبة الخصم: ${coupon.discountPercentage}%',
-                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500),
+                        style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w500, fontFamily: 'Cairo'),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // زر التفعيل / التعطيل
                           Switch(
                             value: coupon.isActive,
                             activeColor: Colors.green,
@@ -91,7 +118,6 @@ class AdminCouponsScreen extends StatelessWidget {
                               context.read<AdminCouponsCubit>().toggleStatus(coupon.id, coupon.isActive);
                             },
                           ),
-                          // زر الحذف
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.red),
                             onPressed: () => _showDeleteConfirmation(context, coupon.id),
@@ -110,11 +136,11 @@ class AdminCouponsScreen extends StatelessWidget {
     );
   }
 
-  // نافذة سفلية (Bottom Sheet) لإضافة كوبون جديد
   void _showAddCouponBottomSheet(BuildContext context) {
     final codeController = TextEditingController();
     final discountController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final cubitInstance = context.read<AdminCouponsCubit>();
 
     showModalBottomSheet(
       context: context,
@@ -139,13 +165,14 @@ class AdminCouponsScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Center(
-                    child: Text('إضافة كوبون خصم جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    child: Text('إضافة كوبون خصم جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                   ),
                   const SizedBox(height: 20),
                   TextFormField(
                     controller: codeController,
                     decoration: const InputDecoration(
                       labelText: 'كود الكوبون (مثال: RAMY20)',
+                      labelStyle: TextStyle(fontFamily: 'Cairo'),
                       border: OutlineInputBorder(),
                     ),
                     validator: (val) => val == null || val.isEmpty ? 'يرجى إدخال كود الكوبون' : null,
@@ -156,6 +183,7 @@ class AdminCouponsScreen extends StatelessWidget {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'نسبة الخصم % (مثال: 15)',
+                      labelStyle: TextStyle(fontFamily: 'Cairo'),
                       border: OutlineInputBorder(),
                     ),
                     validator: (val) {
@@ -178,12 +206,11 @@ class AdminCouponsScreen extends StatelessWidget {
                           final code = codeController.text.trim();
                           final discount = double.parse(discountController.text);
 
-                          // إرسال البيانات للكوبيت
-                          context.read<AdminCouponsCubit>().addCoupon(code, discount);
+                          cubitInstance.addCoupon(code, discount);
                           Navigator.pop(sheetContext);
                         }
                       },
-                      child: const Text('حفظ وإضافة الكوبون', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: const Text('حفظ وإضافة الكوبون', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                     ),
                   ),
                 ],
@@ -195,28 +222,29 @@ class AdminCouponsScreen extends StatelessWidget {
     );
   }
 
-  // نافذة تأكيد الحذف
   void _showDeleteConfirmation(BuildContext context, String couponId) {
+    final cubitInstance = context.read<AdminCouponsCubit>();
+
     showDialog(
       context: context,
       builder: (dialogContext) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('هل أنت متأكد من رغبتك في حذف هذا الكوبون نهائياً؟'),
+          title: const Text('تأكيد الحذف', style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          content: const Text('هل أنت متأكد من رغبتك في حذف هذا الكوبون نهائياً؟', style: TextStyle(fontFamily: 'Cairo')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('تراجع', style: TextStyle(color: Colors.grey)),
+              child: const Text('تراجع', style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                context.read<AdminCouponsCubit>().deleteCoupon(couponId);
+                cubitInstance.deleteCoupon(couponId);
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('حذف', style: TextStyle(color: Colors.white)),
+              child: const Text('حذف', style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
             ),
           ],
         ),

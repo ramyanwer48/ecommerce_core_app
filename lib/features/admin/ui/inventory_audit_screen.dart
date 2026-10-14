@@ -102,15 +102,24 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          automaticallyImplyLeading: false,
           title: const Text('إدارة المخزون وتقييم الأصول', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
           centerTitle: true,
           backgroundColor: primaryNavy,
           elevation: 0,
+          automaticallyImplyLeading: false,
           actions: [
+            // 🌟 سهم الرجوع النظيف في أقصى الشمال واتجاهه للخارج بأمان تام
             IconButton(
-              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  try {
+                    Navigator.pushReplacementNamed(context, '/admin');
+                  } catch (_) {}
+                }
+              },
             ),
             const SizedBox(width: 8),
           ],
@@ -359,7 +368,6 @@ class _InventoryAuditScreenState extends State<InventoryAuditScreen> with Single
     );
   }
 
-  // 🌟 دالة الاعتماد المحسنة مع نافذة التحذير الذكية للعجز أو التالف
   Future<void> _handleAuditAction(String requestId, String action, Map<String, dynamic> data) async {
     final String productName = data['productName'] ?? 'غير معروف';
     final int systemStock = data['systemStock'] ?? 0;

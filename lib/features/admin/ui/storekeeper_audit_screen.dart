@@ -25,15 +25,24 @@ class _StorekeeperAuditScreenState extends State<StorekeeperAuditScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
-          automaticallyImplyLeading: false,
           title: const Text('مهام الجرد الموجهة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           centerTitle: true,
           backgroundColor: primaryNavy,
           elevation: 0,
+          automaticallyImplyLeading: false,
           actions: [
+            // 🌟 سهم الرجوع النظيف في أقصى الشمال واتجاهه للخارج بأمان تام
             IconButton(
-              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  try {
+                    Navigator.pushReplacementNamed(context, '/admin');
+                  } catch (_) {}
+                }
+              },
             ),
             const SizedBox(width: 8),
           ],
@@ -73,14 +82,13 @@ class _StorekeeperAuditScreenState extends State<StorekeeperAuditScreen> {
                       final data = docs[index].data() as Map<String, dynamic>;
                       final productId = docs[index].id;
                       final String name = data['name'] ?? 'غير معروف';
-                      final String? imageUrl = data['imageUrl']; // تم سحب رابط الصورة بناءً على الفايرستور لديك
+                      final String? imageUrl = data['imageUrl'];
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
                         elevation: 0,
                         child: ListTile(
-                          // عرض صورة المنتج
                           leading: Container(
                             width: 50,
                             height: 50,

@@ -17,6 +17,47 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
 
   String _searchQuery = '';
 
+  // نافذة منبثقة فخمة تؤكد النجاح بألوان الهوية
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'تمت الإضافة بنجاح',
+                style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18),
+              ),
+            ],
+          ),
+          content: const Text(
+            'تم تسجيل جهة الشحن أو المندوب بنجاح وأصبح جاهزاً للاستخدام في البوالص.',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.black87),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryNavy,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('حسناً', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // الشاشة السفلية لإضافة جهة الشحن (BottomSheet)
   void _showAddCourierSheet() {
     TextEditingController nameCtrl = TextEditingController();
@@ -128,8 +169,11 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
                             return;
                           }
 
-                          // إظهار اللودينج
-                          showDialog(context: context, barrierDismissible: false, builder: (loadingCtx) => const Center(child: CircularProgressIndicator()));
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (loadingCtx) => Center(child: CircularProgressIndicator(color: brandOrange)),
+                          );
 
                           try {
                             await _firestore.collection('couriers').add({
@@ -141,20 +185,20 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
                               'createdAt': FieldValue.serverTimestamp(),
                             });
 
-                            if (mounted) {
-                              Navigator.pop(context); // إغلاق اللودينج
-                              Navigator.pop(sheetCtx); // إغلاق الشاشة السفلية
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة جهة الشحن بنجاح 🚀', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
-                            }
+                            if (!mounted) return;
+
+                            Navigator.of(context, rootNavigator: true).pop();
+                            Navigator.pop(sheetCtx);
+
+                            _showSuccessDialog();
+
                           } catch (e) {
-                            if (mounted) {
-                              Navigator.pop(context); // إغلاق اللودينج فقط، وترك الشاشة السفلية مفتوحة
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text('تم الرفض من قواعد أمان الفايربيز (Rules)! برجاء السماح لجدول couriers', style: const TextStyle(fontFamily: 'Cairo')),
-                                  backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 5)
-                              ));
-                            }
+                            if (!mounted) return;
+                            Navigator.of(context, rootNavigator: true).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('حدث خطأ أثناء الحفظ: $e', style: const TextStyle(fontFamily: 'Cairo')),
+                              backgroundColor: Colors.red,
+                            ));
                           }
                         },
                         child: const Text('حفظ البيانات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
@@ -177,11 +221,25 @@ class _ShippingCompaniesScreenState extends State<ShippingCompaniesScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7FA),
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           title: const Text('شركات الشحن والمندوبين', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           centerTitle: true,
           backgroundColor: primaryNavy,
-          iconTheme: const IconThemeData(color: Colors.white),
           elevation: 0,
+          actions: [
+            // 🌟 سهم الرجوع النظيف في الجهة اليسرى يشير للخارج
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushReplacementNamed(context, '/admin');
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: brandOrange,

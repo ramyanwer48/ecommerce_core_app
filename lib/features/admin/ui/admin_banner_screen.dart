@@ -15,18 +15,26 @@ class AdminBannerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: AppBar(
-            title: const Text('إدارة إعلانات المتجر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18)),
-            backgroundColor: primaryNavy,
-            foregroundColor: Colors.white,
-            centerTitle: true,
-            leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
+      appBar: AppBar(
+        title: const Text('إدارة إعلانات المتجر', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18)),
+        backgroundColor: primaryNavy,
+        foregroundColor: Colors.white,
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        actions: [
+          // 🌟 الحل الأضمن والأبسط: استخدام Navigator.pop العادي لمنع أي إيرور لـ go_router
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+            onPressed: () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              } else {
+                context.go('/admin');
+              }
+            },
           ),
-        ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
@@ -156,9 +164,6 @@ class AdminBannerScreen extends StatelessWidget {
   }
 }
 
-// ==========================================
-// ويدجت الشاشة المنبثقة
-// ==========================================
 class _BannerEditSheet extends StatefulWidget {
   final int slotNumber;
   final String docId;
@@ -176,7 +181,7 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
   late TextEditingController imgCtrl;
   bool _isLoading = false;
   File? _pickedImage;
-  bool _removeExistingImage = false; // 👈 متغير جديد لتتبع رغبة المستخدم في حذف الصورة المحفوظة
+  bool _removeExistingImage = false;
 
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = const Color(0xFFFB8C00);
@@ -205,7 +210,7 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
       setState(() {
         _pickedImage = File(pickedFile.path);
         imgCtrl.clear();
-        _removeExistingImage = true; // نعتبر أن الصورة القديمة سيتم استبدالها
+        _removeExistingImage = true;
       });
     }
   }
@@ -223,7 +228,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
   }
 
   Future<void> _saveBanner() async {
-    // إزالة قيد إجبارية العنوان (يمكنك الآن حفظ إعلان فارغ أو بصورة فقط)
     if (titleCtrl.text.trim().isEmpty && subCtrl.text.trim().isEmpty && _pickedImage == null && (imgCtrl.text.trim().isEmpty && (_removeExistingImage || widget.currentData?['imageUrl'] == null))) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكن حفظ إعلان فارغ تماماً', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
       return;
@@ -233,7 +237,7 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
 
     String imageUrl = imgCtrl.text.trim();
     if (_removeExistingImage) {
-      imageUrl = ''; // تفريغ الرابط في قاعدة البيانات
+      imageUrl = '';
     }
 
     if (_pickedImage != null) {
@@ -269,7 +273,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    // التحقق مما إذا كان هناك صورة محفوظة مسبقاً
     bool hasSavedImage = widget.currentData != null &&
         widget.currentData!['imageUrl'] != null &&
         widget.currentData!['imageUrl'].toString().isNotEmpty &&
@@ -319,7 +322,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
               ),
               const SizedBox(height: 16),
 
-              // 👈 إضافة زر التفريغ (onClear) لحقل العنوان الرئيسي
               _buildModernTextField(
                 controller: titleCtrl,
                 label: 'العنوان الرئيسي',
@@ -328,7 +330,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
               ),
               const SizedBox(height: 16),
 
-              // 👈 إضافة زر التفريغ (onClear) لحقل العنوان الفرعي
               _buildModernTextField(
                 controller: subCtrl,
                 label: 'العنوان الفرعي (تفاصيل العرض)',
@@ -338,7 +339,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
               ),
               const SizedBox(height: 16),
 
-              // 👈 ويدجت جديد يظهر لمعاينة وحذف الصورة المحفوظة مسبقاً
               if (hasSavedImage && _pickedImage == null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -418,7 +418,7 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
                       TextButton(
                         onPressed: () => setState(() {
                           _pickedImage = null;
-                          _removeExistingImage = false; // التراجع عن الحذف إذا ألغى الاختيار
+                          _removeExistingImage = false;
                         }),
                         child: const Text('إلغاء الصورة المرفوعة', style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontSize: 12)),
                       )
@@ -464,7 +464,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
     );
   }
 
-  // 👈 دالة الحقول تم تعديلها لاستقبال onClear (زر التفريغ X)
   Widget _buildModernTextField({
     required TextEditingController controller,
     required String label,
@@ -482,7 +481,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
         labelText: label,
         labelStyle: TextStyle(fontFamily: 'Cairo', color: Colors.grey.shade600),
         prefixIcon: Icon(icon, color: Colors.grey.shade400),
-        // زر الـ (X) للتفريغ السريع
         suffixIcon: onClear != null && controller.text.isNotEmpty
             ? IconButton(
           icon: const Icon(Icons.clear, color: Colors.redAccent, size: 20),
@@ -494,7 +492,6 @@ class _BannerEditSheetState extends State<_BannerEditSheet> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: brandOrange, width: 1.5)),
       ),
-      // لإظهار الـ (X) بمجرد الكتابة
       onChanged: (_) => setState(() {}),
     );
   }

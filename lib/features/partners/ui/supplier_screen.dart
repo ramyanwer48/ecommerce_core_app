@@ -2,24 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'supplier_ledger_screen.dart';
 
-class PartnersScreen extends StatefulWidget {
-  const PartnersScreen({super.key});
+class SupplierScreen extends StatefulWidget {
+  const SupplierScreen({super.key});
 
   @override
-  State<PartnersScreen> createState() => _PartnersScreenState();
+  State<SupplierScreen> createState() => _SupplierScreenState();
 }
 
-class _PartnersScreenState extends State<PartnersScreen> {
+class _SupplierScreenState extends State<SupplierScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // الجدول المخصص للموردين فقط
   static const String _suppliersCollection = 'suppliers';
 
   final Color primaryNavy = const Color(0xFF0D1B2A);
   final Color brandOrange = Colors.orange.shade600;
 
   String _searchQuery = '';
-  List<String> _selectedSupplierIds = []; // لحفظ معرفات الموردين المختارين في الفلتر
+  List<String> _selectedSupplierIds = [];
 
   @override
   void initState() {
@@ -27,7 +26,6 @@ class _PartnersScreenState extends State<PartnersScreen> {
     _migrateRemainingSuppliersIfNeeded();
   }
 
-  /// فحص تلقائي صامت: إذا كان هناك أي مورد ما زال في الجدول القديم ينقله فوراً إلى جدول الموردين الجديد
   Future<void> _migrateRemainingSuppliersIfNeeded() async {
     try {
       final oldSuppliersSnap = await _firestore
@@ -193,7 +191,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
     );
   }
 
-  // شاشة الفلتر المتعدد
+  // 🌟 شاشة الفلتر المتعدد المحدثة (مع زر X المربع الأنيق)
   void _showFilterModal(List<QueryDocumentSnapshot> allSuppliers) {
     List<String> tempSelected = List.from(_selectedSupplierIds);
 
@@ -207,8 +205,8 @@ class _PartnersScreenState extends State<PartnersScreen> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: Container(
-                height: MediaQuery.of(context).size.height * 0.7, // يأخذ 70% من الشاشة
-                padding: const EdgeInsets.only(top: 20, left: 16, right: 16),
+                height: MediaQuery.of(context).size.height * 0.7,
+                padding: const EdgeInsets.only(top: 16, left: 20, right: 20, bottom: 20),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -223,34 +221,54 @@ class _PartnersScreenState extends State<PartnersScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                    // هيدر نافذة الفلتر مع زر الإغلاق المربع
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'تصفية حسب المورد',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'Cairo',
                             color: primaryNavy,
                           ),
                         ),
-                        if (tempSelected.isNotEmpty)
-                          TextButton(
-                            onPressed: () => setModalState(() => tempSelected.clear()),
-                            child: Text(
-                              'إلغاء التحديد',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                color: Colors.red.shade700,
-                                fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            if (tempSelected.isNotEmpty)
+                              TextButton(
+                                onPressed: () => setModalState(() => tempSelected.clear()),
+                                child: Text(
+                                  'إلغاء التحديد',
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    color: Colors.red.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.black, width: 1.5),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16),
+                                onPressed: () => Navigator.pop(context),
+                                padding: EdgeInsets.zero,
                               ),
                             ),
-                          )
+                          ],
+                        ),
                       ],
                     ),
-                    const Divider(),
+                    const Divider(height: 20),
                     Expanded(
                       child: ListView.builder(
                         itemCount: allSuppliers.length,
@@ -263,10 +281,10 @@ class _PartnersScreenState extends State<PartnersScreen> {
                           final bool isSelected = tempSelected.contains(id);
 
                           return CheckboxListTile(
-                            title: Text(name, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                            title: Text(name, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
                             value: isSelected,
                             activeColor: brandOrange,
-                            checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                             onChanged: (bool? value) {
                               setModalState(() {
                                 if (value == true) {
@@ -280,13 +298,15 @@ class _PartnersScreenState extends State<PartnersScreen> {
                         },
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
                           backgroundColor: brandOrange,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
                         ),
                         onPressed: () {
                           setState(() {
@@ -345,7 +365,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
         ),
         body: Column(
           children: [
-            // شريط البحث والفلتر (يقرأ مباشرة من جدول الموردين)
+            // شريط البحث والفلتر
             Container(
               color: primaryNavy,
               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16, top: 8),
@@ -394,6 +414,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
                         const SizedBox(width: 8),
                       ],
 
+                      // 🌟 زر الفلتر بإطار أبيض صريح حسب الطلب
                       InkWell(
                         onTap: () {
                           if (allDocs.isNotEmpty) {
@@ -405,9 +426,9 @@ class _PartnersScreenState extends State<PartnersScreen> {
                           height: 48,
                           width: 48,
                           decoration: BoxDecoration(
-                            color: hasFilter ? brandOrange : primaryNavy.withOpacity(0.5),
+                            color: hasFilter ? brandOrange : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: brandOrange),
+                            border: Border.all(color: Colors.white, width: 1.5), // إطار أبيض
                           ),
                           child: Stack(
                             alignment: Alignment.center,
@@ -481,16 +502,13 @@ class _PartnersScreenState extends State<PartnersScreen> {
                     );
                   }
 
-                  // 1. استخراج كل البيانات من جدول الموردين
                   var suppliers = snapshot.data!.docs.toList();
 
-                  // 2. تطبيق فلتر الاختيار المتعدد
                   if (_selectedSupplierIds.isNotEmpty) {
                     suppliers =
                         suppliers.where((doc) => _selectedSupplierIds.contains(doc.id)).toList();
                   }
 
-                  // 3. تطبيق فلتر البحث النصي
                   if (_searchQuery.isNotEmpty) {
                     suppliers = suppliers.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
@@ -499,7 +517,6 @@ class _PartnersScreenState extends State<PartnersScreen> {
                     }).toList();
                   }
 
-                  // ترتيب محلي حسب تاريخ الإنشاء
                   suppliers.sort((a, b) {
                     final dataA = a.data() as Map<String, dynamic>;
                     final dataB = b.data() as Map<String, dynamic>;
@@ -563,7 +580,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: brandOrange.withOpacity(0.1),
+                                    color: brandOrange.withValues(alpha: 0.1),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(Icons.storefront_rounded,
@@ -571,6 +588,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
                                 ),
                                 const SizedBox(width: 12),
 
+                                // 🌟 اسم المورد مرن ولا يقص أبداً
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,13 +607,20 @@ class _PartnersScreenState extends State<PartnersScreen> {
                                       const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          Text(
-                                            'مورد',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontFamily: 'Cairo',
-                                              color: Colors.blue.shade700,
-                                              fontWeight: FontWeight.bold,
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: brandOrange.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'مورد معتمد',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontFamily: 'Cairo',
+                                                color: brandOrange,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
                                           if (supplierPhone.isNotEmpty) ...[
@@ -625,26 +650,28 @@ class _PartnersScreenState extends State<PartnersScreen> {
                                 ),
                                 const SizedBox(width: 8),
 
+                                // 🌟 كارت الرصيد (خلفية كحلي ورقم برتقالي)
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   decoration: BoxDecoration(
-                                    color: primaryNavy.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: primaryNavy.withOpacity(0.1)),
+                                    color: primaryNavy,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: brandOrange, width: 1.2),
                                   ),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      Text(
+                                      const Text(
                                         'الرصيد',
                                         style: TextStyle(
                                           fontFamily: 'Cairo',
                                           fontSize: 9,
-                                          color: Colors.grey.shade600,
+                                          color: Colors.white70,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
+                                      const SizedBox(height: 2),
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -655,16 +682,16 @@ class _PartnersScreenState extends State<PartnersScreen> {
                                             style: TextStyle(
                                               fontFamily: 'Cairo',
                                               fontWeight: FontWeight.bold,
-                                              color: primaryNavy,
+                                              color: brandOrange,
                                               fontSize: 13,
                                             ),
                                           ),
                                           const SizedBox(width: 2),
-                                          Text(
+                                          const Text(
                                             'ج',
                                             style: TextStyle(
                                               fontFamily: 'Cairo',
-                                              color: brandOrange,
+                                              color: Colors.white70,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                             ),

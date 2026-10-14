@@ -242,7 +242,20 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(isSubCategory ? 'إضافة قسم فرعي جديد' : 'إضافة قسم أساسي جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                      IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.black, width: 1.5),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16),
+                          onPressed: () => Navigator.pop(ctx),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -332,9 +345,22 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const SizedBox(width: 40),
+                    const SizedBox(width: 32),
                     Text(title, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                    IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(ctx)),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.black, width: 1.5),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16),
+                        onPressed: () => Navigator.pop(ctx),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -416,13 +442,29 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                     Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
                     const SizedBox(height: 12),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const SizedBox(width: 40),
-                        Text('تحديد الأصناف للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                        IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(context)),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const SizedBox(width: 32),
+                          Text('تحديد الأصناف للفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.black, width: 1.5),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16),
+                              onPressed: () => Navigator.pop(context),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const Divider(height: 10),
 
@@ -553,9 +595,22 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const SizedBox(width: 40),
+                        const SizedBox(width: 32),
                         Text('تأسيس صنف جديد', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: primaryNavy)),
-                        IconButton(icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 28), onPressed: () => Navigator.pop(context)),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.black, width: 1.5),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16),
+                            onPressed: () => Navigator.pop(context),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -822,6 +877,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
         invoiceNumber: _invoiceNumberController.text.trim(),
         invoiceDate: _selectedDate,
         items: finalItemsToSave,
+        source: 'manual', // 🌟 أضفنا هذا السطر ليميز الفاتورة اليدوية
       );
 
       if (mounted) {
@@ -895,7 +951,7 @@ class _ManualPurchaseScreenState extends State<ManualPurchaseScreen> {
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),

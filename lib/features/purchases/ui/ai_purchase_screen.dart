@@ -148,24 +148,30 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
           centerTitle: true,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          // 🚀 السحر هنا: إضافة علامة X على الشمال للخروج من الشاشة
+          // 🚀 التعديل هنا: نقلنا زرار الإغلاق المربع للشمال
           actions: [
-            Directionality(
-              textDirection: TextDirection.ltr, // عشان الأيقونة تبان على الشمال في وضع الـ RTL
-              child: IconButton(
-                icon: Icon(Icons.close_rounded, color: primaryNavy, size: 28),
-                onPressed: () {
+            Padding(
+              padding: const EdgeInsets.only(left: 16.0, top: 8, bottom: 8),
+              child: InkWell(
+                onTap: () {
                   HapticFeedback.lightImpact();
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   } else {
-                    // لو الشاشة دي مفتوحة كأنها رئيسية (مثلاً من الـ Bottom Nav)، ممكن نوديه للرئيسية
                     context.go(Routes.home);
                   }
                 },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.black, width: 1.5),
+                  ),
+                  child: const Icon(Icons.close_rounded, color: Colors.black, size: 20),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
           ],
         ),
         body: Center(
@@ -300,7 +306,10 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
                     scale: 1.0 + (_pulseController.value * 0.5),
                     child: Container(
                       width: 100, height: 100,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: brandOrange.withOpacity((1.0 - _pulseController.value) * 0.3)),
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: brandOrange.withOpacity((1.0 - _pulseController.value) * 0.3)
+                      ),
                     ),
                   ),
                   Container(
@@ -315,7 +324,7 @@ class _AiPurchaseScreenState extends State<AiPurchaseScreen> with SingleTickerPr
           const SizedBox(height: 40),
 
           const Text(
-            'لحظات من السحر...',
+            'جاري المعالجة الذكية...',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.white),
           ),
           const SizedBox(height: 12),
