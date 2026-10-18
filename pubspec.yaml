@@ -30,8 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # تأكد أن هذه السطور على نفس مستوى كلمة flutter
 
-  # The following adds the Cupertino Icons font to your application.
+  image: ^4.1.7
+
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_bloc: ^9.1.1
@@ -62,6 +64,8 @@ dependencies:
   path_provider: ^2.1.6
   flutter_contacts: ^1.1.9   # لفتح جهات الاتصال وسحب الرقم
   url_launcher: ^6.3.3
+  mobile_scanner: ^5.1.1
+
 
 dev_dependencies:
   flutter_test:
@@ -91,6 +95,7 @@ flutter:
   # 👈 إضافة مسار الصور هنا (تأكد من المسافات البادئة)
   assets:
     - assets/images/
+
 
 # إعدادات أداة تغيير الأيقونة
 flutter_launcher_icons:
