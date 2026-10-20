@@ -25,9 +25,10 @@ class AdminRepo {
   Future<void> addProduct({
     required String name,
     required double price,
-    required double costPrice, // سعر التكلفة للدفعة الأولى
+    required String barcode, // 👈 استقبال الباركود هنا
+    required double costPrice,
     required String category,
-    required String subCategory, // 👈 استقبال التصنيف الفرعي
+    required String subCategory,
     required String description,
     required String imageUrl,
     required List<String> images,
@@ -46,18 +47,19 @@ class AdminRepo {
 
     await _firestore.collection('products').add({
       'name': name,
-      'price': price, // سعر البيع الثابت للعميل في الواجهة
+      'price': price,
+      'barcode': barcode, // 👈 حفظ الباركود فعلياً في فايربيس
       'category': category,
-      'subCategory': subCategory, // 👈 حفظ التصنيف الفرعي في فايربيز
+      'subCategory': subCategory,
       'description': description,
       'imageUrl': imageUrl,
       'images': images,
       'variations': variations,
       'inStock': stockQuantity > 0,
       'isActive': true,
-      'stockQuantity': stockQuantity, // إجمالي المخزون
-      'batches': [initialBatch], // حقن الدفعة الأولى
-      'createdAt': Timestamp.now(), // 👈 ضروري لترتيب المنتجات الأحدث في لوحة التحكم
+      'stockQuantity': stockQuantity,
+      'batches': [initialBatch],
+      'createdAt': Timestamp.now(),
     });
   }
 

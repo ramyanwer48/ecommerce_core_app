@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../home/data/models/product_model.dart';
 import '../services/purchase_service.dart';
-import '../../admin/ui/widgets/google_image_picker_dialog.dart';
 
 class InvoiceReviewScreen extends StatefulWidget {
   final Map<String, dynamic>? invoiceData;
@@ -16,9 +15,9 @@ class InvoiceReviewScreen extends StatefulWidget {
 }
 
 class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
-  final Color appPrimaryColor = const Color(0xFF0B1E3F);
-  final Color appSecondaryColor = const Color(0xFFFF9F0A);
-  final Color appBackgroundColor = const Color(0xFFF4F6F9);
+  final Color appPrimaryColor = const Color(0xFF0D1B2A);
+  final Color appSecondaryColor = Colors.orange.shade600;
+  final Color appBackgroundColor = const Color(0xFFF4F7FB);
   final Color alertRed = Colors.red.shade600;
   final Color successGreen = const Color(0xFF10B981);
 
@@ -28,6 +27,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
   late TextEditingController _invoiceNoController;
   late TextEditingController _dateController;
   late DateTime _selectedDate;
+
+  double? _currentGlobalMargin;
 
   List<Map<String, dynamic>> _extractedItems = [];
   Map<String, List<String>> _localTaxonomy = Map.from(MasterCatalogCategories.taxonomy);
@@ -47,6 +48,132 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     if (val is double) return val.toInt();
     if (val is String) return int.tryParse(val) ?? 1;
     return 1;
+  }
+
+  String _formatNumber(dynamic val) {
+    if (val == null) return '0';
+    double? number = double.tryParse(val.toString());
+    if (number == null) return val.toString();
+    if (number == number.toInt()) {
+      return number.toInt().toString();
+    }
+    return number.toStringAsFixed(2);
+  }
+
+  void _updateTotal() => setState(() {});
+
+  // 🌟 حسبة سعر البيع بناءً على سعر الكرتونة ومعامل التحويل ونسبة الربح
+  void _calculateSellingPrice(Map<String, dynamic> item, double percentage) {
+    double cartonPrice = double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0;
+    double conversion = double.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1.0;
+    if (conversion <= 0) conversion = 1.0;
+
+    double unitCost = cartonPrice / conversion;
+    double sellingPrice = unitCost + (unitCost * (percentage / 100));
+    (item['sellingPriceController'] as TextEditingController).text = _formatNumber(sellingPrice);
+  }
+
+  void _applyGlobalProfitMargin(double percentage) {
+    setState(() {
+      _currentGlobalMargin = percentage;
+      for (var item in _extractedItems) {
+        if (item['isCustomMargin'] != true) {
+          item['itemMargin'] = percentage;
+          _calculateSellingPrice(item, percentage);
+        }
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم تطبيق نسبة $percentage% على الأصناف وتحديث أسعار البيع', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: successGreen),
+    );
+  }
+
+  void _applyItemProfitMargin(int index, double percentage) {
+    setState(() {
+      var item = _extractedItems[index];
+      item['itemMargin'] = percentage;
+      if (_currentGlobalMargin != null && percentage == _currentGlobalMargin) {
+        item['isCustomMargin'] = false;
+      } else {
+        item['isCustomMargin'] = true;
+      }
+      _calculateSellingPrice(item, percentage);
+    });
+  }
+
+  void _showProfitMarginModal({int? targetItemIndex}) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    List<double> presetMargins = [10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const SizedBox(width: 32),
+                    Text(
+                      targetItemIndex == null ? 'اختر نسبة الربح العامة للفاتورة' : 'اختر نسبة الربح للصنف',
+                      style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor),
+                    ),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.black, width: 1.5)),
+                      child: IconButton(icon: const Icon(Icons.close_rounded, color: Colors.black, size: 16), onPressed: () => Navigator.pop(ctx), padding: EdgeInsets.zero),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: presetMargins.map((margin) => ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appBackgroundColor,
+                      foregroundColor: appPrimaryColor,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      if (targetItemIndex == null) {
+                        _applyGlobalProfitMargin(margin);
+                      } else {
+                        _applyItemProfitMargin(targetItemIndex, margin);
+                      }
+                    },
+                    child: Text('$margin%', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                  )).toList(),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🌟 إجمالي قيمة الفاتورة المالية بناءً على الكرتونة وسعر الكرتونة
+  double get _calculateGrandTotal {
+    return _extractedItems.fold(0.0, (totalSum, item) {
+      double cartonPrice = double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0;
+      int qtyCarton = int.tryParse((item['qtyController'] as TextEditingController).text) ?? 0;
+      return totalSum + (cartonPrice * qtyCarton);
+    });
   }
 
   @override
@@ -93,6 +220,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           }
 
           double parsedCost = _getSafeDouble(item['unitPrice'] ?? item['price']);
+          int parsedQty = _getSafeInt(item['quantity'] ?? item['qty']);
 
           return {
             '_id': UniqueKey().toString(),
@@ -103,10 +231,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
             'isAutoMatched': false,
             'mainCategory': aiMainCat,
             'subCategory': aiSubCat,
-            'qty': _getSafeInt(item['quantity'] ?? item['qty']),
-            'price': parsedCost,
-            'sellingPrice': 0.0,
-            'conversionFactor': 1,
+            'qtyController': TextEditingController(text: parsedQty.toString()),
+            'conversionFactorController': TextEditingController(text: '1'),
+            'priceController': TextEditingController(text: _formatNumber(parsedCost)),
+            'sellingPriceController': TextEditingController(text: '0'),
+            'itemMargin': null,
+            'isCustomMargin': false,
             'imageUrls': <String>[],
           };
         }).toList();
@@ -147,7 +277,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
               _extractedItems[i]['subCategory'] = dbSub;
 
               if (data['price'] != null) {
-                _extractedItems[i]['sellingPrice'] = _getSafeDouble(data['price']);
+                (_extractedItems[i]['sellingPriceController'] as TextEditingController).text = _formatNumber(data['price']);
               }
               break;
             }
@@ -249,10 +379,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       'isAutoMatched': false,
       'mainCategory': _localTaxonomy.keys.isNotEmpty ? _localTaxonomy.keys.first : 'General',
       'subCategory': _localTaxonomy.values.isNotEmpty ? _localTaxonomy.values.first.first : 'General',
-      'qty': 1,
-      'price': 0.0,
-      'sellingPrice': 0.0,
-      'conversionFactor': 1,
+      'qtyController': TextEditingController(text: '1'),
+      'conversionFactorController': TextEditingController(text: '1'),
+      'priceController': TextEditingController(text: '0'),
+      'sellingPriceController': TextEditingController(text: '0'),
+      'itemMargin': null,
+      'isCustomMargin': false,
       'imageUrls': <String>[],
     };
   }
@@ -262,6 +394,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     _supplierController.dispose();
     _invoiceNoController.dispose();
     _dateController.dispose();
+    for (var item in _extractedItems) {
+      (item['qtyController'] as TextEditingController?)?.dispose();
+      (item['conversionFactorController'] as TextEditingController?)?.dispose();
+      (item['priceController'] as TextEditingController?)?.dispose();
+      (item['sellingPriceController'] as TextEditingController?)?.dispose();
+    }
     super.dispose();
   }
 
@@ -287,14 +425,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
         _dateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
       });
     }
-  }
-
-  double get _calculateGrandTotal {
-    double total = 0;
-    for (var item in _extractedItems) {
-      total += (_getSafeDouble(item['qty']) * _getSafeDouble(item['price']));
-    }
-    return total;
   }
 
   bool get _isAllItemsReady {
@@ -414,11 +544,15 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     if (newSubCat.isNotEmpty) {
                       FocusManager.instance.primaryFocus?.unfocus();
                       Navigator.pop(ctx);
+
+                      // 1. التحديث المحلي الفوري عشان تظهر في الواجهة لحظياً
                       Future.delayed(const Duration(milliseconds: 150), () {
                         if (mounted) {
                           setState(() {
                             if (_localTaxonomy[mainCategory] != null) {
-                              _localTaxonomy[mainCategory]!.add(newSubCat);
+                              if (!_localTaxonomy[mainCategory]!.contains(newSubCat)) {
+                                _localTaxonomy[mainCategory]!.add(newSubCat);
+                              }
                             } else {
                               _localTaxonomy[mainCategory] = [newSubCat];
                             }
@@ -426,10 +560,17 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                           });
                         }
                       });
+
+                      // 2. الحفظ الأصلي المطابق لكودك القديم في فايربيز
                       try {
-                        await FirebaseFirestore.instance.collection('categories').doc(mainCategory).update({'subCategories': FieldValue.arrayUnion([newSubCat])});
+                        await FirebaseFirestore.instance.collection('categories').doc(mainCategory).update({
+                          'subCategories': FieldValue.arrayUnion([newSubCat])
+                        });
                       } catch (e) {
-                        await FirebaseFirestore.instance.collection('categories').doc(mainCategory).set({'name': mainCategory, 'subCategories': [newSubCat]}, SetOptions(merge: true));
+                        await FirebaseFirestore.instance.collection('categories').doc(mainCategory).set({
+                          'name': mainCategory,
+                          'subCategories': [newSubCat]
+                        }, SetOptions(merge: true));
                       }
                     }
                   },
@@ -445,199 +586,60 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   void _showCategorySelector(Map<String, dynamic> item, bool isMain) {
     FocusManager.instance.primaryFocus?.unfocus();
-    List<String> options = isMain ? _localTaxonomy.keys.toList() : (_localTaxonomy[item['mainCategory']] ?? []);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       backgroundColor: Colors.white,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-            const SizedBox(height: 16),
-            Text(isMain ? 'اختر التصنيف الأساسي' : 'اختر التصنيف الفرعي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor)),
-            const Divider(),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: Icon(isMain ? Icons.category : Icons.account_tree, color: appSecondaryColor, size: 20),
-                    title: Text(options[index], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
-                    onTap: () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      Navigator.pop(ctx);
-                      Future.delayed(const Duration(milliseconds: 150), () {
-                        if (mounted) {
-                          setState(() {
-                            if (isMain) {
-                              item['mainCategory'] = options[index];
-                              item['subCategory'] = _localTaxonomy[options[index]]?.isNotEmpty == true ? _localTaxonomy[options[index]]!.first : 'General';
-                            } else {
-                              item['subCategory'] = options[index];
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          // 🌟 جلب الخيارات مباشرة وتحديثها لحظياً
+          List<String> options = isMain ? _localTaxonomy.keys.toList() : (_localTaxonomy[item['mainCategory']] ?? []);
+
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 16),
+                Text(isMain ? 'اختر التصنيف الأساسي' : 'اختر التصنيف الفرعي', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor)),
+                const Divider(),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: Icon(isMain ? Icons.category : Icons.account_tree, color: appSecondaryColor, size: 20),
+                        title: Text(options[index], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+                        onTap: () {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          Navigator.pop(ctx);
+                          Future.delayed(const Duration(milliseconds: 150), () {
+                            if (mounted) {
+                              setState(() {
+                                if (isMain) {
+                                  item['mainCategory'] = options[index];
+                                  item['subCategory'] = _localTaxonomy[options[index]]?.isNotEmpty == true ? _localTaxonomy[options[index]]!.first : 'General';
+                                } else {
+                                  item['subCategory'] = options[index];
+                                }
+                              });
                             }
                           });
-                        }
-                      });
+                        },
+                      );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickFromGoogleSearch(int index, String productName) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-
-    final List<String>? selectedImageUrls = await showDialog<List<String>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => GoogleImagePickerDialog(productName: productName),
-    );
-
-    FocusManager.instance.primaryFocus?.unfocus();
-
-    if (selectedImageUrls != null && selectedImageUrls.isNotEmpty && mounted) {
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (mounted) {
-          setState(() {
-            _extractedItems[index]['imageUrls'] = selectedImageUrls;
-          });
-          FocusManager.instance.primaryFocus?.unfocus();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم إرفاق صور جوجل للمنتج!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
           );
-        }
-      });
-    }
-  }
-
-  void _showImagePickerOptions(int index) {
-    FocusManager.instance.primaryFocus?.unfocus();
-    String productName = _extractedItems[index]['mappedName'] ?? 'منتج جديد';
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('إضافة صورة لـ: $productName', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor)),
-            const Divider(thickness: 2, height: 30),
-            ListTile(
-              leading: Icon(Icons.travel_explore, color: appSecondaryColor, size: 30),
-              title: const Text('بحث من جوجل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-              onTap: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                Navigator.pop(ctx);
-                Future.delayed(const Duration(milliseconds: 150), () {
-                  _pickFromGoogleSearch(index, productName);
-                });
-              },
-            ),
-          ],
-        ),
+        },
       ),
-    );
-  }
-
-  void _showProductSearchModal(int index) {
-    FocusManager.instance.primaryFocus?.unfocus();
-    String currentQuery = '';
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Container(
-              padding: EdgeInsets.only(top: 16, left: 16, right: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('اختر الصنف من المخزن لإضافة الدفعة', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: appSecondaryColor)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    decoration: InputDecoration(labelText: 'ابحث عن المنتج...', prefixIcon: Icon(Icons.search, color: appSecondaryColor), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                    onChanged: (val) {
-                      setModalState(() {
-                        currentQuery = val.toLowerCase();
-                      });
-                    },
-                  ),
-                  const Divider(height: 30, thickness: 2),
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('products').limit(50).snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: appSecondaryColor));
-                        var docs = snapshot.data!.docs.where((doc) {
-                          String name = (doc.data() as Map<String, dynamic>)['name']?.toString().toLowerCase() ?? '';
-                          return name.contains(currentQuery);
-                        }).toList();
-                        if (docs.isEmpty) return const Center(child: Text('هذا الصنف غير مسجل.', style: TextStyle(fontFamily: 'Cairo')));
-                        return ListView.builder(
-                          itemCount: docs.length,
-                          itemBuilder: (context, i) {
-                            var data = docs[i].data() as Map<String, dynamic>;
-                            return Card(
-                              child: ListTile(
-                                leading: Icon(Icons.inventory_2, color: appSecondaryColor),
-                                title: Text(data['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('${data['category']} | ${data['subCategory']} | رصيد: ${data['stockQuantity'] ?? 0}'),
-                                onTap: () {
-                                  FocusManager.instance.primaryFocus?.unfocus();
-                                  Navigator.pop(ctx);
-                                  Future.delayed(const Duration(milliseconds: 150), () {
-                                    if (mounted) {
-                                      setState(() {
-                                        _extractedItems[index]['isNewProduct'] = false;
-                                        _extractedItems[index]['isAutoMatched'] = false;
-                                        _extractedItems[index]['mappedId'] = docs[i].id;
-                                        _extractedItems[index]['mappedName'] = data['name'];
-                                        String dbMain = data['category'] ?? _localTaxonomy.keys.first;
-                                        String dbSub = data['subCategory'] ?? 'General';
-                                        if (!_localTaxonomy.containsKey(dbMain)) {
-                                          _localTaxonomy[dbMain] = [dbSub];
-                                        } else if (!_localTaxonomy[dbMain]!.contains(dbSub)) {
-                                          _localTaxonomy[dbMain]!.add(dbSub);
-                                        }
-                                        _extractedItems[index]['mainCategory'] = dbMain;
-                                        _extractedItems[index]['subCategory'] = dbSub;
-                                        if (data['price'] != null) {
-                                          _extractedItems[index]['sellingPrice'] = _getSafeDouble(data['price']);
-                                        }
-                                      });
-                                    }
-                                  },
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 
@@ -656,17 +658,33 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => Center(child: CircularProgressIndicator(color: appSecondaryColor)));
 
     try {
+      // 🌟 تجهيز البيانات للخدمة بالاعتماد على قيم الـ Controllers
+      List<Map<String, dynamic>> finalItemsToSave = _extractedItems.map((item) {
+        return {
+          'mappedName': item['mappedName'],
+          'rawAiName': item['rawAiName'],
+          'mappedId': item['mappedId'],
+          'isNewProduct': item['isNewProduct'],
+          'mainCategory': item['mainCategory'],
+          'subCategory': item['subCategory'],
+          'conversionFactor': int.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1,
+          'imageUrls': item['imageUrls'] ?? <String>[],
+          'qty': int.tryParse((item['qtyController'] as TextEditingController).text) ?? 1,
+          'price': double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0,
+          'sellingPrice': double.tryParse((item['sellingPriceController'] as TextEditingController).text) ?? 0.0,
+        };
+      }).toList();
+
       await PurchaseService().processApprovedInvoice(
         supplierName: _supplierController.text.trim(),
         invoiceNumber: _invoiceNoController.text.trim(),
         invoiceDate: _selectedDate,
-        items: _extractedItems,
-        source: 'ai', // تسجيل الفاتورة كـ AI
+        items: finalItemsToSave,
+        source: 'ai',
       );
 
       if (mounted) Navigator.pop(context);
       if (mounted) {
-        // 🌟 تعديل رسالة النجاح (Custom Dialog) لتتوافق مع الهوية
         showDialog(
           context: context,
           builder: (dialogContext) => Dialog(
@@ -739,13 +757,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
         child: Scaffold(
           backgroundColor: appBackgroundColor,
           appBar: AppBar(
-            automaticallyImplyLeading: false, // 🌟 إيقاف السهم الافتراضي
+            automaticallyImplyLeading: false,
             title: const Text('مراجعة وتسكين الفاتورة', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
             centerTitle: true,
             backgroundColor: appPrimaryColor,
             elevation: 0,
             actions: [
-              // 🌟 إضافة السهم الجديد الموحد على الشمال
               if (Navigator.canPop(context))
                 Directionality(
                   textDirection: TextDirection.ltr,
@@ -832,6 +849,30 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showProfitMarginModal(),
+                            icon: const Icon(Icons.percent_rounded, size: 18),
+                            label: Text(
+                              _currentGlobalMargin == null
+                                  ? 'نسبة الربح العامة للفاتورة (اضغط للتطبيق)'
+                                  : 'نسبة الربح المطبقة: $_currentGlobalMargin% (اضغط للتغيير)',
+                              style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _currentGlobalMargin == null ? Colors.teal : Colors.teal.shade700,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(color: Colors.teal.shade200, width: 1.5),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -846,9 +887,18 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     final item = _extractedItems[index];
                     bool isNew = item['isNewProduct'];
                     bool isAutoMatched = item['isAutoMatched'] ?? false;
+                    bool isCustom = item['isCustomMargin'] == true;
                     bool isItemComplete = item['mappedName'] != null && item['mappedName'].toString().isNotEmpty && item['mainCategory'] != null && item['subCategory'] != null;
                     Color cardBorderColor = isItemComplete ? (isNew ? appSecondaryColor : successGreen) : alertRed;
-                    List<String> images = item['imageUrls'] ?? [];
+
+                    // 🌟 حسابات الكرتونة والقطع الإجمالية
+                    int qtyCarton = int.tryParse((item['qtyController'] as TextEditingController).text) ?? 0;
+                    int convFactor = int.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1;
+                    if (convFactor <= 0) convFactor = 1;
+                    int totalPieces = qtyCarton * convFactor;
+
+                    double cartonPrice = double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0;
+                    double unitCost = cartonPrice / convFactor;
 
                     return Card(
                       key: ValueKey(item['_id']),
@@ -871,143 +921,198 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                                     IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { FocusManager.instance.primaryFocus?.unfocus(); _removeItem(index); }),
                                   ],
                                 ),
-                                if (isNew)
-                                  OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(foregroundColor: appSecondaryColor, side: BorderSide(color: appSecondaryColor, width: 1.5), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), minimumSize: const Size(0, 32), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                                    icon: const Icon(Icons.link, size: 16),
-                                    label: const Text('صنف مسجل', style: TextStyle(fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                                    onPressed: () => _showProductSearchModal(index),
-                                  )
-                                else
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(color: successGreen.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(isAutoMatched ? Icons.auto_awesome : Icons.check_circle, size: 16, color: successGreen),
-                                        const SizedBox(width: 6),
-                                        Text(isAutoMatched ? 'تم التعرف تلقائياً' : 'مربوط بصنف مسجل', style: TextStyle(fontSize: 12, color: successGreen, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                                        const SizedBox(width: 8),
-                                        InkWell(
-                                          onTap: () {
-                                            FocusManager.instance.primaryFocus?.unfocus();
-                                            setState(() {
-                                              item['isNewProduct'] = true;
-                                              item['isAutoMatched'] = false;
-                                              item['mappedId'] = null;
-                                              item['mappedName'] = item['rawAiName'];
-                                            });
-                                          },
-                                          child: const Icon(Icons.close, size: 18, color: Colors.red),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                GestureDetector(
-                                  onTap: isNew ? () => _showImagePickerOptions(index) : null,
-                                  child: Container(
-                                    width: 70,
-                                    height: 70,
-                                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10), border: Border.all(color: isNew ? appSecondaryColor : Colors.grey.shade300, width: 1.5)),
-                                    child: images.isNotEmpty
-                                        ? ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(images.first, fit: BoxFit.cover))
-                                        : Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.image_search, color: isNew ? appSecondaryColor : Colors.grey, size: 24), const SizedBox(height: 4), Text('صورة', style: TextStyle(fontSize: 10, color: isNew ? appSecondaryColor : Colors.grey, fontFamily: 'Cairo'))]),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextFormField(
-                                    initialValue: item['mappedName'],
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                    decoration: InputDecoration(
-                                      labelText: isNew ? 'اسم الصنف الجديد' : 'الصنف (مقفل)',
-                                      labelStyle: TextStyle(color: appSecondaryColor, fontSize: 12),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
-                                      fillColor: isNew ? Colors.white : Colors.grey.shade100,
-                                      filled: true,
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                                    ),
-                                    readOnly: !isNew,
-                                    onChanged: (val) => setState(() => item['mappedName'] = val),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: (isAutoMatched || !isNew) ? successGreen.withValues(alpha: 0.15) : appSecondaryColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(isAutoMatched ? Icons.auto_awesome : (isNew ? Icons.fiber_new_rounded : Icons.check_circle), size: 16, color: (isAutoMatched || !isNew) ? successGreen : appSecondaryColor),
+                                      const SizedBox(width: 6),
+                                      Text(isAutoMatched ? 'تم التعرف تلقائياً' : (isNew ? 'صنف جديد' : 'مربوط بصنف مسجل'), style: TextStyle(fontSize: 12, color: (isAutoMatched || !isNew) ? successGreen : appSecondaryColor, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
 
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    initialValue: item['price'].toString(),
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                    decoration: InputDecoration(labelText: 'سعر الشراء', prefixText: 'EGP ', isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))),
-                                    onChanged: (val) => setState(() => item['price'] = double.tryParse(val) ?? 0.0),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    initialValue: item['sellingPrice'].toString(),
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: appSecondaryColor),
-                                    decoration: InputDecoration(labelText: 'سعر البيع المقترح', prefixText: 'EGP ', isDense: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2))),
-                                    onChanged: (val) => setState(() => item['sellingPrice'] = double.tryParse(val) ?? 0.0),
-                                  ),
-                                ),
-                              ],
+                            TextFormField(
+                              initialValue: item['mappedName'],
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: 'اسم الصنف',
+                                labelStyle: TextStyle(color: appSecondaryColor, fontSize: 12),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
+                                fillColor: isNew ? Colors.white : Colors.grey.shade100,
+                                filled: true,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              ),
+                              readOnly: !isNew,
+                              onChanged: (val) => setState(() => item['mappedName'] = val),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 12),
 
+                            // 🌟 الكمية (كرتونة) والقطع بالكرتونة مثل الشاشة اليدوية تماماً
                             Row(
                               children: [
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['qty'].toString(),
+                                    controller: item['qtyController'] as TextEditingController,
                                     keyboardType: TextInputType.number,
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
                                     decoration: InputDecoration(
-                                      labelText: 'الكمية الواردة',
-                                      labelStyle: const TextStyle(fontSize: 12),
+                                      labelText: 'الكمية (كرتونة)',
+                                      labelStyle: const TextStyle(fontSize: 12, fontFamily: 'Cairo'),
                                       isDense: true,
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                                     ),
-                                    onChanged: (val) => setState(() => item['qty'] = int.tryParse(val) ?? 1),
+                                    onChanged: (val) => _updateTotal(),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextFormField(
-                                    initialValue: item['conversionFactor'].toString(),
+                                    controller: item['conversionFactorController'] as TextEditingController,
                                     keyboardType: TextInputType.number,
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(fontSize: 13),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                     decoration: InputDecoration(
-                                      labelText: 'الكرتونة (كام قطعة؟)',
-                                      labelStyle: const TextStyle(fontSize: 12),
+                                      labelText: 'القطع بالكرتونة',
+                                      labelStyle: const TextStyle(fontSize: 12, fontFamily: 'Cairo'),
                                       hintText: 'مثال: 12',
                                       isDense: true,
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
                                     ),
-                                    onChanged: (val) => item['conversionFactor'] = int.tryParse(val) ?? 1,
+                                    onChanged: (val) {
+                                      double? currentMargin = item['itemMargin'] as double? ?? _currentGlobalMargin;
+                                      if (currentMargin != null) {
+                                        _calculateSellingPrice(item, currentMargin);
+                                      }
+                                      _updateTotal();
+                                    },
                                   ),
+                                ),
+                              ],
+                            ),
+
+                            // 🌟 عرض إجمالي عدد القطع
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.inventory_2_rounded, size: 14, color: Colors.grey.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'إجمالي عدد القطع = $totalPieces قطعة',
+                                    style: TextStyle(fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // 🌟 سعر الشراء (للكرتونة) وسعر البيع (للقطعة) مع تكلفة القطعة
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      TextFormField(
+                                        controller: item['priceController'] as TextEditingController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        decoration: InputDecoration(
+                                          labelText: 'سعر الشراء (للكرتونة)',
+                                          labelStyle: const TextStyle(fontSize: 11, fontFamily: 'Cairo'),
+                                          isDense: true,
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: appSecondaryColor, width: 2)),
+                                        ),
+                                        onChanged: (val) {
+                                          _updateTotal();
+                                          double? currentMargin = item['itemMargin'] as double? ?? _currentGlobalMargin;
+                                          if (currentMargin != null) {
+                                            _calculateSellingPrice(item, currentMargin);
+                                          }
+                                        },
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4.0),
+                                        child: Text(
+                                          'تكلفة القطعة = ${_formatNumber(unitCost)} ج.م',
+                                          style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('سعر البيع (للقطعة)', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.w900, color: appSecondaryColor)),
+                                          InkWell(
+                                            onTap: () => _showProfitMarginModal(targetItemIndex: index),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: isCustom ? Colors.orange.shade700 : Colors.teal,
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.percent_rounded, size: 10, color: Colors.white),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    item['itemMargin'] != null ? '${item['itemMargin']}' : 'نسبة',
+                                                    style: const TextStyle(fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: item['sellingPriceController'] as TextEditingController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontWeight: FontWeight.w900, fontFamily: 'Cairo', fontSize: 16, color: Colors.black87),
+                                        decoration: InputDecoration(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                                          filled: true,
+                                          fillColor: isCustom ? Colors.orange.withValues(alpha: 0.12) : Colors.orange.withValues(alpha: 0.08),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const Divider(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('إجمالي قيمة الصنف:', style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                                Text(
+                                  '${_formatNumber(cartonPrice * qtyCarton)} ج.م',
+                                  style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: appPrimaryColor, fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -1103,7 +1208,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     onPressed: _approveAndSaveInvoice,
                     style: ElevatedButton.styleFrom(backgroundColor: appSecondaryColor, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                     icon: const Icon(Icons.save_alt, color: Colors.white),
-                    label: Text('تأكيد وحفظ الفاتورة (${_calculateGrandTotal.toStringAsFixed(2)} EGP)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
+                    label: Text('تأكيد وحفظ الفاتورة (${_formatNumber(_calculateGrandTotal)} EGP)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'Cairo')),
                   ),
                 ),
               ],

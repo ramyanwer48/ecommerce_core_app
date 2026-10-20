@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- أضف هذا السطر لحل التحذير -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Ramy Store"
         android:name="${applicationName}"

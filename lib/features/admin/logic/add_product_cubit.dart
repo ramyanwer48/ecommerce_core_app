@@ -10,9 +10,10 @@ class AddProductCubit extends Cubit<AddProductState> {
   Future<void> addProductToFirestore({
     required String name,
     required double price,
+    required String barcode,       // 👈 إضافة الباركود هنا لكي يستقبله من الشاشة
     required double costPrice,
-    required String category,      // التصنيف الأساسي
-    required String subCategory,   // 👈 تمت إضافة التصنيف الفرعي هنا
+    required String category,
+    required String subCategory,
     required String description,
     required File mainImageFile,
     required List<File> extraImageFiles,
@@ -35,13 +36,14 @@ class AddProductCubit extends Cubit<AddProductState> {
       // 3. تجميع الصورة الرئيسية مع الصور الإضافية في مصفوفة واحدة للمعرض
       List<String> allImages = [mainImageUrl, ...extraImageUrls];
 
-      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة شاملة التصنيف الفرعي
+      // 4. حفظ المنتج في فايربيز بالبيانات الكاملة
       await _adminRepo.addProduct(
         name: name,
         price: price,
+        barcode: barcode,           // 👈 إرسال الباركود إلى ملف الـ Repo ليتم حفظه
         costPrice: costPrice,
-        category: category,         // الأساسي
-        subCategory: subCategory,   // 👈 إرسال الفرعي للـ Repo
+        category: category,
+        subCategory: subCategory,
         description: description,
         imageUrl: mainImageUrl,
         images: allImages,

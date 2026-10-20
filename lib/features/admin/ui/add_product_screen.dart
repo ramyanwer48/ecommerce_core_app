@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:mobile_scanner/mobile_scanner.dart'; // 👈 ضرورية لعمل الكاميرا
 import '../logic/add_product_cubit.dart';
 import '../logic/add_product_state.dart';
 import 'widgets/google_image_picker_dialog.dart';
@@ -26,12 +27,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
+  final _barcodeController = TextEditingController(); // 👈 إضافة متغير الباركود
   final _descController = TextEditingController();
   final _variationsController = TextEditingController();
 
-  // 🚀 إضافة FocusNodes لتسريع التنقل بين الحقول ومنع الـ Rebuild العشوائي
   final _nameFocus = FocusNode();
   final _priceFocus = FocusNode();
+  final _barcodeFocus = FocusNode(); // 👈 إضافة Focus الباركود
   final _descFocus = FocusNode();
   final _variationsFocus = FocusNode();
 
@@ -61,6 +63,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       final data = widget.productData!;
       _nameController.text = data['name'] ?? '';
       _priceController.text = (data['price'] ?? 0).toString();
+      _barcodeController.text = data['barcode'] ?? ''; // 👈 جلب الباركود إذا كان مسجلاً سابقاً
       _descController.text = data['description'] ?? '';
       _variationsController.text = (data['variations'] as List<dynamic>?)?.join(', ') ?? '';
 
@@ -89,13 +92,34 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
+    _barcodeController.dispose(); // 👈
     _descController.dispose();
     _variationsController.dispose();
     _nameFocus.dispose();
     _priceFocus.dispose();
+    _barcodeFocus.dispose(); // 👈
     _descFocus.dispose();
     _variationsFocus.dispose();
     super.dispose();
+  }
+
+  // 🚀 دالة تشغيل الكاميرا ومسح الباركود
+  Future<void> _scanProductBarcode() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    String? res = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (context) => const BarcodeScannerScreen()),
+    );
+
+    if (res != null && res.isNotEmpty) {
+      setState(() {
+        _barcodeController.text = res;
+      });
+      // إشعار نجاح
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم قراءة الباركود بنجاح!', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
+      );
+    }
   }
 
   Future<void> _pickMainImage() async {
@@ -215,6 +239,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       await FirebaseFirestore.instance.collection('products').doc(widget.productData!['id']).update({
         'name': _nameController.text.trim(),
         'price': double.tryParse(_priceController.text) ?? 0,
+        'barcode': _barcodeController.text.trim(), // 👈 حفظ الباركود في التعديل
         'category': _selectedMainCategory,
         'subCategory': _selectedSubCategory,
         'description': _descController.text.trim(),
@@ -349,13 +374,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  // 🚀 الحقل المحدث بالأداء العالي (بدون Shadow ومع FocusNode)
+  // 🚀 تعديل الدالة لتقبل suffixIcon
   Widget _buildModernTextField({
     required TextEditingController controller,
     required FocusNode focusNode,
     required String label,
     IconData? icon,
     Color? iconColor,
+    Widget? suffixIcon, // 👈 التعديل هنا
     TextInputType keyboardType = TextInputType.text,
     TextInputAction textInputAction = TextInputAction.next,
     int maxLines = 1,
@@ -379,6 +405,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           helperStyle: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.red.shade700, fontWeight: FontWeight.bold),
           labelStyle: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey.shade600),
           prefixIcon: icon != null ? Icon(icon, color: iconColor ?? appSecondaryColor, size: 22) : null,
+          suffixIcon: suffixIcon, // 👈 إضافتها في الديكور
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
@@ -420,9 +447,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             const SizedBox(width: 8),
           ],
         ),
-        // 🚀 استخدام CustomScrollView لتحسين الأداء بشكل جذري أثناء ظهور الكيبورد
         body: GestureDetector(
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(), // إخفاء الكيبورد عند الضغط في أي مكان فارغ
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
           child: Form(
             key: _formKey,
             child: CustomScrollView(
@@ -542,6 +568,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         validator: (value) => value == null || value.trim().isEmpty || (double.tryParse(value) ?? 0) <= 0 ? 'سعر غير صالح' : null,
                       ),
 
+                      // 🚀 إضافة حقل الباركود المدمج بالكاميرا
+                      _buildModernTextField(
+                        controller: _barcodeController,
+                        focusNode: _barcodeFocus,
+                        label: 'باركود المنتج (اختياري)',
+                        icon: Icons.qr_code_rounded,
+                        iconColor: Colors.blueGrey,
+                        keyboardType: TextInputType.text,
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.all(6.0),
+                          child: InkWell(
+                            onTap: _scanProductBarcode,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: appSecondaryColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.qr_code_scanner_rounded, color: appSecondaryColor, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
+
                       Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(16),
@@ -607,7 +657,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         label: 'الوصف الخاص بالمنتج *',
                         icon: Icons.description_outlined,
                         maxLines: 4,
-                        textInputAction: TextInputAction.done, // 👈 عشان يقفل الكيبورد بعد الوصف
+                        textInputAction: TextInputAction.done,
                       ),
 
                       Container(
@@ -646,12 +696,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                             List<String> variationsList = _variationsController.text.isNotEmpty ? _variationsController.text.split(',').map((e) => e.trim()).toList() : [];
                             context.read<AddProductCubit>().addProductToFirestore(
-                              name: _nameController.text,
+                              name: _nameController.text.trim(),
                               price: double.parse(_priceController.text),
+                              barcode: _barcodeController.text.trim(), // 👈 إرسال الباركود للكيوبت
                               costPrice: 0.0,
                               category: _selectedMainCategory!,
                               subCategory: _selectedSubCategory!,
-                              description: _descController.text,
+                              description: _descController.text.trim(),
                               mainImageFile: _selectedImage!,
                               extraImageFiles: _extraImages,
                               variations: variationsList,
@@ -671,6 +722,40 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// شاشة مسح الباركود المبسطة لكي يعمل الزر بنجاح
+class BarcodeScannerScreen extends StatefulWidget {
+  const BarcodeScannerScreen({super.key});
+
+  @override
+  State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
+}
+
+class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
+  bool _isScanned = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('امسح باركود المنتج', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: const Color(0xFF0D1B2A),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: MobileScanner(
+        onDetect: (BarcodeCapture capture) {
+          if (!_isScanned) {
+            final List<Barcode> barcodes = capture.barcodes;
+            if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+              _isScanned = true;
+              Navigator.pop(context, barcodes.first.rawValue);
+            }
+          }
+        },
       ),
     );
   }
