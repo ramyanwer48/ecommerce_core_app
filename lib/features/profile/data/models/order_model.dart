@@ -4,7 +4,8 @@ class OrderItemModel {
   final String productId;
   final String name;
   final String imageUrl;
-  final double unitPrice;
+  final double unitPrice; // 💰 سعر البيع للقطعة
+  final double costPrice; // 🚀 الإضافة المطلوبة للـ FIFO: سعر تكلفة/شراء القطعة الفعلي من المخزن
   final int quantity;
   final double totalCost;
 
@@ -13,6 +14,7 @@ class OrderItemModel {
     required this.name,
     required this.imageUrl,
     required this.unitPrice,
+    this.costPrice = 0.0, // 👈 تم الإضافة هنا
     required this.quantity,
     required this.totalCost,
   });
@@ -23,6 +25,7 @@ class OrderItemModel {
       name: json['name'] ?? '',
       imageUrl: json['imageUrl'] ?? '',
       unitPrice: (json['unitPrice'] ?? json['price'] ?? 0.0).toDouble(),
+      costPrice: (json['costPrice'] ?? 0.0).toDouble(), // 👈 القراءة من الفايربيس
       quantity: (json['quantity'] ?? 1).toInt(),
       totalCost: (json['totalCost'] ?? 0.0).toDouble(),
     );
@@ -34,6 +37,7 @@ class OrderItemModel {
       'name': name,
       'imageUrl': imageUrl,
       'unitPrice': unitPrice,
+      'costPrice': costPrice, // 👈 الحفظ في الفايربيس
       'quantity': quantity,
       'totalCost': totalCost,
     };
@@ -122,7 +126,7 @@ class OrderModel {
 
     return OrderModel(
       id: documentId,
-      orderNumber: resolvedOrderNumber, // 👈 تم التعديل هنا لاستخدام الرقم المفلتر
+      orderNumber: resolvedOrderNumber,
       userId: json['userId'] ?? '',
       items: parsedItems,
       subtotal: resolvedSubtotal,

@@ -114,4 +114,44 @@ class OrderRepo {
       transaction.update(orderRef, {'status': 'Cancelled'});
     });
   }
+
+  // 🚀 الإضافة الجديدة: دالة رفع طلب المرتجع للإدارة (بدون إرجاع المخزون مباشرة)
+  Future<void> requestReturn(OrderModel order) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) throw Exception('يجب تسجيل الدخول لتقديم طلب المرتجع');
+
+    final orderRef = _firestore.collection('orders').doc(order.id);
+    final returnRef = _firestore.collection('return_requests').doc(); // إنشاء آي دي تلقائي
+
+    await _firestore.runTransaction((transaction) async {
+      // 1. التأكد من حالة الطلب قبل رفع المرتجع
+      final orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists) throw Exception('الطلب غير موجود');
+
+      final orderData = orderSnap.data() as Map<String, dynamic>;
+      final String currentStatus = orderData['status'] ?? '';
+
+      if (currentStatus.toLowerCase() != 'delivered') {
+        throw Exception('لا يمكن طلب مرتجع إلا للطلبات التي تم تسليمها');
+      }
+
+      // 2. إنشاء مستند طلب المرتجع في الفايربيس للإدارة
+      final returnData = {
+        'returnId': returnRef.id,
+        'orderId': order.id,
+        'orderNumber': order.orderNumber,
+        'userId': userId,
+        'requestDate': Timestamp.now(),
+        'status': 'Pending Approval', // 👈 في انتظار مراجعة الأدمن
+        'totalRefund': order.totalPrice,
+        // 🚀 حفظ نسخة كاملة من بيانات الطلب (مهم جداً عشان الأدمن يلاقي الـ consumedBatches وقت التنفيذ)
+        'originalOrderData': orderData,
+      };
+
+      transaction.set(returnRef, returnData);
+
+      // 3. تحديث حالة الطلب الأصلي لكي تختفي أيقونة المرتجع من واجهة العميل ويتابع حالته
+      transaction.update(orderRef, {'status': 'Return Requested'});
+    });
+  }
 }
