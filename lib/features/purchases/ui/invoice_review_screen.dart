@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../home/data/models/product_model.dart';
 import '../services/purchase_service.dart';
 
 class InvoiceReviewScreen extends StatefulWidget {
-  final Map<String, dynamic>? invoiceData;
+  final Map? invoiceData;
 
   const InvoiceReviewScreen({super.key, this.invoiceData});
 
@@ -30,8 +29,8 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   double? _currentGlobalMargin;
 
-  List<Map<String, dynamic>> _extractedItems = [];
-  Map<String, List<String>> _localTaxonomy = Map.from(MasterCatalogCategories.taxonomy);
+  List _extractedItems = [];
+  Map _localTaxonomy = {};
   bool _isLoadingCategories = true;
 
   double _getSafeDouble(dynamic val) {
@@ -62,8 +61,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   void _updateTotal() => setState(() {});
 
-  // 🌟 حسبة سعر البيع بناءً على سعر الكرتونة ومعامل التحويل ونسبة الربح
-  void _calculateSellingPrice(Map<String, dynamic> item, double percentage) {
+  void _calculateSellingPrice(Map item, double percentage) {
     double cartonPrice = double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0;
     double conversion = double.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1.0;
     if (conversion <= 0) conversion = 1.0;
@@ -79,7 +77,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       for (var item in _extractedItems) {
         if (item['isCustomMargin'] != true) {
           item['itemMargin'] = percentage;
-          _calculateSellingPrice(item, percentage);
+          _calculateSellingPrice(item as Map, percentage);
         }
       }
     });
@@ -90,7 +88,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   void _applyItemProfitMargin(int index, double percentage) {
     setState(() {
-      var item = _extractedItems[index];
+      var item = _extractedItems[index] as Map;
       item['itemMargin'] = percentage;
       if (_currentGlobalMargin != null && percentage == _currentGlobalMargin) {
         item['isCustomMargin'] = false;
@@ -103,7 +101,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   void _showProfitMarginModal({int? targetItemIndex}) {
     FocusManager.instance.primaryFocus?.unfocus();
-    List<double> presetMargins = [10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200];
+    List presetMargins = [10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 75.0, 100.0, 150.0, 200.0];
 
     showModalBottomSheet(
       context: context,
@@ -150,12 +148,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       if (targetItemIndex == null) {
-                        _applyGlobalProfitMargin(margin);
+                        _applyGlobalProfitMargin(margin as double);
                       } else {
-                        _applyItemProfitMargin(targetItemIndex, margin);
+                        _applyItemProfitMargin(targetItemIndex, margin as double);
                       }
                     },
-                    child: Text('$margin%', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    child: Text('${(margin as double).toInt()}%', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                   )).toList(),
                 ),
                 const SizedBox(height: 10),
@@ -167,20 +165,18 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     );
   }
 
-  // 🌟 إجمالي قيمة الفاتورة المالية بناءً على الكرتونة وسعر الكرتونة
   double get _calculateGrandTotal {
     return _extractedItems.fold(0.0, (totalSum, item) {
-      double cartonPrice = double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0;
-      int qtyCarton = int.tryParse((item['qtyController'] as TextEditingController).text) ?? 0;
-      return totalSum + (cartonPrice * qtyCarton);
+      Map itemMap = item as Map;
+      double cartonPrice = double.tryParse((itemMap['priceController'] as TextEditingController).text) ?? 0.0;
+      int qtyCarton = int.tryParse((itemMap['qtyController'] as TextEditingController).text) ?? 0;
+      return (totalSum as double) + (cartonPrice * qtyCarton);
     });
   }
 
   @override
   void initState() {
     super.initState();
-    _fetchCategoriesFromFirebase();
-
     final data = widget.invoiceData ?? {};
     String supplier = (data['partnerName'] ?? data['supplier'] ?? 'Unknown Supplier').toString();
     String invoiceNo = (data['invoiceNumber'] ?? data['invoice_no'] ?? 'INV-AI-001').toString();
@@ -188,7 +184,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     _supplierController = TextEditingController(text: supplier);
     _invoiceNoController = TextEditingController(text: invoiceNo);
 
-    String? aiDate = data['invoiceDate'];
+    String? aiDate = data['invoiceDate']?.toString();
     if (aiDate != null && aiDate.isNotEmpty) {
       try {
         _selectedDate = DateTime.parse(aiDate);
@@ -204,20 +200,13 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
     if (data['items'] != null && data['items'] is List) {
       try {
-        var rawItems = List<dynamic>.from(data['items']);
+        var rawItems = List.from(data['items'] as List);
         _extractedItems = rawItems.map((rawItem) {
           if (rawItem == null) return _getDefaultItem();
-          Map<String, dynamic> item = Map<String, dynamic>.from(rawItem as Map);
+          Map item = Map.from(rawItem as Map);
 
           String aiMainCat = (item['mainCategory'] ?? 'Uncategorized').toString();
           String aiSubCat = (item['subCategory'] ?? 'Uncategorized').toString();
-
-          if (!_localTaxonomy.containsKey(aiMainCat)) {
-            aiMainCat = _localTaxonomy.keys.isNotEmpty ? _localTaxonomy.keys.first : 'General';
-          }
-          if (!(_localTaxonomy[aiMainCat]?.contains(aiSubCat) ?? false)) {
-            aiSubCat = _localTaxonomy[aiMainCat]?.first ?? 'General';
-          }
 
           double parsedCost = _getSafeDouble(item['unitPrice'] ?? item['price']);
           int parsedQty = _getSafeInt(item['quantity'] ?? item['qty']);
@@ -237,7 +226,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
             'sellingPriceController': TextEditingController(text: '0'),
             'itemMargin': null,
             'isCustomMargin': false,
-            'imageUrls': <String>[],
+            'imageUrls': [],
           };
         }).toList();
       } catch (e) {
@@ -247,6 +236,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       _extractedItems = [_getDefaultItem()];
     }
 
+    _fetchCategoriesFromFirebase();
     _autoMatchProductsWithInventory();
   }
 
@@ -259,25 +249,26 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
       setState(() {
         for (int i = 0; i < _extractedItems.length; i++) {
-          String aiName = _extractedItems[i]['rawAiName'].toString().toLowerCase().trim();
+          Map itemMap = _extractedItems[i] as Map;
+          String aiName = itemMap['rawAiName'].toString().toLowerCase().trim();
 
           for (var doc in existingProducts) {
-            var data = doc.data();
+            Map data = doc.data();
             String dbName = (data['name'] ?? '').toString().toLowerCase().trim();
 
             if (aiName == dbName) {
-              _extractedItems[i]['isNewProduct'] = false;
-              _extractedItems[i]['isAutoMatched'] = true;
-              _extractedItems[i]['mappedId'] = doc.id;
-              _extractedItems[i]['mappedName'] = data['name'];
+              itemMap['isNewProduct'] = false;
+              itemMap['isAutoMatched'] = true;
+              itemMap['mappedId'] = doc.id;
+              itemMap['mappedName'] = data['name'];
 
-              String dbMain = data['category'] ?? _extractedItems[i]['mainCategory'];
-              String dbSub = data['subCategory'] ?? _extractedItems[i]['subCategory'];
-              _extractedItems[i]['mainCategory'] = dbMain;
-              _extractedItems[i]['subCategory'] = dbSub;
+              String dbMain = data['category']?.toString() ?? itemMap['mainCategory'];
+              String dbSub = data['subCategory']?.toString() ?? itemMap['subCategory'];
+              itemMap['mainCategory'] = dbMain;
+              itemMap['subCategory'] = dbSub;
 
               if (data['price'] != null) {
-                (_extractedItems[i]['sellingPriceController'] as TextEditingController).text = _formatNumber(data['price']);
+                (itemMap['sellingPriceController'] as TextEditingController).text = _formatNumber(data['price']);
               }
               break;
             }
@@ -294,20 +285,33 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       var snapshot = await FirebaseFirestore.instance.collection('categories').get();
       setState(() {
         for (var doc in snapshot.docs) {
-          var data = doc.data();
-          String mainCat = data['name'] ?? doc.id;
-          List<String> subCats = [];
-          if (data['subCategories'] != null) subCats = List<String>.from(data['subCategories']);
+          Map data = doc.data();
+          String mainCat = data['name']?.toString() ?? doc.id;
+          List subCats = [];
+          if (data['subCategories'] != null) subCats = List.from(data['subCategories'] as List);
           if (subCats.isEmpty) subCats = ['General'];
+          _localTaxonomy[mainCat] = subCats;
+        }
 
-          if (_localTaxonomy.containsKey(mainCat)) {
-            for (String sub in subCats) {
-              if (!_localTaxonomy[mainCat]!.contains(sub)) _localTaxonomy[mainCat]!.add(sub);
-            }
-          } else {
-            _localTaxonomy[mainCat] = subCats;
+        if (_localTaxonomy.isEmpty) {
+          _localTaxonomy['General'] = ['General'];
+        }
+
+        for (var item in _extractedItems) {
+          Map itemMap = item as Map;
+          String currentMain = itemMap['mainCategory']?.toString() ?? 'General';
+          String currentSub = itemMap['subCategory']?.toString() ?? 'General';
+
+          if (!_localTaxonomy.containsKey(currentMain)) {
+            itemMap['mainCategory'] = _localTaxonomy.keys.isNotEmpty ? _localTaxonomy.keys.first : 'General';
+          }
+          String newMain = itemMap['mainCategory']?.toString() ?? 'General';
+          List availableSubs = _localTaxonomy[newMain] as List? ?? ['General'];
+          if (!availableSubs.contains(currentSub)) {
+            itemMap['subCategory'] = availableSubs.isNotEmpty ? availableSubs.first : 'General';
           }
         }
+
         _isLoadingCategories = false;
       });
     } catch (e) {
@@ -332,9 +336,9 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
             Text('اختر من الموردين المسجلين', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 16, color: appPrimaryColor)),
             const Divider(),
             Flexible(
-              child: StreamBuilder<QuerySnapshot>(
+              child: StreamBuilder(
                 stream: FirebaseFirestore.instance.collection(_suppliersCollection).snapshots(),
-                builder: (context, snapshot) {
+                builder: (context, AsyncSnapshot snapshot) {
                   if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: appSecondaryColor));
                   var docs = snapshot.data!.docs;
                   if (docs.isEmpty) {
@@ -347,7 +351,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     shrinkWrap: true,
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      var data = docs[index].data() as Map<String, dynamic>;
+                      Map data = docs[index].data() as Map;
                       String sName = (data['name'] ?? '').toString();
                       return ListTile(
                         leading: Icon(Icons.storefront, color: appSecondaryColor),
@@ -369,7 +373,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     );
   }
 
-  Map<String, dynamic> _getDefaultItem() {
+  Map _getDefaultItem() {
     return {
       '_id': UniqueKey().toString(),
       'rawAiName': 'New Item',
@@ -378,14 +382,14 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       'isNewProduct': true,
       'isAutoMatched': false,
       'mainCategory': _localTaxonomy.keys.isNotEmpty ? _localTaxonomy.keys.first : 'General',
-      'subCategory': _localTaxonomy.values.isNotEmpty ? _localTaxonomy.values.first.first : 'General',
+      'subCategory': _localTaxonomy.values.isNotEmpty ? (_localTaxonomy.values.first as List).first : 'General',
       'qtyController': TextEditingController(text: '1'),
       'conversionFactorController': TextEditingController(text: '1'),
       'priceController': TextEditingController(text: '0'),
       'sellingPriceController': TextEditingController(text: '0'),
       'itemMargin': null,
       'isCustomMargin': false,
-      'imageUrls': <String>[],
+      'imageUrls': [],
     };
   }
 
@@ -395,10 +399,11 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     _invoiceNoController.dispose();
     _dateController.dispose();
     for (var item in _extractedItems) {
-      (item['qtyController'] as TextEditingController?)?.dispose();
-      (item['conversionFactorController'] as TextEditingController?)?.dispose();
-      (item['priceController'] as TextEditingController?)?.dispose();
-      (item['sellingPriceController'] as TextEditingController?)?.dispose();
+      Map itemMap = item as Map;
+      (itemMap['qtyController'] as TextEditingController?)?.dispose();
+      (itemMap['conversionFactorController'] as TextEditingController?)?.dispose();
+      (itemMap['priceController'] as TextEditingController?)?.dispose();
+      (itemMap['sellingPriceController'] as TextEditingController?)?.dispose();
     }
     super.dispose();
   }
@@ -429,14 +434,16 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
 
   bool get _isAllItemsReady {
     if (_extractedItems.isEmpty) return false;
-    return _extractedItems.every((item) =>
-    item['mappedName'] != null &&
-        item['mappedName'].toString().isNotEmpty &&
-        item['mainCategory'] != null &&
-        item['subCategory'] != null);
+    return _extractedItems.every((item) {
+      Map itemMap = item as Map;
+      return itemMap['mappedName'] != null &&
+          itemMap['mappedName'].toString().isNotEmpty &&
+          itemMap['mainCategory'] != null &&
+          itemMap['subCategory'] != null;
+    });
   }
 
-  void _addNewMainCategory(Map<String, dynamic> currentItem) {
+  void _addNewMainCategory(Map currentItem) {
     FocusManager.instance.primaryFocus?.unfocus();
     TextEditingController catController = TextEditingController();
     showModalBottomSheet(
@@ -503,7 +510,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     );
   }
 
-  void _addNewSubCategory(String mainCategory, Map<String, dynamic> currentItem) {
+  void _addNewSubCategory(String mainCategory, Map currentItem) {
     FocusManager.instance.primaryFocus?.unfocus();
     TextEditingController catController = TextEditingController();
     showModalBottomSheet(
@@ -544,14 +551,12 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     if (newSubCat.isNotEmpty) {
                       FocusManager.instance.primaryFocus?.unfocus();
                       Navigator.pop(ctx);
-
-                      // 1. التحديث المحلي الفوري عشان تظهر في الواجهة لحظياً
                       Future.delayed(const Duration(milliseconds: 150), () {
                         if (mounted) {
                           setState(() {
                             if (_localTaxonomy[mainCategory] != null) {
-                              if (!_localTaxonomy[mainCategory]!.contains(newSubCat)) {
-                                _localTaxonomy[mainCategory]!.add(newSubCat);
+                              if (!(_localTaxonomy[mainCategory] as List).contains(newSubCat)) {
+                                (_localTaxonomy[mainCategory] as List).add(newSubCat);
                               }
                             } else {
                               _localTaxonomy[mainCategory] = [newSubCat];
@@ -560,8 +565,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                           });
                         }
                       });
-
-                      // 2. الحفظ الأصلي المطابق لكودك القديم في فايربيز
                       try {
                         await FirebaseFirestore.instance.collection('categories').doc(mainCategory).update({
                           'subCategories': FieldValue.arrayUnion([newSubCat])
@@ -584,7 +587,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     );
   }
 
-  void _showCategorySelector(Map<String, dynamic> item, bool isMain) {
+  void _showCategorySelector(Map item, bool isMain) {
     FocusManager.instance.primaryFocus?.unfocus();
 
     showModalBottomSheet(
@@ -593,8 +596,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
       backgroundColor: Colors.white,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          // 🌟 جلب الخيارات مباشرة وتحديثها لحظياً
-          List<String> options = isMain ? _localTaxonomy.keys.toList() : (_localTaxonomy[item['mainCategory']] ?? []);
+          List options = isMain ? _localTaxonomy.keys.toList() : (_localTaxonomy[item['mainCategory']] as List? ?? []);
 
           return Directionality(
             textDirection: TextDirection.rtl,
@@ -613,7 +615,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                     itemBuilder: (context, index) {
                       return ListTile(
                         leading: Icon(isMain ? Icons.category : Icons.account_tree, color: appSecondaryColor, size: 20),
-                        title: Text(options[index], style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+                        title: Text(options[index].toString(), style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
                         onTap: () {
                           FocusManager.instance.primaryFocus?.unfocus();
                           Navigator.pop(ctx);
@@ -622,7 +624,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               setState(() {
                                 if (isMain) {
                                   item['mainCategory'] = options[index];
-                                  item['subCategory'] = _localTaxonomy[options[index]]?.isNotEmpty == true ? _localTaxonomy[options[index]]!.first : 'General';
+                                  item['subCategory'] = (_localTaxonomy[options[index]] as List).isNotEmpty ? (_localTaxonomy[options[index]] as List).first : 'General';
                                 } else {
                                   item['subCategory'] = options[index];
                                 }
@@ -658,9 +660,10 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => Center(child: CircularProgressIndicator(color: appSecondaryColor)));
 
     try {
-      // 🌟 تجهيز البيانات للخدمة بالاعتماد على قيم الـ Controllers
-      List<Map<String, dynamic>> finalItemsToSave = _extractedItems.map((item) {
-        return {
+      // 🚀 الاعتماد على الاستنتاج التلقائي (Type Inference) لتمرير النوع الصارم بأمان
+      var finalItemsToSave = _extractedItems.map((itemRaw) {
+        Map item = itemRaw as Map;
+        return <String, dynamic>{
           'mappedName': item['mappedName'],
           'rawAiName': item['rawAiName'],
           'mappedId': item['mappedId'],
@@ -668,7 +671,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
           'mainCategory': item['mainCategory'],
           'subCategory': item['subCategory'],
           'conversionFactor': int.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1,
-          'imageUrls': item['imageUrls'] ?? <String>[],
+          'imageUrls': item['imageUrls'] ?? [],
           'qty': int.tryParse((item['qtyController'] as TextEditingController).text) ?? 1,
           'price': double.tryParse((item['priceController'] as TextEditingController).text) ?? 0.0,
           'sellingPrice': double.tryParse((item['sellingPriceController'] as TextEditingController).text) ?? 0.0,
@@ -679,7 +682,7 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
         supplierName: _supplierController.text.trim(),
         invoiceNumber: _invoiceNoController.text.trim(),
         invoiceDate: _selectedDate,
-        items: finalItemsToSave,
+        items: finalItemsToSave, // 🚀 سيتم قبولها كـ List> الآن
         source: 'ai',
       );
 
@@ -884,14 +887,13 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _extractedItems.length,
                   itemBuilder: (context, index) {
-                    final item = _extractedItems[index];
+                    final item = _extractedItems[index] as Map;
                     bool isNew = item['isNewProduct'];
                     bool isAutoMatched = item['isAutoMatched'] ?? false;
                     bool isCustom = item['isCustomMargin'] == true;
                     bool isItemComplete = item['mappedName'] != null && item['mappedName'].toString().isNotEmpty && item['mainCategory'] != null && item['subCategory'] != null;
                     Color cardBorderColor = isItemComplete ? (isNew ? appSecondaryColor : successGreen) : alertRed;
 
-                    // 🌟 حسابات الكرتونة والقطع الإجمالية
                     int qtyCarton = int.tryParse((item['qtyController'] as TextEditingController).text) ?? 0;
                     int convFactor = int.tryParse((item['conversionFactorController'] as TextEditingController).text) ?? 1;
                     if (convFactor <= 0) convFactor = 1;
@@ -956,7 +958,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            // 🌟 الكمية (كرتونة) والقطع بالكرتونة مثل الشاشة اليدوية تماماً
                             Row(
                               children: [
                                 Expanded(
@@ -1002,7 +1003,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               ],
                             ),
 
-                            // 🌟 عرض إجمالي عدد القطع
                             Padding(
                               padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
                               child: Row(
@@ -1018,7 +1018,6 @@ class _InvoiceReviewScreenState extends State<InvoiceReviewScreen> {
                               ),
                             ),
 
-                            // 🌟 سعر الشراء (للكرتونة) وسعر البيع (للقطعة) مع تكلفة القطعة
                             Row(
                               children: [
                                 Expanded(

@@ -1,22 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class MasterCatalogCategories {
-  static const Map<String, List<String>> taxonomy = {
-    'Computers & Systems': ['Desktops', 'Laptops', 'Servers & Workstations'],
-    'PC Components': ['Processors / CPUs', 'Motherboards', 'Memory / RAM', 'Storage / HDD / SSD / NVMe', 'Graphics Cards / GPUs', 'Power Supplies / PSU', 'Computer Cases', 'Cooling Systems'],
-    'Displays & Monitors': ['Standard Monitors', 'Gaming Monitors'],
-    'Peripherals & Accessories': ['Keyboards', 'Mice & Pointers', 'Headsets & Audio', 'Webcams', 'Mousepads & Stands'],
-    'Cables & Adapters': ['Video Cables', 'Data Cables', 'Power Cables', 'Adapters & Hubs'],
-    'Laptop Specific Parts': ['Laptop Chargers', 'Laptop Batteries', 'Laptop Screens'],
-    'Mobile Accessories': ['Mobile Chargers', 'Screen Protectors', 'Mobile Cases', 'Power Banks'],
-    'Networking': ['Routers & Switches', 'Network Cables'],
-    'Micro-Components & Maintenance': ['Sockets & Connectors', 'ICs & Chips', 'Jumpers & Screws', 'Thermal Paste & Cleaning'],
-  };
-
-  static List<String> get mainCategories => taxonomy.keys.toList();
-  static List<String> getSubCategories(String mainCategory) => taxonomy[mainCategory] ?? [];
-}
-
 class ProductBatch {
   final String batchId;
   final int quantity;
@@ -26,12 +9,27 @@ class ProductBatch {
   ProductBatch({required this.batchId, required this.quantity, required this.costPrice, required this.dateAdded});
 
   Map<String, dynamic> toJson() => {
-    'batchId': batchId, 'quantity': quantity, 'costPrice': costPrice, 'dateAdded': Timestamp.fromDate(dateAdded),
+    'batchId': batchId,
+    'quantity': quantity,
+    'costPrice': costPrice,
+    'dateAdded': dateAdded.toIso8601String(),
   };
 
-  factory ProductBatch.fromJson(Map<String, dynamic> json) => ProductBatch(
-    batchId: json['batchId'] ?? '', quantity: json['quantity'] ?? 0, costPrice: (json['costPrice'] ?? json['sellingPrice'] ?? 0.0).toDouble(), dateAdded: (json['dateAdded'] as Timestamp?)?.toDate() ?? DateTime.now(),
-  );
+  factory ProductBatch.fromJson(Map<String, dynamic> json) {
+    DateTime parsedDate = DateTime.now();
+    if (json['dateAdded'] is Timestamp) {
+      parsedDate = (json['dateAdded'] as Timestamp).toDate();
+    } else if (json['dateAdded'] is String) {
+      parsedDate = DateTime.tryParse(json['dateAdded']) ?? DateTime.now();
+    }
+
+    return ProductBatch(
+      batchId: json['batchId']?.toString() ?? '',
+      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      costPrice: (json['costPrice'] as num?)?.toDouble() ?? (json['sellingPrice'] as num?)?.toDouble() ?? 0.0,
+      dateAdded: parsedDate,
+    );
+  }
 }
 
 class ProductModel {
@@ -41,11 +39,8 @@ class ProductModel {
   final double price;
   final double oldPrice;
   final int salesCount;
-
-  // 🚀 حقول التقييم الجديدة
   final double rating;
   final int reviewsCount;
-
   final String imageUrl;
   final List<String> images;
   final List<String> variations;
@@ -54,12 +49,9 @@ class ProductModel {
   final List<String> barcodes;
   final String unitOfMeasure;
   final String storageLocation;
-
-  // 🚀 رجعتلك inStock كمتغير أساسي عشان الشاشات التانية متضربش إيرور
   final bool inStock;
   final bool isActive;
   final List<ProductBatch> batches;
-
   final int _dbStockQuantity;
 
   int get stockQuantity {
@@ -72,10 +64,10 @@ class ProductModel {
   ProductModel({
     required this.id, required this.name, required this.description, required this.price,
     this.oldPrice = 0.0, this.salesCount = 0,
-    this.rating = 0.0, this.reviewsCount = 0, // 👈 قيم اختيارية آمنة
+    this.rating = 0.0, this.reviewsCount = 0,
     required this.imageUrl, required this.images, required this.variations, required this.category,
     this.subCategory = 'Uncategorized', this.barcodes = const [], this.unitOfMeasure = 'Piece', this.storageLocation = 'Main Storage',
-    this.inStock = true, // 👈 رجعت للـ Constructor زي زمان
+    this.inStock = true,
     this.isActive = true, required this.batches,
     int dbStockQuantity = 0,
   }) : _dbStockQuantity = dbStockQuantity;
@@ -98,7 +90,7 @@ class ProductModel {
 
     List<ProductBatch> parsedBatches = [];
     if (json['batches'] != null) {
-      parsedBatches = (json['batches'] as List).map((b) => ProductBatch.fromJson(b as Map<String, dynamic>)).toList();
+      parsedBatches = (json['batches'] as List).map((b) => ProductBatch.fromJson(Map<String, dynamic>.from(b as Map))).toList();
       parsedBatches.sort((a, b) => a.dateAdded.compareTo(b.dateAdded));
     }
 
@@ -111,12 +103,13 @@ class ProductModel {
 
     int resolvedStockQty = (json['stockQuantity'] as num?)?.toInt() ?? 0;
 
-    // 💡 اللوجيك بيتحسب هنا بنظافة وبدون ما نبوظ الهيكلة
     int calculatedStock = parsedBatches.isNotEmpty ? parsedBatches.fold(0, (sum, b) => sum + b.quantity) : resolvedStockQty;
     bool resolvedInStock = (json['inStock'] == true) || calculatedStock > 0;
 
+    String resolvedId = documentId.isNotEmpty ? documentId : (json['id']?.toString() ?? '');
+
     return ProductModel(
-      id: documentId,
+      id: resolvedId,
       name: json['name'] ?? json['title'] ?? '',
       description: json['description'] ?? '',
       price: resolvedPrice,
@@ -132,7 +125,7 @@ class ProductModel {
       barcodes: parsedBarcodes,
       unitOfMeasure: json['unitOfMeasure'] ?? 'Piece',
       storageLocation: json['storageLocation'] ?? 'Main Storage',
-      inStock: resolvedInStock, // 👈 بنبعت القيمة المحسوبة بأمان
+      inStock: resolvedInStock,
       isActive: json['isActive'] ?? true,
       batches: parsedBatches,
       dbStockQuantity: resolvedStockQty,
@@ -141,6 +134,7 @@ class ProductModel {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name, 'description': description, 'price': price,
       'oldPrice': oldPrice, 'salesCount': salesCount,
       'rating': rating, 'reviewsCount': reviewsCount,

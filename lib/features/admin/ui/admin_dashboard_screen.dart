@@ -31,7 +31,7 @@ import '../../partners/ui/supplier_screen.dart';
 import '../../partners/ui/customers_screen.dart';
 import '../../partners/ui/partners_management_screen.dart';
 import '../../admin/logic/admin_orders_cubit.dart';
-
+import 'manage_returns_screen.dart';
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -374,7 +374,65 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         )
     );
   }
-
+// 🚀 تصميم كارت المرتجعات الذكي
+  Widget _buildReturnsCard(int count, double total, BuildContext context) {
+    bool hasReturns = count > 0;
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: hasReturns ? Colors.orange.shade50 : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: hasReturns ? Colors.orange.shade400 : Colors.grey.shade300, width: 1.5),
+      ),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageReturnsScreen()));
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: hasReturns ? Colors.orange.shade100 : Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.assignment_return_rounded, size: 28, color: hasReturns ? Colors.orange.shade800 : Colors.grey.shade500),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('إدارة المرتجعات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF0D1B2A))),
+                    const SizedBox(height: 4),
+                    Text(
+                      hasReturns ? 'يوجد $count طلب في انتظار المراجعة' : 'لا توجد طلبات مرتجعات معلقة',
+                      style: TextStyle(fontSize: 13, fontFamily: 'Cairo', color: hasReturns ? Colors.orange.shade700 : Colors.grey.shade600, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              if (hasReturns)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('قيمة الاسترداد', style: TextStyle(fontSize: 11, fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold)),
+                    Text('${total.toStringAsFixed(2)} ج', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.red.shade700)),
+                  ],
+                )
+              else
+                const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     const Color primaryNavy = Color(0xFF0D1B2A);
@@ -556,7 +614,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       },
                     ),
                     const SizedBox(height: 32),
-
+// 🚀 القسم الجديد: إدارة المرتجعات والاسترداد
+                    _buildSectionTitle('المرتجعات والاسترداد', Icons.assignment_return_rounded),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('return_requests').where('status', isEqualTo: 'Pending Approval').snapshots(),
+                      builder: (context, snapshot) {
+                        int pendingReturns = 0;
+                        double totalRefund = 0.0;
+                        if (snapshot.hasData) {
+                          pendingReturns = snapshot.data!.docs.length;
+                          for (var doc in snapshot.data!.docs) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            totalRefund += double.tryParse((data['totalRefund'] ?? 0).toString()) ?? 0.0;
+                          }
+                        }
+                        return _buildReturnsCard(pendingReturns, totalRefund, context);
+                      },
+                    ),
+                    const SizedBox(height: 32),
                     _buildSectionTitle('إدارة المشتريات والموردين', Icons.shopping_cart_checkout_rounded),
                     GridView.count(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), childAspectRatio: 1.1,
