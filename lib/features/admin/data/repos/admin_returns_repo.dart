@@ -5,7 +5,6 @@ class AdminReturnsRepo {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // جلب كل طلبات المرتجعات المعلقة (بدون أقواس متداخلة لتجنب مشاكل النسخ)
   Future<dynamic> getPendingReturns() async {
     try {
       final snap = await _firestore
@@ -24,7 +23,6 @@ class AdminReturnsRepo {
     }
   }
 
-  // جلب سجل المرتجعات المكتملة (المعتمدة أو المرفوضة) للأرشفة
   Future<dynamic> getCompletedReturnsLog() async {
     try {
       final snap = await _firestore
@@ -43,7 +41,7 @@ class AdminReturnsRepo {
     }
   }
 
-  // اعتماد المرتجع الشامل (المخزون والخزينة والأرباح)
+  // 🚀 اعتماد المرتجع الشامل (المخزون، الخزينة تصفر، والأرباح تصفر تماماً) 🚀
   Future<void> approveReturn(String returnId, Map returnData) async {
     final String orderId = returnData['orderId']?.toString() ?? '';
     if (orderId.isEmpty) throw Exception('بيانات الطلب غير مكتملة');
@@ -58,6 +56,7 @@ class AdminReturnsRepo {
       final orderData = orderSnap.data() as Map;
       final List items = (orderData['items'] ?? orderData['cartItems'] ?? []) as List;
 
+      // 1. جلب كل المنتجات المتعلقة بالمرتجع
       Map productSnaps = {};
       for (var item in items) {
         Map itemMap = item as Map;
@@ -67,6 +66,7 @@ class AdminReturnsRepo {
         }
       }
 
+      // 2. إرجاع المخزون (تطبيق FIFO دقيق واسترداد أسعار الشراء القديمة)
       for (var item in items) {
         Map itemMap = item as Map;
         final String productId = itemMap['productId']?.toString() ?? itemMap['id']?.toString() ?? '';
@@ -78,16 +78,17 @@ class AdminReturnsRepo {
         final productSnap = productSnaps[productId];
         if (productSnap != null && productSnap.exists) {
           final productData = productSnap.data() as Map;
-          List batches = (productData['batches'] ?? []) as List;
+          List batches = List.from(productData['batches'] ?? []);
 
           if (consumedBatches.isNotEmpty) {
             for (var cb in consumedBatches) {
               Map cbMap = cb as Map;
               batches.add({
-                'batchId': 'return_${cbMap['batchId'] ?? DateTime.now().millisecondsSinceEpoch}',
+                'batchId': cbMap['batchId'] ?? 'return_${DateTime.now().millisecondsSinceEpoch}',
                 'quantity': (cbMap['quantity'] ?? 0).toInt(),
                 'costPrice': (cbMap['costPrice'] ?? 0.0).toDouble(),
-                'dateAdded': Timestamp.now(),
+                'supplierName': cbMap['supplierName'] ?? 'مرتجع عميل',
+                'dateAdded': cbMap['dateAdded'] ?? Timestamp.now(),
               });
             }
           } else {
@@ -97,6 +98,7 @@ class AdminReturnsRepo {
               'batchId': 'return_fallback_${DateTime.now().millisecondsSinceEpoch}',
               'quantity': quantityToRestore,
               'costPrice': unitCostPrice,
+              'supplierName': 'مرتجع عميل',
               'dateAdded': Timestamp.now(),
             });
           }
@@ -112,18 +114,32 @@ class AdminReturnsRepo {
 
       final double totalRefund = (returnData['totalRefund'] ?? 0.0).toDouble();
 
-      // 🚀 تسجيل حركة الخزينة والاسترداد في السجل المالي بشكل سليم ومتصل
+      // 3. 🚀 تسوية الخزينة بنوع refund لكي تظهر في المدفوعات وتطرح بدون أن تحتسب كمصروف تشغيلي 🚀
       final ledgerRef = _firestore.collection('ledger_entries').doc();
       transaction.set(ledgerRef, {
         'id': ledgerRef.id,
-        'type': 'refund',
-        'amount': -totalRefund,
-        'description': 'رد مبلغ لعميل - مرتجع طلب رقم ${returnData['orderNumber'] ?? ''}',
+        'type': 'refund', // 🚀 نوع خاص بالاسترداد لكي تخصم من السيولة ولا تدخل في المصروفات التشغيلية
+        'amount': totalRefund, // بالموجب لتطرحها شاشة الخزينة من إجمالي الداخل
+        'description': 'استرداد نقدي لعميل (مرتجع) - طلب رقم ${returnData['orderNumber'] ?? ''}',
         'date': Timestamp.now(),
         'addedBy': _auth.currentUser?.email ?? 'System',
       });
 
-      transaction.update(orderRef, {'status': 'Returned'});
+      // 4. 🚀 التسوية المحاسبية للأرباح: تصفير إيرادات وتكلفة وربح الطلب تماماً ليعود للصفر بدون أي خسائر وهمية 🚀
+      Map<String, dynamic> orderUpdate = {
+        'status': 'Returned',
+        'totalPrice': 0.0,
+        'totalCost': 0.0,
+        'profit': 0.0,
+      };
+
+      if (orderData.containsKey('totalAmount')) {
+        orderUpdate['totalAmount'] = 0.0;
+      }
+
+      transaction.update(orderRef, orderUpdate);
+
+      // 5. تحديث حالة المرتجع إلى معتمد
       transaction.update(returnRef, {
         'status': 'Approved',
         'approvedAt': Timestamp.now(),
@@ -132,7 +148,6 @@ class AdminReturnsRepo {
     });
   }
 
-  // 3. رفض المرتجع
   Future<void> rejectReturn(String returnId, String orderId) async {
     await _firestore.runTransaction((transaction) async {
       final returnRef = _firestore.collection('return_requests').doc(returnId);

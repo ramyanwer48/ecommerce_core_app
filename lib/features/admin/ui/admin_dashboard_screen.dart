@@ -32,6 +32,7 @@ import '../../partners/ui/customers_screen.dart';
 import '../../partners/ui/partners_management_screen.dart';
 import '../../admin/logic/admin_orders_cubit.dart';
 import 'manage_returns_screen.dart';
+
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -63,6 +64,169 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  // 🚀 دالة التهيئة المطابقة لبنية بيانات الفايربيز الفعلية (اعتماداً على productName) 🚀
+  Future<void> _resetTestData(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent)),
+    );
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // 1. مسح العمليات التجريبية (الطلبات، المرتجعات، الخزينة)
+      final ordersSnap = await firestore.collection('orders').get();
+      final returnsSnap = await firestore.collection('return_requests').get();
+      final ledgersSnap = await firestore.collection('ledger_entries').get();
+
+      List<Future> deleteFutures = [];
+      for (var doc in ordersSnap.docs) { deleteFutures.add(doc.reference.delete()); }
+      for (var doc in returnsSnap.docs) { deleteFutures.add(doc.reference.delete()); }
+      for (var doc in ledgersSnap.docs) { deleteFutures.add(doc.reference.delete()); }
+      await Future.wait(deleteFutures);
+
+      // 2. قراءة كل المنتجات الحالية من كوليكشن products لعمل خريطة تربط الاسم بالـ ID
+      final productsSnap = await firestore.collection('products').get();
+      Map<String, String> productNameToId = {};
+      for (var prodDoc in productsSnap.docs) {
+        final prodData = prodDoc.data();
+        String name = (prodData['name'] ?? '').toString().trim().toLowerCase();
+        if (name.isNotEmpty) {
+          productNameToId[name] = prodDoc.id;
+        }
+      }
+
+      // 3. قراءة فواتير المشتريات وتجميع الكميات بناءً على الـ productName الظاهر في صور الفايربيز
+      final purchasesSnap = await firestore.collection('purchases').get();
+      Map productTotalQty = {};
+      Map productBatches = {};
+
+      for (var invoice in purchasesSnap.docs) {
+        final data = invoice.data();
+        final List items = (data['items'] ?? []) as List;
+        String supplierName = data['supplierName'] ?? 'مورد غير محدد';
+        var invoiceDate = data['date'] ?? data['invoiceDate'] ?? Timestamp.now();
+
+        for (var item in items) {
+          final itemMap = item as Map;
+          // التطابق يتم عبر productName الموجود فعلياً في الفاتورة حسب صورك
+          final String productName = (itemMap['productName'] ?? '').toString().trim();
+          final int qty = (itemMap['quantity'] ?? 0).toInt();
+          final double costPrice = (itemMap['costPerPiece'] ?? itemMap['unitPrice'] ?? itemMap['costPrice'] ?? 0.0).toDouble();
+
+          if (productName.isEmpty || qty <= 0) continue;
+
+          String lowerName = productName.toLowerCase();
+
+          productTotalQty[lowerName] = (productTotalQty[lowerName] ?? 0) + qty;
+
+          if (productBatches[lowerName] == null) {
+            productBatches[lowerName] = [];
+          }
+
+          (productBatches[lowerName] as List).add({
+            'batchId': 'reset_inv_${invoice.id}_${DateTime.now().millisecondsSinceEpoch}',
+            'quantity': qty,
+            'costPrice': costPrice,
+            'supplierName': supplierName,
+            'dateAdded': invoiceDate,
+          });
+        }
+      }
+
+      // 4. تحديث كوليكشن products بالكميات والدفعات المطابقة بالاسم الصحيح
+      List<Future> updateProductsFutures = [];
+
+      for (var prodDoc in productsSnap.docs) {
+        String prodId = prodDoc.id;
+        String prodName = (prodDoc.data()['name'] ?? '').toString().trim().toLowerCase();
+
+        if (productTotalQty.containsKey(prodName)) {
+          int exactQty = (productTotalQty[prodName] ?? 0).toInt();
+          updateProductsFutures.add(
+              firestore.collection('products').doc(prodId).update({
+                'stockQuantity': exactQty,
+                'batches': productBatches[prodName],
+                'inStock': exactQty > 0,
+              })
+          );
+        } else {
+          // إذا لم تكن موجودة في الفواتير، يصفر المخزون بأمان
+          updateProductsFutures.add(
+              firestore.collection('products').doc(prodId).update({
+                'stockQuantity': 0,
+                'batches': [],
+                'inStock': false,
+              })
+          );
+        }
+      }
+
+      await Future.wait(updateProductsFutures);
+
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // إغلاق اللودينج
+
+      // رسالة النجاح المنبثقة
+      showDialog(
+        context: context,
+        builder: (successContext) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            elevation: 10,
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.deepPurple.withAlpha(25), shape: BoxShape.circle),
+                    child: const Icon(Icons.settings_backup_restore_rounded, color: Colors.deepPurpleAccent, size: 48),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'تمت إعادة التهيئة بنجاح',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 20, color: Color(0xFF0D1B2A)),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'تم مسح العمليات، ومطابقة أسماء المنتجات مع فواتير المشتريات، واستعادة المخزون في شاشة إدارة المنتجات بنجاح.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.black87, height: 1.5),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(successContext),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D1B2A),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text('حسناً', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ أثناء التهيئة: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _updateProfileImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
@@ -81,71 +245,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      if (!mounted) return;
       setState(() => profileImageUrl = downloadUrl);
 
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة بنجاح', style: TextStyle(fontFamily: 'Cairo'))));
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e', style: const TextStyle(fontFamily: 'Cairo'))));
-      }
-    }
-  }
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الصورة بنجاح', style: TextStyle(fontFamily: 'Cairo'))));
 
-  void _showUserProfileData() {
-    String displayName = currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'المدير العام';
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('بيانات الحساب والبروفايل', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0D1B2A))),
-                  InkWell(
-                    onTap: () { if (Navigator.canPop(ctx)) Navigator.pop(ctx); },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      height: 32, width: 32,
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.black, width: 2)),
-                      child: const Icon(Icons.close, color: Colors.black, size: 20),
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: Color(0xFF0D1B2A), child: Icon(Icons.person, color: Colors.white)),
-                title: Text(displayName, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15)),
-                subtitle: const Text('الاسم المسجل بالنظام', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
-              ),
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.email, color: Colors.white)),
-                title: Text(currentUser?.email ?? 'غير متوفر', style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 13)),
-                subtitle: const Text('البريد الإلكتروني للوصول', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
-              ),
-              const ListTile(
-                leading: CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.admin_panel_settings, color: Colors.white)),
-                title: Text('مدير عام (Super Admin)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green)),
-                subtitle: Text('لديك كافة الصلاحيات في النظام', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.grey)),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
-    );
+    } catch (e) {
+      if (!mounted) return;
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e', style: const TextStyle(fontFamily: 'Cairo'))));
+    }
   }
 
   void _showSystemSettingsSheet() async {
@@ -219,12 +329,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  void _showLowStockSheet(BuildContext context, List<Map<String, dynamic>> lowStockItems) {
+  void _showLowStockSheet(BuildContext context, List lowStockItems) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Directionality(
+      builder: (sheetContext) => Directionality(
         textDirection: TextDirection.rtl,
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -254,7 +364,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const SizedBox(width: 12),
                   InkWell(
                     onTap: () {
-                      if (Navigator.canPop(context)) Navigator.pop(context);
+                      if (Navigator.canPop(sheetContext)) Navigator.pop(sheetContext);
                     },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
@@ -270,15 +380,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: lowStockItems.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final item = lowStockItems[index];
+                  separatorBuilder: (ctx, index) => const Divider(),
+                  itemBuilder: (ctx, index) {
+                    final item = lowStockItems[index] as Map;
                     final name = item['name'] ?? 'منتج غير معروف';
                     final stock = item['stockQuantity'] ?? 0;
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.inventory_2_outlined, color: Colors.red, size: 20)),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
+                      title: Text(name.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
                       trailing: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
@@ -313,14 +423,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  Widget _buildResetItemRow(IconData icon, String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.grey.shade800))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPipelineStep({required String title, required IconData icon, required Color color, required String count}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.6), width: 1.5),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))]
+          border: Border.all(color: color.withAlpha(153), width: 1.5),
+          boxShadow: [BoxShadow(color: color.withAlpha(10), blurRadius: 4, offset: const Offset(0, 2))]
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -341,7 +464,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildActionCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Card(
       elevation: 0, color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: color.withOpacity(0.6), width: 1.5)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: color.withAlpha(153), width: 1.5)),
       child: InkWell(
         onTap: () { HapticFeedback.selectionClick(); onTap(); },
         borderRadius: BorderRadius.circular(16),
@@ -350,7 +473,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircleAvatar(radius: 22, backgroundColor: color.withOpacity(0.1), child: Icon(icon, size: 26, color: color)),
+                CircleAvatar(radius: 22, backgroundColor: color.withAlpha(26), child: Icon(icon, size: 26, color: color)),
                 const SizedBox(height: 10),
                 Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF0D1B2A), height: 1.2), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
@@ -374,7 +497,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         )
     );
   }
-// 🚀 تصميم كارت المرتجعات الذكي
+
   Widget _buildReturnsCard(int count, double total, BuildContext context) {
     bool hasReturns = count > 0;
     return Card(
@@ -433,6 +556,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     const Color primaryNavy = Color(0xFF0D1B2A);
@@ -488,23 +612,94 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // 🚀 زرار إعادة التهيئة واستعادة المخزون (اللون البنفسجي المميز) 🚀
+                      _buildHeaderIcon(Icons.restart_alt_rounded, Colors.deepPurple.withAlpha(38), Colors.deepPurpleAccent, () {
+                        HapticFeedback.heavyImpact();
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: Dialog(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              elevation: 10,
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(color: Colors.deepPurple.withAlpha(25), shape: BoxShape.circle),
+                                          child: const Icon(Icons.settings_backup_restore_rounded, color: Colors.deepPurpleAccent, size: 32),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        const Expanded(child: Text('إعادة تهيئة بيئة الاختبار', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18))),
+                                      ],
+                                    ),
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 16),
+                                      child: Divider(thickness: 1, height: 1),
+                                    ),
+                                    const Text('سيتم تنفيذ الإجراءات التالية لتهيئة النظام:', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
+                                    const SizedBox(height: 12),
+                                    _buildResetItemRow(Icons.cleaning_services_rounded, 'تصفير (الطلبات، المرتجعات، الخزينة).', Colors.redAccent),
+                                    _buildResetItemRow(Icons.inventory_rounded, 'استعادة المخزون من فواتير الشراء الأساسية.', Colors.green),
+                                    const SizedBox(height: 24),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextButton(
+                                              onPressed: () => Navigator.pop(ctx),
+                                              child: const Text('إلغاء وتراجع', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey, fontWeight: FontWeight.bold))
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          flex: 2,
+                                          child: ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurpleAccent, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              _resetTestData(context); // استدعاء دالة التهيئة الشاملة
+                                            },
+                                            child: const Text('بدء التهيئة', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 14)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(width: 8),
+
                       StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance.collection('products').snapshots(),
                           builder: (context, snapshot) {
                             int lowStockCount = 0;
-                            List<Map<String, dynamic>> lowStockList = [];
-                            if (snapshot.hasData) {
-                              for (var doc in snapshot.data!.docs) {
-                                final data = doc.data() as Map<String, dynamic>;
-                                double price = double.tryParse(data['price'].toString()) ?? 0;
-                                int stock = int.tryParse(data['stockQuantity'].toString()) ?? 0;
-                                int threshold = price >= 1500 ? 2 : 5;
-                                if (stock <= threshold) { lowStockCount++; lowStockList.add(data); }
+                            List lowStockList = [];
+                            final docs = snapshot.data?.docs ?? [];
+
+                            for (var doc in docs) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              double price = double.tryParse(data['price'].toString()) ?? 0;
+                              int stock = int.tryParse(data['stockQuantity'].toString()) ?? 0;
+                              int threshold = price >= 1500 ? 2 : 5;
+                              if (stock <= threshold) {
+                                lowStockCount++;
+                                lowStockList.add(data);
                               }
                             }
+
                             return _buildHeaderIcon(
                               Icons.notifications_active_rounded,
-                              Colors.white.withOpacity(0.1),
+                              Colors.white.withAlpha(26),
                               Colors.white,
                                   () {
                                 HapticFeedback.selectionClick();
@@ -525,9 +720,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           }
                       ),
                       const SizedBox(width: 8),
-                      _buildHeaderIcon(Icons.settings_rounded, Colors.white.withOpacity(0.1), Colors.white, () { HapticFeedback.lightImpact(); _showSystemSettingsSheet(); }),
+                      _buildHeaderIcon(Icons.settings_rounded, Colors.white.withAlpha(26), Colors.white, () { HapticFeedback.lightImpact(); _showSystemSettingsSheet(); }),
                       const SizedBox(width: 8),
-                      _buildHeaderIcon(Icons.logout_rounded, Colors.red.withOpacity(0.2), Colors.redAccent, () async { HapticFeedback.lightImpact(); await FirebaseAuth.instance.signOut(); if (context.mounted) context.go(Routes.login); }),
+                      _buildHeaderIcon(Icons.logout_rounded, Colors.red.withAlpha(51), Colors.redAccent, () async { HapticFeedback.lightImpact(); await FirebaseAuth.instance.signOut(); if (context.mounted) context.go(Routes.login); }),
                     ],
                   ),
                 ],
@@ -548,18 +743,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           stream: FirebaseFirestore.instance.collection('categories').snapshots(),
                           builder: (context, categoriesSnapshot) {
                             int totalProducts = 0, activeProducts = 0, inactiveProducts = 0, lowStockCount = 0, totalCategories = 0;
-                            if (productsSnapshot.hasData) {
-                              totalProducts = productsSnapshot.data!.docs.length;
-                              for (var doc in productsSnapshot.data!.docs) {
-                                final data = doc.data() as Map<String, dynamic>;
-                                bool isActive = data['isActive'] ?? true;
-                                double price = double.tryParse(data['price'].toString()) ?? 0;
-                                int stock = int.tryParse(data['stockQuantity'].toString()) ?? 0;
-                                if (isActive) activeProducts++; else inactiveProducts++;
-                                if (stock <= (price >= 1500 ? 2 : 5)) lowStockCount++;
+
+                            final pDocs = productsSnapshot.data?.docs ?? [];
+                            totalProducts = pDocs.length;
+                            for (var doc in pDocs) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              bool isActive = data['isActive'] ?? true;
+                              double price = double.tryParse(data['price'].toString()) ?? 0;
+                              int stock = int.tryParse(data['stockQuantity'].toString()) ?? 0;
+
+                              if (isActive) {
+                                activeProducts++;
+                              } else {
+                                inactiveProducts++;
+                              }
+
+                              if (stock <= (price >= 1500 ? 2 : 5)) {
+                                lowStockCount++;
                               }
                             }
-                            if (categoriesSnapshot.hasData) totalCategories = categoriesSnapshot.data!.docs.length;
+
+                            totalCategories = categoriesSnapshot.data?.docs.length ?? 0;
+
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -585,18 +790,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       stream: FirebaseFirestore.instance.collection('orders').snapshots(),
                       builder: (context, snapshot) {
                         int newOrders = 0, preparing = 0, waybill = 0, shipping = 0, delivered = 0;
-                        if (snapshot.hasData) {
-                          for (var doc in snapshot.data!.docs) {
-                            final data = doc.data() as Map<String, dynamic>;
-                            String status = data['status']?.toString().toLowerCase() ?? 'new';
+                        final oDocs = snapshot.data?.docs ?? [];
 
-                            if (status == 'new' || status == 'جديد' || status == 'pending') newOrders++;
-                            else if (status == 'preparing' || status == 'تجهيز' || status == 'processing' || status == 'جاري التجهيز') preparing++;
-                            else if (status == 'waybill' || status == 'بوليصة') waybill++;
-                            else if (status == 'shipping' || status == 'شحن' || status == 'shipped') shipping++;
-                            else if (status == 'delivered' || status == 'تم التسليم' || status == 'completed') delivered++;
+                        for (var doc in oDocs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          String status = data['status']?.toString().toLowerCase() ?? 'new';
+
+                          if (status == 'new' || status == 'جديد' || status == 'pending') {
+                            newOrders++;
+                          } else if (status == 'preparing' || status == 'تجهيز' || status == 'processing' || status == 'جاري التجهيز') {
+                            preparing++;
+                          } else if (status == 'waybill' || status == 'بوليصة') {
+                            waybill++;
+                          } else if (status == 'shipping' || status == 'شحن' || status == 'shipped') {
+                            shipping++;
+                          } else if (status == 'delivered' || status == 'تم التسليم' || status == 'completed') {
+                            delivered++;
                           }
                         }
+
                         return Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -614,20 +826,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       },
                     ),
                     const SizedBox(height: 32),
-// 🚀 القسم الجديد: إدارة المرتجعات والاسترداد
+
                     _buildSectionTitle('المرتجعات والاسترداد', Icons.assignment_return_rounded),
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance.collection('return_requests').where('status', isEqualTo: 'Pending Approval').snapshots(),
                       builder: (context, snapshot) {
                         int pendingReturns = 0;
                         double totalRefund = 0.0;
-                        if (snapshot.hasData) {
-                          pendingReturns = snapshot.data!.docs.length;
-                          for (var doc in snapshot.data!.docs) {
-                            final data = doc.data() as Map<String, dynamic>;
-                            totalRefund += double.tryParse((data['totalRefund'] ?? 0).toString()) ?? 0.0;
-                          }
+                        final rDocs = snapshot.data?.docs ?? [];
+
+                        pendingReturns = rDocs.length;
+                        for (var doc in rDocs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          totalRefund += double.tryParse((data['totalRefund'] ?? 0).toString()) ?? 0.0;
                         }
+
                         return _buildReturnsCard(pendingReturns, totalRefund, context);
                       },
                     ),
@@ -725,7 +938,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 }
 
 // ============================================================================
-// 🌟 1. الكلاس المسؤول عن نافذة المطابقة
+// 🌟 الكلاس المسؤول عن نافذة المطابقة
 // ============================================================================
 class ReconciliationBottomSheet extends StatefulWidget {
   const ReconciliationBottomSheet({super.key});
@@ -754,14 +967,20 @@ class _ReconciliationBottomSheetState extends State<ReconciliationBottomSheet> {
 
       double tSales = 0, tReceipts = 0, tBalance = 0;
 
-      for (var doc in ordersSnap.docs) { tSales += double.tryParse((doc.data()['totalPrice'] ?? doc.data()['totalAmount'] ?? 0).toString()) ?? 0; }
+      for (var doc in ordersSnap.docs) {
+        tSales += double.tryParse((doc.data()['totalPrice'] ?? doc.data()['totalAmount'] ?? 0).toString()) ?? 0;
+      }
       for (var doc in ledgerSnap.docs) {
         var data = doc.data();
         String type = data['type'] ?? '';
         double amt = double.tryParse((data['amount'] ?? 0).toString()) ?? 0;
-        if (type == 'receipt' || type == 'income' || type == 'sale') tReceipts += amt;
+        if (type == 'receipt' || type == 'income' || type == 'sale') {
+          tReceipts += amt;
+        }
       }
-      for (var doc in customersSnap.docs) { tBalance += double.tryParse((doc.data()['balance'] ?? 0).toString()) ?? 0; }
+      for (var doc in customersSnap.docs) {
+        tBalance += double.tryParse((doc.data()['balance'] ?? 0).toString()) ?? 0;
+      }
 
       double tExpected = tSales - tBalance;
       double tDiscrepancy = tReceipts - tExpected;
@@ -906,7 +1125,7 @@ class _ReconciliationBottomSheetState extends State<ReconciliationBottomSheet> {
 }
 
 // ============================================================================
-// 🌟 2. الكلاس الخاص بإدارة فريق العمل والصلاحيات (مع الترتيب الذكي للمديرين)
+// 🌟 الكلاس الخاص بإدارة فريق العمل والصلاحيات (مع الترتيب الذكي للمديرين)
 // ============================================================================
 class StaffManagementBottomSheet extends StatefulWidget {
   const StaffManagementBottomSheet({super.key});
@@ -973,10 +1192,12 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.orange));
                       if (!snap.hasData || snap.data!.docs.isEmpty) return const Center(child: Text('لا يوجد مستخدمين', style: TextStyle(fontFamily: 'Cairo')));
+
+                      final usersDocs = snap.data?.docs ?? [];
                       return ListView.builder(
-                        itemCount: snap.data!.docs.length,
+                        itemCount: usersDocs.length,
                         itemBuilder: (context, index) {
-                          var doc = snap.data!.docs[index];
+                          var doc = usersDocs[index];
                           String email = (doc.data() as Map)['email'] ?? doc.id;
                           String name = (doc.data() as Map)['name'] ?? email.split('@')[0];
                           return Card(
@@ -1052,28 +1273,26 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      if (mounted) {
-        setState(() {
-          isSaving = false;
-          flashMessage = 'تم حفظ الصلاحيات وتحديث النظام بنجاح ✅';
-          isErrorMsg = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        isSaving = false;
+        flashMessage = 'تم حفظ الصلاحيات وتحديث النظام بنجاح ✅';
+        isErrorMsg = false;
+      });
 
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-        });
-      }
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          isSaving = false;
-          flashMessage = 'عفواً، حدث خطأ: $e';
-          isErrorMsg = true;
-        });
-        Future.delayed(const Duration(seconds: 4), () {
-          if (mounted) setState(() => flashMessage = null);
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        isSaving = false;
+        flashMessage = 'عفواً، حدث خطأ: $e';
+        isErrorMsg = true;
+      });
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => flashMessage = null);
+      });
     }
   }
 
@@ -1128,7 +1347,7 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: Colors.grey.shade400, width: 1.5),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3))]
+                            boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 8, offset: const Offset(0, 3))]
                         ),
                         child: Row(
                           children: [
@@ -1171,7 +1390,8 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
                           title: const Text('مدير عام (Super Admin)', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 15)),
                           subtitle: Text(isSuperAdmin ? 'هذا المستخدم لديه وصول كامل لكل الشاشات' : 'تفعيل لإعطاء صلاحيات كاملة', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: isSuperAdmin ? Colors.green.shade700 : Colors.grey)),
                           value: isSuperAdmin,
-                          activeColor: Colors.green,
+                          activeThumbColor: Colors.green,
+                          activeTrackColor: Colors.green.withAlpha(128),
                           secondary: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(color: isSuperAdmin ? Colors.green.shade100 : Colors.grey.shade200, shape: BoxShape.circle),
@@ -1220,7 +1440,8 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
                               return SwitchListTile(
                                 title: Text(screenTitle, style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
                                 value: isChecked,
-                                activeColor: Colors.orange.shade600,
+                                activeThumbColor: Colors.orange.shade600,
+                                activeTrackColor: Colors.orange.shade300,
                                 onChanged: (val) {
                                   setState(() {
                                     if (val) {
@@ -1247,8 +1468,7 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
                         if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()));
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('لا توجد صلاحيات مخصصة حالياً', style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)));
 
-                        // 🌟 الترتيب الذكي: المدير العام يظهر في أعلى القائمة دايماً 🌟
-                        var docs = snapshot.data!.docs.toList();
+                        var docs = snapshot.data?.docs.toList() ?? [];
                         docs.sort((a, b) {
                           var aData = a.data() as Map<String, dynamic>;
                           var bData = b.data() as Map<String, dynamic>;
@@ -1331,7 +1551,7 @@ class _StaffManagementBottomSheetState extends State<StaffManagementBottomSheet>
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                   color: Colors.white,
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]
+                  boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 10, offset: const Offset(0, -5))]
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

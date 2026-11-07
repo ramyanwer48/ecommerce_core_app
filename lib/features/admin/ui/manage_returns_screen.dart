@@ -88,11 +88,12 @@ class ManageReturnsView extends StatelessWidget {
                 builder: (ctx) => Center(child: CircularProgressIndicator(color: brandOrange)),
               );
             } else if (state is AdminReturnsActionSuccess) {
-              // 🚀 ضمان إغلاق نافذة التحميل قبل إظهار مودال النجاح
-              if (Navigator.canPop(context)) Navigator.pop(context);
+              // 🚀 التأكد الجذري من إغلاق أي نوافذ مفتوحة (اللودينج) قبل إظهار رسالة النجاح
+              Navigator.of(context, rootNavigator: true).pop();
               _showSuccessModal(context, state.message);
             } else if (state is AdminReturnsError) {
-              if (Navigator.canPop(context)) Navigator.pop(context);
+              // 🚀 التأكد الجذري من إغلاق أي نوافذ مفتوحة (اللودينج) قبل إظهار رسالة الخطأ
+              Navigator.of(context, rootNavigator: true).pop();
               _showErrorModal(context, state.error);
             }
           },
