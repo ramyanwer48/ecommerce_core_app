@@ -91,6 +91,8 @@ class CheckoutRepo {
                 'quantity': remainingToDeduct,
                 'costPrice': batchCost,
                 'batchId': batchData['batchId'] ?? 'batch_${DateTime.now().millisecondsSinceEpoch}',
+                'supplierName': batchData['supplierName'] ?? batchData['supplier'] ?? 'غير معروف',
+                'supplierId': batchData['supplierId'] ?? '',
               });
 
               remainingToDeduct = 0;
@@ -102,6 +104,8 @@ class CheckoutRepo {
                 'quantity': batchQty,
                 'costPrice': batchCost,
                 'batchId': batchData['batchId'] ?? 'batch_${DateTime.now().millisecondsSinceEpoch}',
+                'supplierName': batchData['supplierName'] ?? batchData['supplier'] ?? 'غير معروف',
+                'supplierId': batchData['supplierId'] ?? '',
               });
 
               remainingToDeduct -= batchQty;
@@ -173,56 +177,6 @@ class CheckoutRepo {
         'orderDate': Timestamp.now(),
         'createdAt': Timestamp.now(),
       });
-
-      // القيد المحاسبي المزدوج (Double-Entry Bookkeeping)
-      // 🚀 التعديل: تحديد الحساب بناءً على طريقة الدفع ونوع الطلب
-      String debitAccount = 'الخزينة (كاش)';
-      if (paymentMethod == 'Online Card') {
-        debitAccount = 'بوابة الدفع (Paymob)';
-      } else if (orderType == 'pos') {
-        debitAccount = 'درج الكاشير'; // يمكن تغييرها حسب شجرة حساباتك
-      } else if (paymentMethod == 'الدفع عند الاستلام' && status != 'Delivered') {
-        debitAccount = 'العملاء (ذمم مدينة)'; // أونلاين لم يتم تسليمه بعد
-      }
-
-      transaction.set(ledgerRef, {
-        'id': ledgerRef.id,
-        'orderId': orderRef.id,
-        'orderNumber': currentNumber,
-        'userId': userId,
-        'date': Timestamp.now(),
-        'type': 'Sales',
-        'entries': [
-          {
-            'account': debitAccount,
-            'debit': totalSellingAmount,
-            'credit': 0.0,
-          },
-          if (discountAmount > 0)
-            {
-              'account': 'الخصم المسموح به (كوبونات)',
-              'debit': discountAmount,
-              'credit': 0.0,
-            },
-          {
-            'account': 'إيرادات المبيعات',
-            'debit': 0.0,
-            'credit': subtotal,
-          },
-          {
-            'account': 'تكلفة البضاعة المباعة',
-            'debit': totalOrderCostPrice,
-            'credit': 0.0,
-          },
-          {
-            'account': 'المخزون',
-            'debit': 0.0,
-            'credit': totalOrderCostPrice,
-          }
-        ],
-        'totalDebit': totalSellingAmount + discountAmount + totalOrderCostPrice,
-        'totalCredit': subtotal + totalOrderCostPrice,
-      });
     });
   }
 
@@ -266,6 +220,8 @@ class CheckoutRepo {
               'batchId': cb['batchId'],
               'quantity': (cb['quantity'] as num).toInt(),
               'costPrice': (cb['costPrice'] as num).toDouble(),
+              'supplier': cb['supplier'] ?? 'Unknown',
+              'supplierId': cb['supplierId'],
               'dateAdded': Timestamp.now(),
             });
           }

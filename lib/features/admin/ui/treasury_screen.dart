@@ -242,7 +242,6 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
                 tooltip: 'إلغاء الفلتر',
               ),
             const SizedBox(width: 4),
-            // 🌟 سهم الرجوع النظيف في الجهة اليسرى يشير للخارج
             IconButton(
               icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
               onPressed: () {
@@ -279,28 +278,12 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
 
                       double totalRevenues = 0;
                       double totalCOGS = 0;
-                      for (var doc in ordersSnap.data?.docs ?? []) {
-                        var data = doc.data() as Map<String, dynamic>;
-                        if (_isWithinDateRange(data['createdAt'] ?? data['orderDate'])) {
-                          totalRevenues += _parseSafeDouble(data['totalPrice'] ?? data['totalAmount']);
-                          totalCOGS += _parseSafeDouble(data['totalCostPrice']);
-                        }
-                      }
-
-                      double totalWastage = 0;
-                      for (var doc in productsSnap.data?.docs ?? []) {
-                        var data = doc.data() as Map<String, dynamic>;
-                        double damagedQty = _parseSafeDouble(data['damagedQuantity']);
-                        double costPrice = _parseSafeDouble(data['costPrice']);
-
-                        if (damagedQty > 0) {
-                          totalWastage += (damagedQty * costPrice);
-                        }
-                      }
+                      double totalReturns = 0;
 
                       double totalCashIn = 0;
                       double totalCashOut = 0;
                       double totalExpenses = 0;
+
                       List<QueryDocumentSnapshot> allMovements = [];
                       List<QueryDocumentSnapshot> expenseMovements = [];
 
@@ -318,27 +301,91 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
 
                       for (var doc in ledgerDocs) {
                         var data = doc.data() as Map<String, dynamic>;
-                        String type = (data['type'] ?? '').toString();
-                        double amount = _parseSafeDouble(data['amount']);
                         Timestamp? docDate = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;
 
                         if (_isWithinDateRange(docDate)) {
-                          bool isCashMovement = type == 'receipt' || type == 'income' || type == 'expense' || type == 'payment';
-                          if (isCashMovement && amount > 0) {
-                            allMovements.add(doc);
-                          }
-                          if (type == 'expense' || type == 'payment') {
-                            expenseMovements.add(doc);
-                            totalExpenses += amount;
-                            totalCashOut += amount;
-                          }
-                          if (type == 'receipt' || type == 'income') {
-                            totalCashIn += amount;
+                          String type = (data['type'] ?? '').toString().toLowerCase();
+
+                          if (data.containsKey('entries')) {
+                            List entries = data['entries'] as List;
+                            bool isCashAffected = false;
+                            double movementAmount = 0.0;
+                            String movementType = type;
+
+                            for (var entry in entries) {
+                              Map entryData = entry as Map;
+                              String account = entryData['account'].toString();
+                              double debit = _parseSafeDouble(entryData['debit']);
+                              double credit = _parseSafeDouble(entryData['credit']);
+
+                              if (account == 'إيرادات المبيعات') {
+                                totalRevenues += credit;
+                              } else if (account == 'مردودات المبيعات') {
+                                totalReturns += debit;
+                              } else if (account == 'تكلفة البضاعة المباعة') {
+                                if (debit > 0) totalCOGS += debit;
+                                if (credit > 0) totalCOGS -= credit;
+                              }
+
+                              if (account == 'الخزينة (كاش)' || account == 'بوابة الدفع (Paymob)' || account == 'درج الكاشير') {
+                                if (debit > 0) {
+                                  totalCashIn += debit;
+                                  isCashAffected = true;
+                                  movementAmount = debit;
+                                  movementType = 'income';
+                                }
+                                if (credit > 0) {
+                                  totalCashOut += credit;
+                                  isCashAffected = true;
+                                  movementAmount = credit;
+                                  movementType = 'refund';
+                                }
+                              }
+                            }
+
+                            if (isCashAffected) {
+                              Map<String, dynamic> fakeDoc = Map.from(data);
+                              fakeDoc['amount'] = movementAmount;
+                              fakeDoc['type'] = movementType;
+                              fakeDoc['note'] = movementType == 'income' ? 'متحصلات مبيعات' : 'مردودات مبيعات';
+
+                              allMovements.add(doc);
+                            }
+
+                          } else {
+                            double amount = _parseSafeDouble(data['amount']);
+                            bool isCashMovement = type == 'receipt' || type == 'income' || type == 'expense' || type == 'payment' || type == 'refund';
+
+                            if (isCashMovement && amount > 0) {
+                              allMovements.add(doc);
+                            }
+                            if (type == 'expense' || type == 'payment') {
+                              expenseMovements.add(doc);
+                              totalExpenses += amount;
+                              totalCashOut += amount;
+                            }
+                            if (type == 'receipt' || type == 'income') {
+                              totalCashIn += amount;
+                            }
+                            if (type == 'refund' && !data.containsKey('entries')) {
+                              totalCashOut += amount;
+                            }
                           }
                         }
                       }
 
-                      double grossProfit = totalRevenues - totalCOGS;
+                      double totalWastage = 0;
+                      for (var doc in productsSnap.data?.docs ?? []) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        double damagedQty = _parseSafeDouble(data['damagedQuantity']);
+                        double costPrice = _parseSafeDouble(data['costPrice']);
+                        if (damagedQty > 0) {
+                          totalWastage += (damagedQty * costPrice);
+                        }
+                      }
+
+                      double netRevenues = totalRevenues - totalReturns;
+                      double grossProfit = netRevenues - totalCOGS;
                       double netProfit = grossProfit - totalExpenses - totalWastage;
                       double currentLiquidity = totalCashIn - totalCashOut;
 
@@ -489,10 +536,28 @@ class _TreasuryScreenState extends State<TreasuryScreen> with SingleTickerProvid
             itemBuilder: (context, index) {
               final data = movements[index].data() as Map<String, dynamic>;
               String type = data['type'] ?? '';
-              double amount = _parseSafeDouble(data['amount']);
-              String note = data['note'] ?? data['description'] ?? 'بدون بيان';
+
+              double amount = 0.0;
+              if (data.containsKey('entries')) {
+                String movementType = type.toString().toLowerCase();
+                List entries = data['entries'] as List;
+                for (var entry in entries) {
+                  Map entryData = entry as Map;
+                  String account = entryData['account'].toString();
+                  if (account == 'الخزينة (كاش)' || account == 'بوابة الدفع (Paymob)' || account == 'درج الكاشير') {
+                    double debit = _parseSafeDouble(entryData['debit']);
+                    double credit = _parseSafeDouble(entryData['credit']);
+                    if (debit > 0) amount = debit;
+                    if (credit > 0) amount = credit;
+                  }
+                }
+              } else {
+                amount = _parseSafeDouble(data['amount']);
+              }
+
+              String note = data['note'] ?? data['description'] ?? (data['type'] == 'Sales' ? 'فاتورة مبيعات ${data['orderNumber'] ?? ''}' : data['type'] == 'Refund' ? 'مرتجع مبيعات ${data['orderNumber'] ?? ''}' : 'حركة مالية');
               String partner = data['partnerName'] ?? '';
-              bool isIncome = (type == 'receipt' || type == 'income');
+              bool isIncome = (type.toString().toLowerCase() == 'receipt' || type.toString().toLowerCase() == 'income' || type.toString().toLowerCase() == 'sales');
 
               DateTime date = DateTime.now();
               Timestamp? ts = (data['date'] ?? data['timestamp'] ?? data['createdAt']) as Timestamp?;

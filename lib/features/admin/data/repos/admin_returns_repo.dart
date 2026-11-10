@@ -44,19 +44,18 @@ class AdminReturnsRepo {
   // 🚀 اعتماد المرتجع الشامل (المخزون، الخزينة تصفر، والأرباح تصفر تماماً) 🚀
   Future<void> approveReturn(String returnId, Map returnData) async {
     final String orderId = returnData['orderId']?.toString() ?? '';
-    if (orderId.isEmpty) throw Exception('بيانات الطلب غير مكتملة');
+    if (orderId.isEmpty) throw Exception('Order data is incomplete');
 
     final orderRef = _firestore.collection('orders').doc(orderId);
     final returnRef = _firestore.collection('return_requests').doc(returnId);
 
     await _firestore.runTransaction((transaction) async {
       final orderSnap = await transaction.get(orderRef);
-      if (!orderSnap.exists) throw Exception('الطلب الأصلي غير موجود في النظام');
+      if (!orderSnap.exists) throw Exception('Original order not found');
 
       final orderData = orderSnap.data() as Map;
       final List items = (orderData['items'] ?? orderData['cartItems'] ?? []) as List;
 
-      // 1. جلب كل المنتجات المتعلقة بالمرتجع
       Map productSnaps = {};
       for (var item in items) {
         Map itemMap = item as Map;
@@ -66,7 +65,10 @@ class AdminReturnsRepo {
         }
       }
 
-      // 2. إرجاع المخزون (تطبيق FIFO دقيق واسترداد أسعار الشراء القديمة)
+      double totalCostPriceForRefund = 0.0;
+      double subtotalForRefund = (orderData['subtotal'] ?? 0.0).toDouble();
+      double discountForRefund = (orderData['discountAmount'] ?? 0.0).toDouble();
+
       for (var item in items) {
         Map itemMap = item as Map;
         final String productId = itemMap['productId']?.toString() ?? itemMap['id']?.toString() ?? '';
@@ -83,22 +85,29 @@ class AdminReturnsRepo {
           if (consumedBatches.isNotEmpty) {
             for (var cb in consumedBatches) {
               Map cbMap = cb as Map;
+              double cbCost = (cbMap['costPrice'] ?? 0.0).toDouble();
+              int cbQty = (cbMap['quantity'] ?? 0).toInt();
+              totalCostPriceForRefund += (cbCost * cbQty);
+
               batches.add({
                 'batchId': cbMap['batchId'] ?? 'return_${DateTime.now().millisecondsSinceEpoch}',
-                'quantity': (cbMap['quantity'] ?? 0).toInt(),
-                'costPrice': (cbMap['costPrice'] ?? 0.0).toDouble(),
-                'supplierName': cbMap['supplierName'] ?? 'مرتجع عميل',
-                'dateAdded': cbMap['dateAdded'] ?? Timestamp.now(),
+                'quantity': cbQty,
+                'costPrice': cbCost,
+                'supplier': cbMap['supplier'] ?? 'Unknown',
+                'supplierId': cbMap['supplierId'],
+                'dateAdded': Timestamp.now(),
               });
             }
           } else {
             final double totalCost = (itemMap['totalCost'] ?? 0.0).toDouble();
             final double unitCostPrice = quantityToRestore > 0 ? (totalCost / quantityToRestore) : 0.0;
+            totalCostPriceForRefund += totalCost;
+
             batches.add({
               'batchId': 'return_fallback_${DateTime.now().millisecondsSinceEpoch}',
               'quantity': quantityToRestore,
               'costPrice': unitCostPrice,
-              'supplierName': 'مرتجع عميل',
+              'supplier': 'Unknown',
               'dateAdded': Timestamp.now(),
             });
           }
@@ -113,33 +122,56 @@ class AdminReturnsRepo {
       }
 
       final double totalRefund = (returnData['totalRefund'] ?? 0.0).toDouble();
+      final String paymentMethod = (orderData['paymentMethod'] ?? '').toString();
+      final String paymentAccount = paymentMethod.contains('Card') || paymentMethod.contains('فيزا')
+          ? 'بوابة الدفع (Paymob)'
+          : 'الخزينة (كاش)';
 
-      // 3. 🚀 تسوية الخزينة بنوع refund لكي تظهر في المدفوعات وتطرح بدون أن تحتسب كمصروف تشغيلي 🚀
       final ledgerRef = _firestore.collection('ledger_entries').doc();
       transaction.set(ledgerRef, {
         'id': ledgerRef.id,
-        'type': 'refund', // 🚀 نوع خاص بالاسترداد لكي تخصم من السيولة ولا تدخل في المصروفات التشغيلية
-        'amount': totalRefund, // بالموجب لتطرحها شاشة الخزينة من إجمالي الداخل
-        'description': 'استرداد نقدي لعميل (مرتجع) - طلب رقم ${returnData['orderNumber'] ?? ''}',
+        'orderId': orderId,
+        'orderNumber': orderData['orderNumber'] ?? '',
+        'userId': orderData['userId'] ?? '',
         'date': Timestamp.now(),
-        'addedBy': _auth.currentUser?.email ?? 'System',
+        'type': 'Refund',
+        'entries': [
+          {
+            'account': paymentAccount,
+            'debit': 0.0,
+            'credit': totalRefund,
+          },
+          if (discountForRefund > 0)
+            {
+              'account': 'الخصم المسموح به (كوبونات)',
+              'debit': 0.0,
+              'credit': discountForRefund,
+            },
+          {
+            'account': 'مردودات المبيعات',
+            'debit': subtotalForRefund,
+            'credit': 0.0,
+          },
+          {
+            'account': 'تكلفة البضاعة المباعة',
+            'debit': 0.0,
+            'credit': totalCostPriceForRefund,
+          },
+          {
+            'account': 'المخزون',
+            'debit': totalCostPriceForRefund,
+            'credit': 0.0,
+          }
+        ],
+        'totalDebit': subtotalForRefund + totalCostPriceForRefund,
+        'totalCredit': totalRefund + discountForRefund + totalCostPriceForRefund,
       });
 
-      // 4. 🚀 التسوية المحاسبية للأرباح: تصفير إيرادات وتكلفة وربح الطلب تماماً ليعود للصفر بدون أي خسائر وهمية 🚀
       Map<String, dynamic> orderUpdate = {
         'status': 'Returned',
-        'totalPrice': 0.0,
-        'totalCost': 0.0,
-        'profit': 0.0,
       };
-
-      if (orderData.containsKey('totalAmount')) {
-        orderUpdate['totalAmount'] = 0.0;
-      }
-
       transaction.update(orderRef, orderUpdate);
 
-      // 5. تحديث حالة المرتجع إلى معتمد
       transaction.update(returnRef, {
         'status': 'Approved',
         'approvedAt': Timestamp.now(),

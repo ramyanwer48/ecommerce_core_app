@@ -68,113 +68,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     );
   }
 
-  Future<void> _automateLedgerEntry(OrderModel order) async {
-    try {
-      final firestore = FirebaseFirestore.instance;
-      WriteBatch batch = firestore.batch();
-
-      DocumentSnapshot orderDoc =
-      await firestore.collection('orders').doc(order.id).get();
-      if (!orderDoc.exists) return;
-      var data = orderDoc.data() as Map<String, dynamic>;
-
-      String customerName = '';
-      if (data.containsKey('shippingAddress') &&
-          data['shippingAddress'] is Map) {
-        var addr = data['shippingAddress'];
-        customerName =
-            '${addr['firstName'] ?? ''} ${addr['lastName'] ?? ''}'.trim();
-        if (customerName.isEmpty) {
-          customerName =
-              (addr['name'] ?? addr['fullName'] ?? '').toString().trim();
-        }
-      }
-      if (customerName.isEmpty) {
-        customerName =
-            (data['userName'] ?? data['customerName'] ?? data['name'] ?? '')
-                .toString()
-                .trim();
-      }
-      if (customerName.isEmpty) {
-        String shortId =
-        order.id.length >= 4 ? order.id.substring(0, 4) : order.id;
-        customerName = 'عميل أونلاين ($shortId)';
-      }
-
-      String phone = order.phone;
-      double price = order.totalPrice;
-      if (price <= 0) return;
-
-      QuerySnapshot customerSnap = await firestore
-          .collection('customers')
-          .where('name', isEqualTo: customerName)
-          .get();
-      DocumentReference customerRef;
-      String customerId;
-
-      if (customerSnap.docs.isEmpty) {
-        customerRef = firestore.collection('customers').doc();
-        customerId = customerRef.id;
-        batch.set(customerRef, {
-          'id': customerId,
-          'name': customerName,
-          'phone': phone,
-          'type': 'customer',
-          'balance': 0.0,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        customerRef = customerSnap.docs.first.reference;
-        customerId = customerSnap.docs.first.id;
-      }
-
-      String shortOrderId =
-      order.id.length >= 5 ? order.id.substring(0, 5) : order.id;
-
-      DocumentReference saleRef =
-      firestore.collection('ledger_entries').doc('order_${order.id}');
-      batch.set(
-        saleRef,
-        {
-          'partnerId': customerId,
-          'accountId': customerId,
-          'partnerName': customerName,
-          'type': 'sale',
-          'transactionType': 'online_sale',
-          'amount': price,
-          'date': FieldValue.serverTimestamp(),
-          'timestamp': FieldValue.serverTimestamp(),
-          'note': 'أوردر أونلاين رقم: $shortOrderId',
-        },
-        SetOptions(merge: true),
-      );
-
-      DocumentReference receiptRef = firestore
-          .collection('ledger_entries')
-          .doc('auto_receipt_${order.id}');
-      batch.set(
-        receiptRef,
-        {
-          'partnerId': customerId,
-          'accountId': customerId,
-          'partnerName': customerName,
-          'type': 'receipt',
-          'transactionType': 'online_receipt',
-          'amount': price,
-          'date': FieldValue.serverTimestamp(),
-          'timestamp': FieldValue.serverTimestamp(),
-          'note': 'تحصيل أوتوماتيكي (أونلاين/تم التسليم)',
-        },
-        SetOptions(merge: true),
-      );
-
-      await batch.commit();
-      debugPrint('Automation Success: Ledger updated for ${order.id}');
-    } catch (e) {
-      debugPrint('Automation error: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -739,9 +632,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                         Navigator.pop(bottomSheetContext);
                         if (!isSelected) {
                           adminOrdersCubit.updateStatus(order, status);
-                          if (status == 'Delivered') {
-                            await _automateLedgerEntry(order);
-                          }
+
                           if (status == 'Delivered' || status == 'Cancelled') {
                             _showArchiveConfirmationDialog(status);
                           }

@@ -29,7 +29,7 @@ class AdminOrdersRepo {
     }
   }
 
-  // 2. تحديث حالة الطلب وإرجاع المخزون في حالة الإلغاء بدقة محاسبية (FIFO Reversal)
+  // 2. تحديث حالة الطلب وإرجاع المخزون في حالة الإلغاء بدقة محاسبية وتسجيل الخزنة عند التسليم
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
     final orderRef = _firestore.collection('orders').doc(orderId);
 
@@ -61,6 +61,8 @@ class AdminOrdersRepo {
       // ==========================================
       // 2. مرحلة الكتابة والتحديثات ثانياً (Writes Second)
       // ==========================================
+
+      // أ. معالجة الإلغاء (إرجاع المخزون فقط)
       if (newStatus.toLowerCase() == 'cancelled' && oldStatus.toLowerCase() != 'cancelled') {
         for (var item in items) {
           final String productId = item['productId'] ?? item['id'] ?? '';
@@ -83,6 +85,8 @@ class AdminOrdersRepo {
                   'batchId': 'return_${cb['batchId'] ?? DateTime.now().millisecondsSinceEpoch}',
                   'quantity': cb['quantity'],
                   'costPrice': cb['costPrice'], // 👈 السعر الفعلي لكل قطعة
+                  'supplierName': cb['supplierName'] ?? cb['supplier'] ?? 'غير معروف',
+                  'supplierId': cb['supplierId'] ?? '',
                   'dateAdded': Timestamp.now(),
                 });
               }
@@ -95,6 +99,7 @@ class AdminOrdersRepo {
                 'batchId': 'return_batch_${DateTime.now().millisecondsSinceEpoch}',
                 'quantity': quantityToRestore,
                 'costPrice': unitCostPrice,
+                'supplier': 'Unknown',
                 'dateAdded': Timestamp.now(),
               });
             }
@@ -109,6 +114,60 @@ class AdminOrdersRepo {
             });
           }
         }
+      }
+
+      // ب. معالجة التسليم (تسجيل القيد في الخزنة والأرباح)
+      if (newStatus == 'Delivered' && oldStatus != 'Delivered') {
+        final ledgerRef = _firestore.collection('ledger_entries').doc();
+
+        double totalSellingAmount = (orderData['totalAmount'] ?? orderData['totalPrice'] ?? 0.0).toDouble();
+        double subtotal = (orderData['subtotal'] ?? totalSellingAmount).toDouble();
+        double discountAmount = (orderData['discountAmount'] ?? 0.0).toDouble();
+        double totalOrderCostPrice = (orderData['totalCostPrice'] ?? 0.0).toDouble();
+        String paymentMethod = (orderData['paymentMethod'] ?? '').toString();
+
+        String debitAccount = paymentMethod.toLowerCase().contains('card') || paymentMethod.contains('فيزا')
+            ? 'بوابة الدفع (Paymob)'
+            : 'الخزينة (كاش)';
+
+        transaction.set(ledgerRef, {
+          'id': ledgerRef.id,
+          'orderId': orderId,
+          'orderNumber': orderData['orderNumber'] ?? '',
+          'userId': orderData['userId'] ?? '',
+          'date': Timestamp.now(),
+          'type': 'Sales',
+          'entries': [
+            {
+              'account': debitAccount,
+              'debit': totalSellingAmount,
+              'credit': 0.0,
+            },
+            if (discountAmount > 0)
+              {
+                'account': 'الخصم المسموح به (كوبونات)',
+                'debit': discountAmount,
+                'credit': 0.0,
+              },
+            {
+              'account': 'إيرادات المبيعات',
+              'debit': 0.0,
+              'credit': subtotal,
+            },
+            {
+              'account': 'تكلفة البضاعة المباعة',
+              'debit': totalOrderCostPrice,
+              'credit': 0.0,
+            },
+            {
+              'account': 'المخزون',
+              'debit': 0.0,
+              'credit': totalOrderCostPrice,
+            }
+          ],
+          'totalDebit': totalSellingAmount + discountAmount + totalOrderCostPrice,
+          'totalCredit': subtotal + totalOrderCostPrice,
+        });
       }
 
       // تحديث حالة الأوردر النهائية
