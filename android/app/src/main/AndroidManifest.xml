@@ -16,7 +16,7 @@
     <!-- أضف هذا السطر لحل التحذير -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="Ramy Store"
+        android:label="Ramy Store ERP"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

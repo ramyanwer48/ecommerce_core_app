@@ -34,7 +34,9 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
+            // تعطيل ضغط وحذف الكلاسات (R8) لمنع تعطل مكتبات Firebase والتخزين الآمن في نسخة Release
+            isMinifyEnabled = false
+            isShrinkResources = false
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
